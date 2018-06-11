@@ -1,0 +1,9 @@
+[submodule "src/salt/base/formula/redis-formula"]
+	path = src/salt/base/formula/redis-formula
+	url = https://github.com/saltstack-formulas/redis-formula.git
+[submodule "src/salt/base/formula/hostapd-formula"]
+	path = src/salt/base/formula/hostapd-formula
+	url = https://github.com/autopi-io/hostapd-formula.git
+[submodule "src/salt/base/formula/dnsmasq-formula"]
+	path = src/salt/base/formula/dnsmasq-formula
+	url = https://github.com/autopi-io/dnsmasq-formula.git

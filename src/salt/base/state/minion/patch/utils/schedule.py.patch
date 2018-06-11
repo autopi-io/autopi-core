@@ -1,0 +1,13 @@
+439c439,440
+<                       include_pillar=True):
+---
+>                       include_pillar=True,
+>                       include_transient=True):
+453a455,457
+>         if not include_transient:
+>             schedule = {name: data for name, data in six.iteritems(schedule) \
+>                 if not data.get('metadata', {}).get('transient', False)}
+481c485
+<                             {'schedule': self._get_schedule(include_pillar=False)},
+---
+>                             {'schedule': self._get_schedule(include_pillar=False, include_transient=False)},

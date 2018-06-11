@@ -1,0 +1,3 @@
+2039a2040,2041
+>         elif tag.startswith('minion_job'):
+>             self._handle_decoded_payload(data)

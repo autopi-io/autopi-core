@@ -1,0 +1,18 @@
+
+from RPi.GPIO import BOARD
+
+
+MODE = BOARD
+
+AMP_ON     = 31  # GPIO06
+
+RPI_ON_OFF = 7   # GPIO04
+STN_PWR    = 32  # GPIO12
+
+ACC_INT1   = 29  # GPIO05
+
+SPI_CLK    = 36  # GPIO16
+SPI_MOSI   = 11  # GPIO17
+SPI_MISO   = 38  # GPIO20
+
+HOLD_PWR   = 33  # GPIO13

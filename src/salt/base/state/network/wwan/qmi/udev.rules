@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="usbmisc", DRIVER=="", KERNEL=="cdc-wdm0", RUN+="/bin/sh -c 'echo Y > /sys/class/net/wwan0/qmi/raw_ip'"

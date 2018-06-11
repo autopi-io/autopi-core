@@ -1,0 +1,10 @@
+pip>=10.0.1
+pyserial==3.4
+redis==2.10.6
+retrying==1.3.3
+croniter==0.3.20
+flask==0.12.2
+flask-cors==3.0.3
+flask-api==1.0
+git+git://github.com/autopi-io/py-nmea@e257773cee103f16f75dd1ea4f9e2ef64645540a#pynmea2
+git+git://github.com/autopi-io/py-obd@f8a60acfa3584faaa4808a2ec31423f2acd3aa22#obd
