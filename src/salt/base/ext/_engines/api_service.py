@@ -18,6 +18,7 @@ cors = CORS(app)
 settings = {
     "host": "0.0.0.0",
     "port": 9000,
+    "threaded": True,
     # Do not use debug settings here, as this will spawn new processes of the salt-minion
 }
 
