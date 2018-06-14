@@ -24,6 +24,7 @@ settings = {
 
 @app.errorhandler(Exception)
 def handle_error(e):
+    log.error('exception occurred: {:}'.format(e))
     code = 500
     if isinstance(e, HTTPException):
         code = e.code
@@ -105,11 +106,24 @@ def terminal_execute(unit_id):
 
     cmd_object = request.get_json(force=True)
 
+    command = cmd_object['command']
     args = cmd_object['arg']
     kwargs = dict(cmd_object['kwarg'])
 
-    caller = get_caller()
-    response = caller.cmd(cmd_object['command'], *args, **kwargs)
+    if command.startswith('state.'):
+        log.info('executing command via caller')
+        try:
+            response = get_caller().cmd(command, *args, **kwargs)
+        except:
+            log.exception('Failed while executing command via caller')
+            # reset caller to get new instance for next command, just in case
+            global caller
+            caller = None
+
+            raise
+    else:
+        log.info('executing command via minionutil.run_job')
+        response = salt(command, *args, **kwargs)
 
     return jsonify(response)
 
