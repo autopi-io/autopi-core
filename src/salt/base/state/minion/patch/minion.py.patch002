@@ -1,0 +1,27 @@
+148a149,150
+>     cache_fn = os.path.join(opts['cachedir'], 'last_master_ip')
+> 
+159a162,173
+> 
+>                     # Try read cached master IP if available
+>                     if os.path.isfile(cache_fn):
+>                         with salt.utils.fopen(cache_fn, 'rb') as f:
+>                             try:
+>                                 ret['master_ip'] = f.read()
+>                                 log.info('Read master IP {:} from cache file {:}'.format(ret['master_ip'], cache_fn))
+> 
+>                                 break
+>                             except:
+>                                 log.exception('Unable to read master IP from cache file {:}'.format(cache_fn))
+> 
+195a210,217
+>     # Always write resolved master IP to cache file
+>     if 'master_ip' in ret:
+>         try:
+>             with salt.utils.flopen(cache_fn, 'w+') as f:
+>                 f.write(ret['master_ip'])
+>         except (IOError, OSError):
+>             log.exception('Unable to write master IP {:} to cache file {:}'.format(ret['master_ip'], cache_fn))
+> 
+200a223
+> 
