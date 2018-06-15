@@ -18,6 +18,7 @@ cors = CORS(app)
 settings = {
     "host": "0.0.0.0",
     "port": 9000,
+    "threaded": True,
     # Do not use debug settings here, as this will spawn new processes of the salt-minion
 }
 
@@ -35,10 +36,10 @@ from werkzeug.exceptions import default_exceptions
 for ex in default_exceptions:
     app.register_error_handler(ex, handle_error)
 
+
 minion_id = None
 
-
-def get_minion_id():
+def _minion_id():
     global minion_id
     if minion_id:
         return minion_id
@@ -47,36 +48,34 @@ def get_minion_id():
         return minion_id
 
 
-caller = None
+def _caller():
+    log.info('Creating Salt caller instance...')
 
-def get_caller():
-    global caller
-    if not caller:
-        import salt.client
-        import salt.config
-        __opts__ = salt.config.minion_config('/etc/salt/minion')
-        __opts__['file_client'] = 'local'
-        __opts__['file_roots']['base'].append('/var/cache/salt/minion/files/base')
+    import salt.client
+    import salt.config
 
-        caller = salt.client.Caller(mopts=__opts__)
+    opts = salt.config.minion_config('/etc/salt/minion')
+    opts['file_client'] = 'local'
+    opts['file_roots']['base'].append('/var/cache/salt/minion/files/base')
 
-    return caller
+    return salt.client.Caller(mopts=opts)
 
 
-def salt(command, *args, **kwargs):
-    log.info('SALT CMD: cmd: {:}, args: {:}, kwargs: {:}'.format(
+def _salt(command, *args, **kwargs):
+    log.info('Executing Salt call: cmd: {:}, args: {:}, kwargs: {:}'.format(
         command, args, kwargs))
+
     return __salt__['minionutil.run_job'](command, *args, **kwargs)
 
 
 @app.route("/")
 def index():
-    return {"unit_id": get_minion_id()}
+    return {"unit_id": _minion_id()}
 
 
 @app.route("/auth/login/", methods=["POST"])
 def auth_login():
-    devices = [{"unit_id": get_minion_id(), "display": "Local device"}]
+    devices = [{"unit_id": _minion_id(), "display": "Local device"}]
     auth_response = {
         "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImxvY2FsIHVzZXIiLCJ1c2VyX2lkIjoxLCJlbWFpbCI6IiIsImV4cCI6NDEwMjQ0NDgwMH0.X4nF8J2JMOXX0JIfs_KUbf7TjzU-5sfN1VImSmRnoW8",
         "user": {
@@ -92,13 +91,13 @@ def auth_login():
 
 @app.route("/dongle/devices/")
 def devices():
-    devices = [{"unit_id": get_minion_id(), "display": "Local device"}]
+    devices = [{"unit_id": _minion_id(), "display": "Local device"}]
     return devices
 
 
 @app.route('/dongle/<uuid:unit_id>/execute/', methods=['POST'])
 def terminal_execute(unit_id):
-    minion_id = get_minion_id()
+    minion_id = _minion_id()
 
     if not minion_id == unit_id:
         log.warning('unit_id does not match the id configured on this device')
@@ -111,26 +110,18 @@ def terminal_execute(unit_id):
     kwargs = dict(cmd_object['kwarg'])
 
     if command.startswith('state.'):
-        log.info('executing command via caller')
-        try:
-            response = get_caller().cmd(command, *args, **kwargs)
-        except:
-            log.exception('Failed while executing command via caller')
-            # reset caller to get new instance for next command, just in case
-            global caller
-            caller = None
-
-            raise
+        log.debug('executing command via caller')
+        response = _caller().cmd(command, *args, **kwargs)
     else:
-        log.info('executing command via minionutil.run_job')
-        response = salt(command, *args, **kwargs)
+        log.debug('executing command via minionutil.run_job')
+        response = _salt(command, *args, **kwargs)
 
     return jsonify(response)
 
 
 @app.route('/dongle/<uuid:unit_id>/settings/apn/', methods=['GET', 'PUT'])
 def apn_settings(unit_id):
-    minion_id = get_minion_id()
+    minion_id = _minion_id()
 
     if not minion_id == unit_id:
         log.warning('unit_id does not match the id configured on this device')
@@ -166,7 +157,7 @@ def start(flask):
         global settings
         settings.update(flask)
 
-        get_minion_id()
+        _minion_id()
 
         app.run(**settings)
 
