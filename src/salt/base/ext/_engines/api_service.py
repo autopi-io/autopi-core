@@ -113,8 +113,8 @@ def terminal_execute(unit_id):
         log.debug('executing command via caller')
         response = _caller().cmd(command, *args, **kwargs)
     else:
-        log.debug('executing command via minionutil.run_job')
-        response = _salt(command, *args, **kwargs)
+        log.debug('executing command via __salt__')
+        response = __salt__[command](*args, **kwargs)
 
     return jsonify(response)
 
