@@ -11,12 +11,23 @@ minion-script-backed-up:
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py
     - force: true
     - prereq:
-      - file: minion-script-patched
-minion-script-patched:
+      - file: minion-script-001-patched
+      - file: minion-script-002-patched
+minion-script-001-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
-    - source: salt://minion/patch/minion.py.patch
+    - source: salt://minion/patch/minion.py.patch001
     - hash: 36d5e76a283786e8040f2576e3ebd52910326d31
+    # Only apply this patch if hash matches specific version
+    - onlyif: cd /usr/lib/python2.7/dist-packages/salt/ && echo '31fa372f166f5d1e27394022780709de6e03e337 minion.py' | sha1sum -c -
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+minion-script-002-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/minion.py
+    - source: salt://minion/patch/minion.py.patch002
+    - hash: 422b3a0877b468ad09327b50322274cc71b829f4
+    # IMPORTANT: No 'onlyif' requisite for latest patch
     - watch_in:
       - module: minion-restart-requested-after-patching
 minion-script-rolled-back:
@@ -25,7 +36,8 @@ minion-script-rolled-back:
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
     - force: true
     - onfail:
-      - file: minion-script-patched
+      - file: minion-script-001-patched
+#      - file: minion-script-002-patched
 
 utils-schedule-script-backed-up:
   file.copy:

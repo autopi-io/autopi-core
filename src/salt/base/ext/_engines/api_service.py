@@ -150,19 +150,6 @@ def apn_settings(unit_id):
         return grains
 
 
-@app.route('/dongle/<uuid:unit_id>/settings/run_state/', methods=['POST'])
-def settings_runstate(unit_id):
-    minion_id = _minion_id()
-
-    if not minion_id == unit_id:
-        log.warning('unit_id does not match the id configured on this device')
-        return 'unit_id does not match the id configured on this device', 401
-
-    response = _caller().cmd('state.apply', 'network.wwan.qmi.config')
-
-    return jsonify(response)
-
-
 def start(flask):
     try:
         log.debug("Starting API service")
