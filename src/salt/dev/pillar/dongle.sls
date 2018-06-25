@@ -16,7 +16,9 @@ minion:
   mine_enabled: False
   startup_states: sls
   sls_list:
-    - startup
+    - ec2x.startup
+    - ec2x.gnss.update
+#    - acc.config # TODO: Test this
   return: event  # Publish job execution result notifications on the Minion event bus
   beacons_before_connect: True
   scheduler_before_connect: True
