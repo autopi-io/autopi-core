@@ -102,6 +102,27 @@ def imei():
     return query("AT+GSN")
 
 
+def time(mode=1):
+    """
+    Obtain the latest time synchronized through network
+
+    Query network time mode:
+        0 = Query the latest time that has been synchronized through network
+        1 = Query the current GMT time calculated from the latest time that has been synchronized through network
+        2 = Query the current LOCAL time calculated from the latest time that has been synchronized through network
+    """
+
+    res = query("AT+QLTS={:d}".format(mode))
+    if "data" in res:
+        row = _parse_dict(res.pop("data"))["+QLTS"].strip('"').split(",")
+        res.update({
+            "time": row[0],
+            "dst": row[1]
+        })
+
+    return res
+
+
 def error_format_config(value=None):
     """
     Controls the format of error result codes: "ERROR", error numbers or
