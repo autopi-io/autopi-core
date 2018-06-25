@@ -116,8 +116,9 @@ def time(mode=1):
     if "data" in res:
         row = _parse_dict(res.pop("data"))["+QLTS"].strip('"').split(",")
         res.update({
-            "time": row[0],
-            "dst": row[1]
+            "date": row[0],
+            "time": row[1],
+            "dst": row[2]
         })
 
     return res
