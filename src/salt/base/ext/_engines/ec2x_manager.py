@@ -105,12 +105,66 @@ def download_handler(cmd, size, dest):
     return res
 
 
+@edmp.register_hook()
+def sync_time_handler(force=False):
+
+    ret = {}
+
+    # Check if system time is already NTP synchronized
+    res = __salt__["time.status"]()
+    if not force and res["ntp_synchronized"] == "yes":
+        log.info("System time is already NTP synchronized")
+    else:
+
+        if res["ntp_synchronized"] == "no":
+            log.info("System time is not NTP synchronized")
+
+        ret["old"] = " ".join(res["universal_time"].split(" ")[1:2])
+
+        # Disable automatic time synchronization
+        if res["network_time_on"] == "yes":
+            __salt__["time.ntp"](enable=False)
+
+        try:
+
+            # Get current UTC network time
+            pattern = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
+            res = _exec("AT+QLTS=1")
+            if "error" in res:
+                raise Exception("Unable to retrieve network time: {:}".format(res["error"]))
+
+            match = pattern.match(res["data"])
+            if not match:
+                raise Exception("Failed to match network time result: {:}".format(res["data"]))
+
+            time = "{year:d}-{month:d}-{day:d} {hour:d}:{minute:d}:{second:d}".format(**match.groupdict())
+
+            __salt__["time.set"](time, adjust_system_clock=True)
+            log.info("Synchronized system time with network time")
+
+            ret["new"] = time
+
+        finally:
+
+            # Re-enable automatic time synchronization
+            __salt__["time.ntp"](enable=True)
+
+    return ret
+
+
 def start(serial_conn):
     try:
         log.debug("Starting EC2X manager")
 
         # Initialize serial connection
         conn.init(serial_conn)
+
+        # Attempt to sync system time with network time
+        # TODO: Run in worker with an interval of 1 min?
+        try
+            sync_time_handler(force=False)
+        except:
+            log.exception("System time may be inaccurate because it could not be synchronized with network time")
 
         # Initialize and run message processor
         edmp.init(__opts__)

@@ -124,6 +124,14 @@ def time(mode=1):
     return res
 
 
+def sync_time(force=False, **kwargs):
+    """
+    Synchronize system time with network time.
+    """
+
+    return client.send_sync(msg_pack(force=force, _handler="sync_time", **kwargs))
+
+
 def error_format_config(value=None):
     """
     Controls the format of error result codes: "ERROR", error numbers or
