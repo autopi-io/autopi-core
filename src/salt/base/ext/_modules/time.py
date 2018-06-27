@@ -31,18 +31,39 @@ def status():
 
     pairs = (l.split(": ") for l in res.splitlines())
     for k, v in pairs:
-        ret[k] = v
+        ret[k.strip().lower().replace(" ", "_")] = v.strip()
 
     return ret
 
 
-def set(value):
+def set(value, adjust_system_clock=False):
     """
     Set system time.
     """
 
-    res = __salt__["cmd.run_all"]("timedatectl set-time {:s}".format(value))
-    if res["retcode"] == 0:
-        return res
-    else:
+    ret = {}
+
+    cmd = ["timedatectl"]
+    if adjust_system_clock:
+        cmd.append("--adjust-system-clock")
+    cmd.append("set-time '{:s}'".format(value))
+
+    res = __salt__["cmd.run_all"](" ".join(cmd))
+    if res["retcode"] != 0:
         raise salt.exceptions.CommandExecutionError(res["stderr"])
+
+    return ret
+
+
+def ntp(enable=True):
+    """
+    Enable or disable network time synchronization.
+    """
+
+    ret = {}
+
+    res = __salt__["cmd.run_all"]("timedatectl set-ntp '{:d}'".format(enable))
+    if res["retcode"] != 0:
+        raise salt.exceptions.CommandExecutionError(res["stderr"])
+
+    return ret
