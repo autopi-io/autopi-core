@@ -147,8 +147,12 @@ class MessageProcessor(object):
         # Exceptions will kill worker thread as default behavior
         suppress_exceptions = settings.pop("suppress_exceptions", False)
 
+        # Terminates worker thread after a successful run without warnings nor exceptions
+        kill_upon_success = settings.pop("kill_upon_success", False)
+
         # Prepare function that performs actual work
         def do_work(thread, context):
+            success = True
 
             # Loop through all messages found in thread context
             for message in list(context["messages"]):  # Copy list to allow changes while looping
@@ -159,14 +163,21 @@ class MessageProcessor(object):
 
                 except Warning as w:
                     log.info("Warning in worker thread '{:}': {:}".format(thread.name, w))
+                    success = False
 
                 except Exception:
                     log.exception("Exception in worker thread '{:}' while running workflow for message: {:}".format(thread.name, message))
+                    success = False
 
                     if suppress_exceptions:
                         log.warn("Suppressing above exception and continues as nothing happened")
                     else:
                         raise
+
+            if kill_upon_success and success:
+                thread.kill()
+
+                log.info("Killed worker thread '{:}' upon successful run")
 
         # Auto start is default
         auto_start = settings.pop("start", True)
