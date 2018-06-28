@@ -1,3 +1,4 @@
+import datetime
 import logging
 import re
 import time
@@ -119,7 +120,7 @@ def sync_time_handler(force=False):
         if res["ntp_synchronized"] == "no":
             log.info("System time is not NTP synchronized")
 
-        ret["old"] = " ".join(res["universal_time"].split(" ")[1:2])
+        ret["old"] = " ".join(res["universal_time"].split(" ")[1:3])
 
         # Disable automatic time synchronization
         if res["network_time_on"] == "yes":
@@ -137,12 +138,23 @@ def sync_time_handler(force=False):
             if not match:
                 raise Exception("Failed to match network time result: {:}".format(res["data"]))
 
-            time = "{year:d}-{month:d}-{day:d} {hour:d}:{minute:d}:{second:d}".format(**match.groupdict())
+            time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
+
+            ret["old"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
             __salt__["time.set"](time, adjust_system_clock=True)
-            log.info("Synchronized system time with network time")
 
             ret["new"] = time
+
+            log.info("Synchronized system time with network time")
+
+            if ret["old"] != ret["new"]:
+                # Trigger event
+                edmp.trigger_event({
+                        "old": ret["old"],
+                        "new": ret["new"],
+                    },
+                    "time/synced")
 
         finally:
 
@@ -152,22 +164,31 @@ def sync_time_handler(force=False):
     return ret
 
 
-def start(serial_conn):
+def start(serial_conn, **kwargs):
     try:
         log.debug("Starting EC2X manager")
 
         # Initialize serial connection
         conn.init(serial_conn)
 
-        # Attempt to sync system time with network time
-        # TODO: Run in worker with an interval of 1 min?
-        try
-            sync_time_handler(force=False)
-        except:
-            log.exception("System time may be inaccurate because it could not be synchronized with network time")
+        # TODO: Get workers from pillar data instead of hardcoded here (but wait until all units have engine that accept **kwargs to prevent error)
+        workers = [{
+            "name": "sync_time",
+            "interval": 60,  # Run every minute
+            "suppress_exceptions": True,  # Exceptions will not kill worker thread
+            "kill_upon_success": True,  # Kill after first successful run
+            "messages": [
+                {
+                    "handler": "sync_time",
+                    "kwargs": {
+                        "force": False
+                    }
+                }
+            ]
+        }]
 
         # Initialize and run message processor
-        edmp.init(__opts__)
+        edmp.init(__opts__, workers=workers)
         edmp.run()
 
     except Exception:
