@@ -145,7 +145,7 @@ def speak_handler(text):
     }
 
 
-def start(mixer):
+def start(mixer, **kwargs):
     try:
         log.debug("Starting audio manager")
 

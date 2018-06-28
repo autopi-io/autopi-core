@@ -124,7 +124,7 @@ def flash_firmware_handler(hex_file, no_write=True):
     return ret
 
 
-def start(workers):
+def start(workers, **kwargs):
     try:
         log.debug("Starting SPM manager")
 

@@ -118,7 +118,7 @@ def g_block_converter(result):
     return result
 
 
-def start(i2c_conn):
+def start(i2c_conn, **kwargs):
     try:
         log.debug("Starting MMA8X5X manager")
 
