@@ -150,7 +150,7 @@ def apn_settings(unit_id):
         return grains
 
 
-def start(flask):
+def start(flask, **kwargs):
     try:
         log.debug("Starting API service")
 

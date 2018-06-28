@@ -49,7 +49,7 @@ def echo_handler(result):
     log.info("Echo: {:}".format(result))
 
 
-def start(mappings):
+def start(mappings, **kwargs):
     try:
         log.debug("Starting event reactor")
 

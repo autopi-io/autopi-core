@@ -225,7 +225,7 @@ def _battery_listener(result):
         )
 
 
-def start(serial_conn, returner, workers):
+def start(serial_conn, returner, workers, **kwargs):
     try:
         log.debug("Starting ELM327 manager")
 

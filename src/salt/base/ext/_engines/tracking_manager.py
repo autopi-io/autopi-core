@@ -213,7 +213,7 @@ def _position_listener(result):
             "position/{:s}".format(ctx["state"]))
 
 
-def start(serial_conn, returner, workers):
+def start(serial_conn, returner, workers, **kwargs):
     try:
         log.debug("Starting tracking manager")
 
