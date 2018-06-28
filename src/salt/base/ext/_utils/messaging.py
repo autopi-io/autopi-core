@@ -177,7 +177,7 @@ class MessageProcessor(object):
             if kill_upon_success and success:
                 thread.kill()
 
-                log.info("Killed worker thread '{:}' upon successful run")
+                log.debug("Killed worker thread '{:}' upon successful run".format(thread.name))
 
         # Auto start is default
         auto_start = settings.pop("start", True)
