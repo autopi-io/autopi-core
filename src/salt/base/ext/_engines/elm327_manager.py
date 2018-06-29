@@ -21,13 +21,16 @@ returner_func = None
 
 context = {
     "engine": {
-        "state": None
+        "state": ""
     },
     "battery": {
-        "state": None,
-        "voltage": None,
-        "level": None,
-        "critical_limit": None
+        "state": "",
+        "recurrences": 0,
+        "recurrence_thresholds": {
+            "*": 2,  # Default is two repetitions
+            battery_util.CRITICAL_LEVEL_STATE: 240
+        },
+        "critical_limit": 0
     },
     "readout": {}
 }
@@ -210,18 +213,22 @@ def _battery_listener(result):
 
     ctx = context["battery"]
 
-    # Check if state has chaged since last known state
+    # Check if state has chaged since last state
     if ctx["state"] != result["state"]:
         ctx["state"] = result["state"]
-        ctx["voltage"] = result["voltage"]
-        ctx["level"] = result["level"]
+        ctx["recurrences"] = 1
+    else:
+        ctx["recurrences"] += 1
+
+    # Trigger event only when state is repeated according to recurrence threshold
+    if ctx["recurrences"] == ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)):
 
         # Trigger event
         edmp.trigger_event({
-                "voltage": ctx["voltage"],
-                "level": ctx["level"]
+                "voltage": result["voltage"],
+                "level": result["level"]
             },
-            "battery/{:s}".format(ctx["state"])
+            "battery/{:s}".format(result["state"])
         )
 
 
