@@ -25,10 +25,11 @@ context = {
     },
     "battery": {
         "state": "",
+        "level": 0,
         "recurrences": 0,
         "recurrence_thresholds": {
             "*": 2,  # Default is two repetitions
-            battery_util.CRITICAL_LEVEL_STATE: 240
+            battery_util.CRITICAL_LEVEL_STATE: 60
         },
         "critical_limit": 0
     },
@@ -213,20 +214,21 @@ def _battery_listener(result):
 
     ctx = context["battery"]
 
-    # Check if state has chaged since last state
-    if ctx["state"] != result["state"]:
+    # Check if state or level has chaged since last time
+    if ctx["state"] != result["state"] or ctx["level"] != result["level"]:
         ctx["state"] = result["state"]
+        ctx["level"] = result["level"]
         ctx["recurrences"] = 1
     else:
         ctx["recurrences"] += 1
 
-    # Trigger event only when state is repeated according to recurrence threshold
+    # Trigger only event when state and level is repeated according to recurrence threshold
     if ctx["recurrences"] == ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)):
 
         # Trigger event
         edmp.trigger_event({
-                "voltage": result["voltage"],
-                "level": result["level"]
+                "level": result["level"],
+                "voltage": result["voltage"]
             },
             "battery/{:s}".format(result["state"])
         )
