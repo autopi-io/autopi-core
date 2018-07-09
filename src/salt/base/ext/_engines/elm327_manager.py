@@ -47,6 +47,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
     log.debug("Querying: %s", name)
 
+    # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
     # Check if STN has powered down while connection was open (might be due to low battery)
     if conn != None and conn.is_open() and gpio.input(gpio_pin.STN_PWR) == 0:
         conn.close()
@@ -128,12 +129,27 @@ def status_handler():
     ret = {
         "connection": {
             "status": conn.status(),
-            "protocol": conn.protocol()
+            "protocol": conn.protocol(),
+            "settings": conn.settings()
         },
         "context": context
     }
 
     return ret
+
+
+@edmp.register_hook()
+def monitor_handler():
+    """
+    Monitor all messages on OBD bus.
+    """
+
+    conn.switch_baudrate(115200)
+
+    # TODO
+    return {
+        "data": "TODO"
+    }
 
 
 @edmp.register_hook(synchronize=False)

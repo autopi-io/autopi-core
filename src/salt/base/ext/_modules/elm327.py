@@ -72,6 +72,14 @@ def dtc(clear=False, **kwargs):
     return res
 
 
+def monitor(**kwargs):
+    """
+    Monitor all messages on OBD bus.
+    """
+
+    return client.send_sync(msg_pack(_handler="monitor", **kwargs))
+
+
 def manage(*args, **kwargs):
     """
     Example: obd.manage worker list *
