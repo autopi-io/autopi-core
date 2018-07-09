@@ -5,6 +5,7 @@ The software that runs on the autopi dongle.
 ## Getting Started
 
 We are working on a getting started guide that will show how to get a virtual saltstack master server up and running, along with autopi core running on either a virtual salt minion, or an actual device.
+
 For now, the focus of this repository is to give people an idea about what is going on on the device, what commands are available, and how they work.
 
 ### Prerequisites
