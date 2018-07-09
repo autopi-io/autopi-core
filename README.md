@@ -18,7 +18,9 @@ The main requirement is saltstack, as this is the platform on which this reposit
 
 ## Contributing
 
-Please read [CONTRIBUTING.md](https://gist.github.com/PurpleBooth/b24679402957c63ec426) for details on our code of conduct, and the process for submitting pull requests to us.
+We appreciate contributions, in any form, be it comments, issues, changes to the code, etc.
+
+One rule: be nice :)
 
 ## License
 
