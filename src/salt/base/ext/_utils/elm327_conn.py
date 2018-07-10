@@ -2,12 +2,13 @@ import logging
 import obd
 
 from retrying import retry
+from serial_conn import SerialConn
 
 
 log = logging.getLogger(__name__)
 
 
-class ELM327Conn:
+class ELM327Conn(SerialConn):
 
     def __init__(self):
         self._device = None
@@ -32,6 +33,7 @@ class ELM327Conn:
 
         try :
             self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate)
+            self._serial = _obd.interface._ELM327__port
 
             return self
         except Exception:
@@ -43,29 +45,8 @@ class ELM327Conn:
         return self._obd != None \
             and self._obd.status() != obd.OBDStatus.NOT_CONNECTED
 
-    def ensure_open(self):
-        if not self.is_open():
-            self.open()
-
     def close(self):
         self._obd.close()
-
-    def __enter__(self):
-        return self.open()
-
-    def __exit__(self, type, value, traceback):
-        self.close()
-
-    def ensured(self, func):
-        '''
-        Decorater method.
-        '''
-
-        def func_wrapper():
-            self.ensure_open()
-            return func()
-
-        return func_wrapper
 
     def settings(self):
         return {
@@ -107,11 +88,11 @@ class ELM327Conn:
             return
 
         # Switch UART baudrate in terminal-friendly way
-        self._obd.interface._ELM327__write("STSBR {:d}".format(new))
+        self.write_line("STSBR {:d}".format(new))
         log.info("Switched baudrate from {:} to {:}".format(old, new))
 
         # Close connection
-        self._obd.close()
+        self.close()
 
         # Open connection again with new baudrate
         try:

@@ -144,6 +144,10 @@ def monitor_handler():
     Monitor all messages on OBD bus.
     """
 
+    ret = {
+        "data": []
+    }
+
     res = conn._obd.interface.send_and_parse("ATCAF0")
     log.info("CAN Auto Formatting off: {:}".format(res))
 
@@ -152,16 +156,20 @@ def monitor_handler():
 
     conn.switch_baudrate(576000)
     try:
-        pass
-        #conn._obd.interface._ELM327__write("STMA")
+        conn.write_line("STMA")
+        
+        for x in range(0, 10):
+            line = conn.read_line()
+
+            if data:
+                ret["data"].append(data)
+
+        conn.write_line("")
 
     finally:
         conn.switch_baudrate(9600)
 
-    # TODO
-    return {
-        "data": "TODO"
-    }
+    return ret
 
 
 @edmp.register_hook(synchronize=False)

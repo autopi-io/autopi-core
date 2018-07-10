@@ -74,6 +74,7 @@ class SerialConn:
 
     def serial(self):
         self.ensure_open()
+        
         return self._serial
 
     def write_line(self, data, line_terminator="\r"):
