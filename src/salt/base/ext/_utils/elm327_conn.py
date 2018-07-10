@@ -99,21 +99,26 @@ class ELM327Conn:
     def switch_baudrate(self, value, timeout=2000):
         self.ensure_open()
 
+        old = self._baudrate
+        new = value
+
         # First check if already switched
-        if value == self._baudrate:
+        if old == new:
             return
 
-        # Set the baud switch timeout
-        res = self._obd.interface.send_and_parse("STBRT {:d}".format(timeout))
-        log.info("Set baud switch timeout: {:}".format(res))
+        # Switch UART baudrate in terminal-friendly way
+        self._obd.interface._ELM327__write("STSBR {:d}".format(new))
+        log.info("Switched baudrate from {:} to {:}".format(old, new))
 
-        # Switch UART baudrate in software-friendly way
-        res = self._obd.interface.send_and_parse("STBR {:d}".format(value))
-        log.info("Set baudrate: {:}".format(res))
-
-        # Close current connection and open new with switched baudrate
+        # Close connection
         self._obd.close()
-        self._obd = obd.OBD(portstr=self._device, baudrate=value)
 
-        # Update baudrate if no exception was raised
-        self._baudrate = value
+        # Open connection again with new baudrate
+        try:
+            self._baudrate = new
+            self.open()
+        except:
+            self._baudrate = old
+
+            log.exception("Failed to switch to new baudrate {:} - now reverted back to {:}".format(new, old))
+
