@@ -33,7 +33,7 @@ class ELM327Conn(SerialConn):
 
         try :
             self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate)
-            self._serial = _obd.interface._ELM327__port
+            self._serial = self._obd.interface._ELM327__port
 
             return self
         except Exception:

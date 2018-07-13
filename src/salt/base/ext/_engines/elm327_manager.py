@@ -154,20 +154,23 @@ def monitor_handler():
     res = conn._obd.interface.send_and_parse("STCMM1")
     log.info("CAN monitor mode: {:}".format(res))
 
-    conn.switch_baudrate(576000)
+    #conn.switch_baudrate(576000)
     try:
         conn.write_line("STMA")
-        
+
         for x in range(0, 10):
             line = conn.read_line()
 
-            if data:
-                ret["data"].append(data)
+            if not line:
+                break
+
+            ret["data"].append(line)
 
         conn.write_line("")
 
     finally:
-        conn.switch_baudrate(9600)
+        pass
+        #conn.switch_baudrate(9600)
 
     return ret
 
