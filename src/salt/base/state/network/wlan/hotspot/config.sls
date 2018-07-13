@@ -15,6 +15,10 @@ dhcpcd-service-running:
     - watch:
       - file: /etc/dhcpcd.conf
 
+dhcpcd-fast-boot-enabled:
+  file.absent:
+    - name: /etc/systemd/system/dhcpcd.service.d/wait.conf
+
 ip-forward-enabled:
   file.replace:
     - name: /etc/sysctl.conf
