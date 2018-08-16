@@ -50,11 +50,15 @@ redis-flushed:
 salt-minion:
   service.dead
 
-"/etc/hostapd/hostapd_wlan0.conf":
+set-passphrase-to-default:
   file.replace:
+    name: "/etc/hostapd/hostapd_wlan0.conf"
     - pattern: "wpa_passphrase=.*"
     - repl: "wpa_passphrase=autopi2018"
+  
+set-ssid-to-initial:
   file.replace:
+    - name: "/etc/hostapd/hostapd_wlan0.conf"
     - pattern: "ssid=.*"
     - repl: "ssid=AutoPi-Initial"
 
