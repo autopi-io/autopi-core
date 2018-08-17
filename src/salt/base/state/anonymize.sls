@@ -1,3 +1,5 @@
+salt-minion:
+  service.dead
 
 # Delete 'pi' user files
 /home/pi/.*_history:
@@ -28,16 +30,16 @@ redis-flushed:
   cmd.run
 
 # Delete Salt files
-/etc/salt/pki/minion/:
-  file.absent
+# /etc/salt/pki/minion/:
+#   file.absent
 /etc/salt/minion_id:
   file.absent
 /etc/salt/grains:
   file.absent
 /etc/salt/minion.d/:
   file.absent
-/var/cache/salt/minion/:
-  file.absent
+# /var/cache/salt/minion/:
+#   file.absent
 
 # Truncate log files
 "truncate -s 0 /var/log/*.log":  # First level
@@ -46,9 +48,6 @@ redis-flushed:
   cmd.run
 "truncate -s 0 /var/log/salt/*":  # Salt
   cmd.run
-
-salt-minion:
-  service.dead
 
 set-passphrase-to-default:
   file.replace:
