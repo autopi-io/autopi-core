@@ -52,7 +52,7 @@ salt-minion:
 
 set-passphrase-to-default:
   file.replace:
-    name: "/etc/hostapd/hostapd_wlan0.conf"
+    - name: "/etc/hostapd/hostapd_wlan0.conf"
     - pattern: "wpa_passphrase=.*"
     - repl: "wpa_passphrase=autopi2018"
   
