@@ -38,7 +38,7 @@ context = {
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", force=False, keep_conn=True):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", force=False):
     """
     Queries a given OBD command.
     """
@@ -80,8 +80,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
         }
 
     res = conn.query(cmd, force)
-
-    log.debug("Got result: %s", res)
+    log.debug("Got query result: %s", res)
 
     # Prepare return value
     ret = {
@@ -97,6 +96,36 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
         else:
             ret["value"] = res.value
 
+    return ret
+
+
+@edmp.register_hook()
+def execute_handler(cmd, keep_conn=True):
+    """
+    Executes a raw command.
+    """
+
+    global conn
+
+    log.debug("Executing: %s", cmd)
+
+    # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
+    # Check if STN has powered down while connection was open (might be due to low battery)
+    if conn != None and conn.is_open() and gpio.input(gpio_pin.STN_PWR) == 0:
+        conn.close()
+        conn = None  # Ensure no UART communication that can wake up STN
+
+        log.warn("Closed ELM327 connection because STN powered off")
+
+        edmp.close()  # Will kill all active workers
+
+    # Check if connection is available
+    if conn == None:
+        raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
+
+    res = conn.execute(cmd)
+    log.debug("Got execute result: {:}".format(res))
+
     # Close connection if requested (required when putting STN to sleep)
     if not keep_conn:
         conn.close()
@@ -105,6 +134,13 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
         log.warn("Closed ELM327 connection upon request")
 
         edmp.close()  # Will kill all active workers
+
+    # Prepare return value(s)
+    ret = {}
+    if len(res) == 1:
+        ret["value"] = res[0]
+    else:
+        ret["values"] = res
 
     return ret
 

@@ -42,6 +42,14 @@ def commands(**kwargs):
     return client.send_sync(msg_pack(_handler="commands", **kwargs))
 
 
+def execute(cmd, **kwargs):
+    """
+    Executes a raw command.
+    """
+
+    return client.send_sync(msg_pack(cmd, _handler="execute", **kwargs))
+
+
 def status(**kwargs):
     """
     Get current connection status and protocol.

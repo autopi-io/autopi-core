@@ -77,6 +77,11 @@ class ELM327Conn(SerialConn):
 
         return self._obd.supported_commands
 
+    def execute(self, cmd_string):
+        self.ensure_open()
+
+        return self._obd.execute(cmd_string)
+
     def switch_baudrate(self, value, timeout=2000):
         self.ensure_open()
 

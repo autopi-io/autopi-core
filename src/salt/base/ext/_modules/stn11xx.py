@@ -44,28 +44,16 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
-def _query(cmd, **kwargs):
+def _execute(cmd, **kwargs):
     """
-    Private helper function to perform query commands.
+    Private helper function to execute commands.
     """
 
-    res = client.send_sync(msg_pack(cmd, force=True, **kwargs))
-    res.pop("_type")
+    res = client.send_sync(msg_pack(cmd, _handler="execute", **kwargs))
 
-    lines = parsing.lines_parser(res.pop("value"))
-
-    # Check if first line is echo
-    if lines and lines[0] == cmd:
-        lines.pop(0)
-
-    if not lines:
+    if not "value" in res and not "values" in res:
         raise salt.exceptions.CommandExecutionError(
-            "Query command '{:s}' returned no value(s)".format(cmd))
-
-    if len(lines) == 1:
-        res["value"] = lines[0]
-    else:
-        res["values"] = lines
+            "Execution of command '{:s}' returned no value(s)".format(cmd))
 
     return res
 
@@ -75,7 +63,7 @@ def _change(cmd, **kwargs):
     Private helper function to perform change settings commands.
     """
 
-    res = _query(cmd, **kwargs)
+    res = _execute(cmd, **kwargs)
 
     if res.get("value", None) != "OK":
         raise salt.exceptions.CommandExecutionError(
@@ -84,14 +72,14 @@ def _change(cmd, **kwargs):
     return res
 
 def get_serial():
-    res = _query("STDIX")
+    res = _execute("STDIX")
     parsing.into_dict_parser(res.pop("values"), root=res)
 
     return res["Serial #"]
 
 
 def reset():
-    res = _query("ATZ")
+    res = _execute("ATZ")
     if not res.get("value", "").startswith("ELM"):
         raise salt.exceptions.CommandExecutionError(
             "Reset device command failed")
@@ -104,7 +92,7 @@ def power_config():
     Summarizes active PowerSave configuration.
     """
 
-    res = _query("STSLCS")
+    res = _execute("STSLCS")
     parsing.into_dict_parser(res.pop("values"), root=res)
 
     return res
@@ -115,7 +103,7 @@ def power_trigger_status():
     Reports last active sleep/wakeup triggers since last reset.
     """
 
-    res = _query("STSLLT")
+    res = _execute("STSLLT")
     parsing.into_dict_parser(res.pop("values"), root=res)
 
     return res
