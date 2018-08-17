@@ -1,6 +1,3 @@
-salt-minion:
-  service.dead
-
 # Delete 'pi' user files
 /home/pi/.*_history:
   file.absent
@@ -75,3 +72,6 @@ regenerate-ssh-host-keys-enabled:
     - enable: true
     - require:
       - file: /lib/systemd/system/regenerate-ssh-host-keys.service
+
+salt-minion:
+  service.dead
