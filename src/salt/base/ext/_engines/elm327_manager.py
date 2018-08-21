@@ -74,7 +74,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
         cmd = obd.OBDCommand(name, None, name, bytes, decoder)
 
     # Check if command is supported
-    if not cmd in conn.commands() and not force:
+    if not cmd in conn.supported_commands() and not force:
         return {
             "error": "Command may not be supported - set 'force=True' to run it anyway"
         }
@@ -151,7 +151,35 @@ def commands_handler(mode=None):
     Lists all supported OBD commands found for vehicle.
     """
 
-    ret = {cmd.name: cmd.desc for cmd in conn.commands()}
+    ret = conn.supported_commands()
+
+    return ret
+
+
+@edmp.register_hook()
+def protocol_handler(set=None, baudrate=None):
+    """
+    Configures protocol or lists all supported.
+    """
+
+    ret = {}
+
+    if set == None and baudrate == None:
+        ret["supported"] = {"AUTO": "Automatic"}
+        ret["supported"].update(conn.supported_protocols())
+
+    if set != None:
+        id = str(set).upper()
+        if id == "AUTO":
+           if not conn.change_protocol():
+               raise Exception("Failed to change protocol using auto detection - see log for more details")
+        elif id in conn.supported_protocols():
+            if not conn.change_protocol(id=id, baudrate=baudrate):
+                raise Exception("Failed to change protocol - see log for more details")
+        else:
+            raise Exception("Unsupported protocol specified")
+
+    ret["active"] = conn.active_protocol()
 
     return ret
 
@@ -165,7 +193,7 @@ def status_handler():
     ret = {
         "connection": {
             "status": conn.status(),
-            "protocol": conn.protocol(),
+            "protocol": conn.active_protocol(),
             "settings": conn.settings()
         },
         "context": context

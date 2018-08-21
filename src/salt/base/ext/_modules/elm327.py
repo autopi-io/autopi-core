@@ -42,12 +42,20 @@ def commands(**kwargs):
     return client.send_sync(msg_pack(_handler="commands", **kwargs))
 
 
+def protocol(**kwargs):
+    """
+    Configures protocol or lists all supported.
+    """
+
+    return client.send_sync(msg_pack(_handler="protocol", **kwargs))
+
+
 def execute(cmd, **kwargs):
     """
     Executes a raw command.
     """
 
-    return client.send_sync(msg_pack(cmd, _handler="execute", **kwargs))
+    return client.send_sync(msg_pack(str(cmd), _handler="execute", **kwargs))
 
 
 def status(**kwargs):

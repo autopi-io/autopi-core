@@ -1,6 +1,7 @@
 import logging
 import obd
 
+from obd.interfaces import STN11XX
 from retrying import retry
 from serial_conn import SerialConn
 
@@ -32,7 +33,7 @@ class ELM327Conn(SerialConn):
         log.info("Opening ELM327 connection")
 
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate)
+            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX)
             self._serial = self._obd.interface._ELM327__port
 
             return self
@@ -54,14 +55,23 @@ class ELM327Conn(SerialConn):
             "baudrate": self._baudrate
         }
 
-    def protocol(self):
+    def active_protocol(self):
         self.ensure_open()
 
-        return {
-            "name": self._obd.protocol_name(),
-            "id": self._obd.protocol_id()
-        }
+        return self._obd.protocol_info()
 
+    def supported_protocols(self):
+        self.ensure_open()
+
+        protocols = self._obd.supported_protocols()
+
+        return {k: v.NAME for k, v in protocols.iteritems()}
+
+    def change_protocol(self, id=None, baudrate=None):
+        self.ensure_open()
+        
+        return self._obd.interface.set_protocol(id, baudrate=baudrate)
+        
     def status(self):
         self.ensure_open()
 
@@ -72,10 +82,12 @@ class ELM327Conn(SerialConn):
 
         return self._obd.query(cmd, force=force)
 
-    def commands(self):
+    def supported_commands(self):
         self.ensure_open()
 
-        return self._obd.supported_commands
+        commands = self._obd.supported_commands
+
+        return {c.name: c.desc for c in commands}
 
     def execute(self, cmd_string):
         self.ensure_open()
