@@ -71,11 +71,18 @@ def _change(cmd, **kwargs):
 
     return res
 
-def get_serial():
+
+def info():
     res = _execute("STDIX")
     parsing.into_dict_parser(res.pop("values"), root=res)
 
-    return res["Serial #"]
+    return res
+
+
+def serial():
+    res = _execute("STSN")
+
+    return res
 
 
 def reset():
