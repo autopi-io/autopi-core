@@ -50,9 +50,17 @@ def protocol(**kwargs):
     return client.send_sync(msg_pack(_handler="protocol", **kwargs))
 
 
+def send(msg, **kwargs):
+    """
+     Sends a raw message/data on OBD bus.
+    """
+
+    return client.send_sync(msg_pack(str(msg), _handler="send", **kwargs))
+
+
 def execute(cmd, **kwargs):
     """
-    Executes a raw command.
+    Executes a raw AT/ST command.
     """
 
     return client.send_sync(msg_pack(str(cmd), _handler="execute", **kwargs))
@@ -60,7 +68,7 @@ def execute(cmd, **kwargs):
 
 def status(**kwargs):
     """
-    Get current connection status and protocol.
+    Gets current connection status and more.
     """
 
     return client.send_sync(msg_pack(_handler="status", **kwargs))
@@ -68,7 +76,7 @@ def status(**kwargs):
 
 def battery(**kwargs):
     """
-    Get current battery voltage
+    Gets current battery voltage
     """
 
     return client.send_sync(msg_pack("ELM_VOLTAGE", _converter="battery", **kwargs))
@@ -76,7 +84,7 @@ def battery(**kwargs):
 
 def dtc(clear=False, **kwargs):
     """
-    Readout Diagnostics Trouble Codes (DTCs).
+    Readouts Diagnostics Trouble Codes (DTCs).
     """
 
     cmd = "GET_DTC" if not clear else "CLEAR_DTC"
@@ -88,12 +96,20 @@ def dtc(clear=False, **kwargs):
     return res
 
 
-def monitor(**kwargs):
+def dump(**kwargs):
     """
-    Monitor all messages on OBD bus.
+    Dumps all messages from OBD bus to screen or file.
     """
 
-    return client.send_sync(msg_pack(_handler="monitor", **kwargs))
+    return client.send_sync(msg_pack(_handler="dump", **kwargs))
+
+
+def play(file, **kwargs):
+    """
+    Plays all messages from file on the OBD bus.
+    """
+
+    return client.send_sync(msg_pack(file, _handler="play", **kwargs))
 
 
 def manage(*args, **kwargs):

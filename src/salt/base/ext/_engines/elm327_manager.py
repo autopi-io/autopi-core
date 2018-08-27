@@ -1,7 +1,9 @@
 import battery_util
 import gpio_pin
 import logging
+import math
 import obd
+import os
 import RPi.GPIO as gpio
 import salt.loader
 
@@ -79,7 +81,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
             "error": "Command may not be supported - set 'force=True' to run it anyway"
         }
 
-    res = conn.query(cmd, force)
+    res = conn.query(cmd, force=force)
     log.debug("Got query result: %s", res)
 
     # Prepare return value
@@ -100,9 +102,30 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
 
 @edmp.register_hook()
+def send_handler(msg):
+    """
+    Sends a raw message/data on OBD bus.
+    """
+
+    log.debug("Sending: %s", msg)
+
+    res = conn.send(msg, auto_format=False)
+
+    # Prepare return value(s)
+    ret = {}
+    if res:
+        if len(res) == 1:
+            ret["value"] = res[0]
+        else:
+            ret["values"] = res
+
+    return ret
+
+
+@edmp.register_hook()
 def execute_handler(cmd, keep_conn=True):
     """
-    Executes a raw command.
+    Executes a raw AT/ST command.
     """
 
     global conn
@@ -123,7 +146,7 @@ def execute_handler(cmd, keep_conn=True):
     if conn == None:
         raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
 
-    res = conn.execute(cmd)
+    res = conn.send(cmd)
     log.debug("Got execute result: {:}".format(res))
 
     # Close connection if requested (required when putting STN to sleep)
@@ -137,10 +160,11 @@ def execute_handler(cmd, keep_conn=True):
 
     # Prepare return value(s)
     ret = {}
-    if len(res) == 1:
-        ret["value"] = res[0]
-    else:
-        ret["values"] = res
+    if res:
+        if len(res) == 1:
+            ret["value"] = res[0]
+        else:
+            ret["values"] = res
 
     return ret
 
@@ -171,15 +195,13 @@ def protocol_handler(set=None, baudrate=None):
     if set != None:
         id = str(set).upper()
         if id == "AUTO":
-           if not conn.change_protocol():
-               raise Exception("Failed to change protocol using auto detection - see log for more details")
+            conn.change_protocol(None)
         elif id in conn.supported_protocols():
-            if not conn.change_protocol(id=id, baudrate=baudrate):
-                raise Exception("Failed to change protocol - see log for more details")
+            conn.change_protocol(id, baudrate=baudrate)
         else:
             raise Exception("Unsupported protocol specified")
 
-    ret["active"] = conn.active_protocol()
+    ret["current"] = conn.protocol_info()
 
     return ret
 
@@ -187,15 +209,11 @@ def protocol_handler(set=None, baudrate=None):
 @edmp.register_hook()
 def status_handler():
     """
-    Get current connection status and more.
+    Gets current connection status and more.
     """
 
     ret = {
-        "connection": {
-            "status": conn.status(),
-            "protocol": conn.active_protocol(),
-            "settings": conn.settings()
-        },
+        "connection": conn.info(),
         "context": context
     }
 
@@ -203,38 +221,81 @@ def status_handler():
 
 
 @edmp.register_hook()
-def monitor_handler():
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None):
     """
-    Monitor all messages on OBD bus.
+    Dumps all messages from OBD bus to screen or file.
     """
 
-    ret = {
-        "data": []
-    }
+    ret = {}
 
-    res = conn._obd.interface.send_and_parse("ATCAF0")
-    log.info("CAN Auto Formatting off: {:}".format(res))
+    # Check if baudrate is sufficient compared to protocol baudrate
+    protocol_baudrate = conn.protocol_info().get("baudrate", 0) 
+    if protocol_baudrate > baudrate:
+        raise Exception("Connection baudrate '{:}' is lower than protocol baudrate '{:}'".format(baudrate, protocol_baudrate))
 
-    res = conn._obd.interface.send_and_parse("STCMM1")
-    log.info("CAN monitor mode: {:}".format(res))
+    conn.change_baudrate(baudrate)
 
-    #conn.switch_baudrate(576000)
-    try:
-        conn.write_line("STMA")
+    res = conn.monitor_all(duration=duration, mode=monitor_mode, auto_format=auto_format)
 
-        for x in range(0, 10):
-            line = conn.read_line()
+    # Write result to file if specified
+    if file != None:
+        path = file if os.path.isabs(file) else os.path.join(__opts__["cachedir"], file)
+        with open(path, "w") as f:
+            for line in res:
+                f.write(line + os.linesep)
 
-            if not line:
+            ret["file"] = f.name
+    else:
+        ret["data"] = res
+
+    return ret
+
+
+@edmp.register_hook()
+def play_handler(file, slice=None, verbose=False):
+    """
+    Plays messages from file on the OBD bus.
+    """
+
+    ret = {}
+
+    lines = []
+    with open(file, "r") as f:
+        lines = f.readlines()
+
+    ret["total"] = len(lines)
+
+    # Filter lines based on defined slice pattern (divide and conquer)
+    if not slice is None:
+        slice = slice.upper()
+
+        ret["slice"] = {
+            "offset": 0
+        }
+
+        # Loop through slice chars one by one
+        for char in slice:
+            if lines <= 1:
                 break
 
-            ret["data"].append(line)
+            offset = int(math.ceil(len(lines) / 2.0))
+            if char == "T":  # Top half
+                lines = lines [:offset]
+            elif char == "B":  # Bottom half
+                lines = lines [offset:]
 
-        conn.write_line("")
+                ret["slice"]["offset"] += offset
+            else:
+                raise Exception("Unsupported slice character")
 
-    finally:
-        pass
-        #conn.switch_baudrate(9600)
+        ret["slice"]["count"] = len(lines)
+
+    # Send lines
+    for line in lines:
+        conn.send(line, auto_format=False)
+
+    if verbose or len(lines) == 1:
+        ret["messages"] = lines
 
     return ret
 
