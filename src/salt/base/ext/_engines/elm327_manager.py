@@ -77,9 +77,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
-        return {
-            "error": "Command may not be supported - set 'force=True' to run it anyway"
-        }
+        raise Exception("Command may not be supported - set 'force=True' to run it anyway")
 
     res = conn.query(cmd, force=force)
     log.debug("Got query result: %s", res)
