@@ -6,9 +6,11 @@ import obd
 import os
 import RPi.GPIO as gpio
 import salt.loader
+import time
 
 from elm327_conn import ELM327Conn
 from messaging import EventDrivenMessageProcessor
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ context = {
 @edmp.register_hook()
 def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", force=False):
     """
-    Queries a given OBD command.
+    Queries an OBD command.
     """
 
     global conn
@@ -100,14 +102,14 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
 
 @edmp.register_hook()
-def send_handler(msg):
+def send_handler(msg, **kwargs):
     """
-    Sends a raw message/data on OBD bus.
+    Sends a raw message on bus.
     """
 
     log.debug("Sending: %s", msg)
 
-    res = conn.send(msg, auto_format=False)
+    res = conn.send(msg, **kwargs)
 
     # Prepare return value(s)
     ret = {}
@@ -123,7 +125,7 @@ def send_handler(msg):
 @edmp.register_hook()
 def execute_handler(cmd, keep_conn=True):
     """
-    Executes a raw AT/ST command.
+    Executes an AT/ST command.
     """
 
     global conn
@@ -144,7 +146,7 @@ def execute_handler(cmd, keep_conn=True):
     if conn == None:
         raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
 
-    res = conn.send(cmd)
+    res = conn.execute(cmd)
     log.debug("Got execute result: {:}".format(res))
 
     # Close connection if requested (required when putting STN to sleep)
@@ -205,10 +207,13 @@ def protocol_handler(set=None, baudrate=None):
 
 
 @edmp.register_hook()
-def status_handler():
+def status_handler(reset=None):
     """
     Gets current connection status and more.
     """
+
+    if reset:
+        conn.reset(mode=reset)
 
     ret = {
         "connection": conn.info(),
@@ -233,7 +238,15 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
 
     conn.change_baudrate(baudrate)
 
-    res = conn.monitor_all(duration=duration, mode=monitor_mode, auto_format=auto_format)
+    # Play sound to indicate recording has begun
+    __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
+
+    try:
+        res = conn.monitor_all(duration=duration, mode=monitor_mode, auto_format=auto_format)
+    finally:
+
+        # Play sound to indicate recording has ended
+        __salt__["cmd.run"]("aplay /opt/autopi/audio/beep.wav")
 
     # Write result to file if specified
     if file != None:
@@ -250,7 +263,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
 
 
 @edmp.register_hook()
-def play_handler(file, slice=None, verbose=False):
+def play_handler(file, delay=None, slice=None, verbose=False):
     """
     Plays messages from file on the OBD bus.
     """
@@ -259,7 +272,7 @@ def play_handler(file, slice=None, verbose=False):
 
     lines = []
     with open(file, "r") as f:
-        lines = f.readlines()
+        lines = f.read().splitlines()
 
     ret["total"] = len(lines)
 
@@ -289,8 +302,14 @@ def play_handler(file, slice=None, verbose=False):
         ret["slice"]["count"] = len(lines)
 
     # Send lines
+    start = timer()
     for line in lines:
         conn.send(line, auto_format=False)
+
+        if delay:
+            time.sleep(delay / 1000.0)
+
+    ret["duration"] = timer() - start
 
     if verbose or len(lines) == 1:
         ret["messages"] = lines

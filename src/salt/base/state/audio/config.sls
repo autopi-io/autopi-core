@@ -2,8 +2,8 @@
 include:
   - .dac.config
 
-power-on-sound-distributed:
-  file.managed:
-    - name: /opt/autopi/audio/power_on.wav
-    - source: salt://audio/power_on.wav
-    - makedirs: True
+sounds-distributed:
+  file.recurse:
+    - name: /opt/autopi/audio
+    - source: salt://audio/sounds
+    - clean: True

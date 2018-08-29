@@ -78,18 +78,26 @@ class ELM327Conn(SerialConn):
 
         return {c.name: c.desc for c in self._obd.supported_commands}
 
-    def send(self, data, **kwargs):
+    def send(self, msg, **kwargs):
         self.ensure_open()
 
-        header = None
-
         # Parse out header if found
-        hash_pos = data.find("#")
+        hash_pos = msg.find("#")
         if hash_pos > 0:
-            header = data[:hash_pos]
-            data = data[hash_pos + 1:]
+            kwargs["header"] = msg[:hash_pos]
+            msg = msg[hash_pos + 1:]
 
-        return self._obd.send(data, header=header, **kwargs)
+        return self._obd.send(msg, **kwargs)
+
+    def execute(self, cmd, **kwargs):
+        self.ensure_open()
+
+        return self._obd.execute(cmd, **kwargs)
+
+    def reset(self, **kwargs):
+        self.ensure_open()
+
+        self._obd.reset(**kwargs) 
 
     def change_baudrate(self, value):
         if not value in STN11XX.TRY_BAUDRATES:

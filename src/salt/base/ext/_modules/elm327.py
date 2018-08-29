@@ -52,7 +52,7 @@ def protocol(**kwargs):
 
 def send(msg, **kwargs):
     """
-     Sends a raw message/data on OBD bus.
+    Sends a raw message on bus.
     """
 
     return client.send_sync(msg_pack(str(msg), _handler="send", **kwargs))
@@ -60,7 +60,7 @@ def send(msg, **kwargs):
 
 def execute(cmd, **kwargs):
     """
-    Executes a raw AT/ST command.
+    Executes an AT/ST command.
     """
 
     return client.send_sync(msg_pack(str(cmd), _handler="execute", **kwargs))
