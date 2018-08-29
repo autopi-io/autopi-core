@@ -1,6 +1,8 @@
 from signal_rater import rate
 
 
+# High rating mean good signal quality
+
 # RSSI
 
 assert rate("rssi",   0.0, "dBm") == 4
