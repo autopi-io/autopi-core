@@ -1,12 +1,13 @@
 import battery_util
+import cProfile as profile
 import gpio_pin
 import logging
 import math
 import obd
 import os
+import psutil
 import RPi.GPIO as gpio
 import salt.loader
-import time
 
 from elm327_conn import ELM327Conn
 from messaging import EventDrivenMessageProcessor
@@ -49,7 +50,8 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
     global conn
 
-    log.debug("Querying: %s", name)
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Querying: %s", name)
 
     # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
     # Check if STN has powered down while connection was open (might be due to low battery)
@@ -82,7 +84,9 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
         raise Exception("Command may not be supported - set 'force=True' to run it anyway")
 
     res = conn.query(cmd, force=force)
-    log.debug("Got query result: %s", res)
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Got query result: %s", res)
 
     # Prepare return value
     ret = {
@@ -107,7 +111,8 @@ def send_handler(msg, **kwargs):
     Sends a raw message on bus.
     """
 
-    log.debug("Sending: %s", msg)
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Sending: %s", msg)
 
     res = conn.send(msg, **kwargs)
 
@@ -130,7 +135,8 @@ def execute_handler(cmd, keep_conn=True):
 
     global conn
 
-    log.debug("Executing: %s", cmd)
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Executing: %s", cmd)
 
     # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
     # Check if STN has powered down while connection was open (might be due to low battery)
@@ -147,7 +153,9 @@ def execute_handler(cmd, keep_conn=True):
         raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
 
     res = conn.execute(cmd)
-    log.debug("Got execute result: {:}".format(res))
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Got execute result: {:}".format(res))
 
     # Close connection if requested (required when putting STN to sleep)
     if not keep_conn:
@@ -224,7 +232,7 @@ def status_handler(reset=None):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=2304000, file=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -263,20 +271,45 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, verbose=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", test=False):
     """
     Plays messages from file on the OBD bus.
     """
 
-    ret = {}
+    ret = {
+        "count": {}
+    }
 
     lines = []
     with open(file, "r") as f:
         lines = f.read().splitlines()
 
-    ret["total"] = len(lines)
+    ret["count"]["total"] = len(lines)
 
-    # Filter lines based on defined slice pattern (divide and conquer)
+    def group_by(mode, lines):
+        ret = {}
+
+        if mode.lower() == "id":
+            for line in lines:
+                id = line[:line.find("#")]
+                if id in ret:
+                    ret[id] += 1
+                else:
+                    ret[id] = 1
+
+        elif mode.lower() == "msg":
+            for line in lines:
+                if line in ret:
+                    ret[line] += 1
+                else:
+                    ret[line] = 1
+
+        else:
+            raise ValueError("Unsupported group by mode")
+
+        return ret
+
+    # Slice lines based on defined pattern (used for divide and conquer)
     if not slice is None:
         slice = slice.upper()
 
@@ -301,18 +334,85 @@ def play_handler(file, delay=None, slice=None, verbose=False):
 
         ret["slice"]["count"] = len(lines)
 
+    # Filter lines based on defined rules
+    if not filter is None:
+        filters = [f.strip() for f in filter.split(",")]
+
+        mutate = None
+        duplicate = None
+
+        # Filter included
+        incl = set()
+        for f in [f[1:].upper() for f in filters if f.startswith("+")]:
+            if f == "MUTATE":
+                mutate = True
+                continue
+            elif f == "DUPLICATE":
+                duplicate = True
+                continue
+
+            incl.update([l for l in lines if l.startswith(f)])
+        if incl:
+            lines = [l for l in lines if l in incl]
+
+        # Filter excluded
+        excl = set()
+        for f in [f[1:].upper() for f in filters if f.startswith("-")]:
+            if f == "MUTATE":
+                mutate = False
+                continue
+            elif f == "DUPLICATE":
+                duplicate = False
+                continue
+
+            excl.update([l for l in lines if l.startswith(f)])
+        if excl:
+            lines = [l for l in lines if l not in excl]
+
+        # Filter mutating
+        if mutate != None:
+            groups = group_by("id", set(lines))
+            if mutate:
+                ids = set(g[0] for g in groups.items() if g[1] > 1)
+                lines = [l for l in lines if l[:l.find("#")] in ids]
+            else:
+                ids = set(g[0] for g in groups.items() if g[1] == 1)
+                lines = [l for l in lines if l[:l.find("#")] in ids]
+
+        # Filter duplicates
+        if duplicate != None:
+            groups = group_by("msg", lines)
+            if duplicate:
+                msgs = set(g[0] for g in groups.items() if g[1] > 1)
+                lines = [l for l in lines if l in msgs]
+            else:
+                msgs = set(g[0] for g in groups.items() if g[1] == 1)
+                lines = [l for l in lines if l in msgs]
+
+        ret["count"]["filtered"] = len(lines)
+
     # Send lines
-    start = timer()
-    for line in lines:
-        conn.send(line, auto_format=False)
+    if not test:
+        start = timer()
 
-        if delay:
-            time.sleep(delay / 1000.0)
+        # TODO: Not sure if this helps or not
+        p = psutil.Process(os.getpid())
+        p.nice(-20)
 
-    ret["duration"] = timer() - start
+        # TODO: For some reason this runs much faster when profiling!
+        #conn.send_all(lines, delay=delay)
+        profile.runctx("conn.send_all(lines, delay=delay)", globals(), locals())
 
-    if verbose or len(lines) == 1:
-        ret["messages"] = lines
+        ret["count"]["sent"] = len(lines)
+        ret["duration"] = timer() - start
+    else:
+        ret["count"]["sent"] = 0
+
+    if group:
+        groups = group_by(group, lines)
+        ret["output"] = [{i[1]: i[0]} for i in sorted(groups.items(), key=lambda i: (i[1], i[0]), reverse=True)]
+    else:
+        ret["output"] = lines
 
     return ret
 
@@ -370,7 +470,8 @@ def _rpm_listener(result):
     Listens for RPM results and triggers engine running/stopped events.
     """
 
-    log.debug("Listener got RPM result: {:}".format(result))
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Listener got RPM result: {:}".format(result))
 
     ctx = context["engine"]
 
@@ -391,7 +492,8 @@ def _battery_listener(result):
     Listens for battery results and triggers battery state events when voltage changes.
     """
 
-    log.debug("Listener got battery result: {:}".format(result))
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Listener got battery result: {:}".format(result))
 
     ctx = context["battery"]
 
@@ -417,7 +519,9 @@ def _battery_listener(result):
 
 def start(serial_conn, returner, workers, **kwargs):
     try:
-        log.debug("Starting ELM327 manager")
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting ELM327 manager")
 
         # Setup GPIO to listen on STN power pin
         gpio.setmode(gpio.BOARD)

@@ -3,13 +3,12 @@ import obd
 
 from obd.interfaces import STN11XX
 from retrying import retry
-from serial_conn import SerialConn
 
 
 log = logging.getLogger(__name__)
 
 
-class ELM327Conn(SerialConn):
+class ELM327Conn(object):
 
     def __init__(self):
         self._device = None
@@ -46,6 +45,10 @@ class ELM327Conn(SerialConn):
     def is_open(self):
         return self._obd != None \
             and self._obd.status() != obd.OBDStatus.NOT_CONNECTED
+
+    def ensure_open(self):
+        if not self.is_open():
+            self.open()
 
     def close(self):
         self._obd.close()
@@ -88,6 +91,13 @@ class ELM327Conn(SerialConn):
             msg = msg[hash_pos + 1:]
 
         return self._obd.send(msg, **kwargs)
+
+    def send_all(self, msgs, delay=None):
+        for msg in msgs:
+            self.send(msg, auto_format=False)
+
+            if delay:
+                time.sleep(delay / 1000.0)
 
     def execute(self, cmd, **kwargs):
         self.ensure_open()
