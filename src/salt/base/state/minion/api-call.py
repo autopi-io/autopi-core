@@ -1,4 +1,5 @@
-# This Python file uses the following encoding: utf-8
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import json
 import sys
@@ -65,6 +66,9 @@ def state_output(res):
     print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(res.keys()), succeded, len(errors)))
 
 def main():
+
+    if len(sys.argv) < 2:
+        print("Usage: {:} [options] <command> [arguments]".format(sys.argv[0]))
 
     # Pop script name
     sys.argv.pop(0)
