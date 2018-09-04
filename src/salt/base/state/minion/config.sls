@@ -21,6 +21,14 @@ minion-configured:
     - formatter: yaml
     - show_changes: True
 
+minion-api-call-script-installed:
+  file.managed:
+    - name: /usr/bin/autopi
+    - source: salt://minion/api-call.py
+    - mode: 755
+    - user: root
+    - group: root
+
 minion-restart-after-config-changes-required:
   module.wait:
     - name: minionutil.request_restart
