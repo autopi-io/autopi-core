@@ -7,7 +7,7 @@
 # Delete 'root' user files
 /root/.*_history:
   file.absent
-/root/.nano/:
+/root/.nano:
   file.absent
 
 # Delete archived logs
@@ -22,13 +22,13 @@ redis-flushed:
     - port: 6379
     - db: 0
 
-# Flush all ssh keys, maybe remove this, as the regenerate-ssh-host-keys will do this once on next start.
+# Flush all ssh keys
 "rm -v /etc/ssh/ssh_host_*":
   cmd.run
 
 # Delete Salt files
-# /etc/salt/pki/minion/:
-#   file.absent
+/etc/salt/pki/minion/:
+  file.absent
 /etc/salt/minion_id:
   file.absent
 /etc/salt/grains:
@@ -42,6 +42,10 @@ redis-flushed:
 "truncate -s 0 /var/log/*.log":  # First level
   cmd.run
 "truncate -s 0 /var/log/**/*.log":  # Nested folders
+  cmd.run
+"truncate -s 0 /var/log/syslog":  # syslog
+  cmd.run
+"truncate -s 0 /var/log/messages":  # messages
   cmd.run
 "truncate -s 0 /var/log/salt/*":  # Salt
   cmd.run
