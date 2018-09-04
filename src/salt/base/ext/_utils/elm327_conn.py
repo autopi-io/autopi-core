@@ -1,14 +1,14 @@
 import logging
 import obd
 
+from obd.interfaces import STN11XX
 from retrying import retry
-from serial_conn import SerialConn
 
 
 log = logging.getLogger(__name__)
 
 
-class ELM327Conn(SerialConn):
+class ELM327Conn(object):
 
     def __init__(self):
         self._device = None
@@ -20,11 +20,13 @@ class ELM327Conn(SerialConn):
         log.info("Initializing ELM327 connection using settings: %s", settings)
 
         if not "device" in settings:
-            raise ValueError("ELM327 'device' must be specified in settings")
+            raise ValueError("Setting 'device' must be specified")
         self._device = settings["device"]
 
         if not "baudrate" in settings:
-            raise ValueError("ELM327 'baudrate' must be specified in settings")
+            raise ValueError("Setting 'baudrate' must be specified")
+        if not settings["baudrate"] in STN11XX.TRY_BAUDRATES:
+            raise ValueError("Setting 'baudrate' has unsupported value")
         self._baudrate = settings["baudrate"]
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
@@ -32,8 +34,7 @@ class ELM327Conn(SerialConn):
         log.info("Opening ELM327 connection")
 
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate)
-            self._serial = self._obd.interface._ELM327__port
+            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX)
 
             return self
         except Exception:
@@ -45,61 +46,81 @@ class ELM327Conn(SerialConn):
         return self._obd != None \
             and self._obd.status() != obd.OBDStatus.NOT_CONNECTED
 
+    def ensure_open(self):
+        if not self.is_open():
+            self.open()
+
     def close(self):
         self._obd.close()
 
-    def settings(self):
+    def info(self):
         return {
-            "device": self._device,
-            "baudrate": self._baudrate
+            "status": self._obd.status(),
+            "serial": self._obd.connection_info(),
+            "protocol": self._obd.protocol_info()
         }
 
-    def protocol(self):
+    def protocol_info(self):
+        return self._obd.protocol_info()
+
+    def supported_protocols(self):
+        return {k: v.NAME for k, v in self._obd.supported_protocols().iteritems()}
+
+    def change_protocol(self, id, **kwargs):
+        self.ensure_open()
+        
+        return self._obd.change_protocol(id, **kwargs)
+
+    def query(self, cmd, **kwargs):
         self.ensure_open()
 
-        return {
-            "name": self._obd.protocol_name(),
-            "id": self._obd.protocol_id()
-        }
+        return self._obd.query(cmd, **kwargs)
 
-    def status(self):
+    def supported_commands(self):
         self.ensure_open()
 
-        return self._obd.status()
+        return {c.name: c.desc for c in self._obd.supported_commands}
 
-    def query(self, cmd, force=False):
+    def send(self, msg, **kwargs):
         self.ensure_open()
 
-        return self._obd.query(cmd, force=force)
+        # Parse out header if found
+        hash_pos = msg.find("#")
+        if hash_pos > 0:
+            kwargs["header"] = msg[:hash_pos]
+            msg = msg[hash_pos + 1:]
 
-    def commands(self):
+        return self._obd.send(msg, **kwargs)
+
+    def send_all(self, msgs, delay=None):
+        for msg in msgs:
+            self.send(msg, auto_format=False)
+
+            if delay:
+                time.sleep(delay / 1000.0)
+
+    def execute(self, cmd, **kwargs):
         self.ensure_open()
 
-        return self._obd.supported_commands
+        return self._obd.execute(cmd, **kwargs)
 
-    def switch_baudrate(self, value, timeout=2000):
+    def reset(self, **kwargs):
         self.ensure_open()
 
-        old = self._baudrate
-        new = value
+        self._obd.reset(**kwargs) 
 
-        # First check if already switched
-        if old == new:
-            return
+    def change_baudrate(self, value):
+        if not value in STN11XX.TRY_BAUDRATES:
+            raise ValueError("Invalid baudrate - supported values are: {:}".format(
+                ", ".join([str(b) for b in STN11XX.TRY_BAUDRATES])
+            ))
 
-        # Switch UART baudrate in terminal-friendly way
-        self.write_line("STSBR {:d}".format(new))
-        log.info("Switched baudrate from {:} to {:}".format(old, new))
+        self.ensure_open()
 
-        # Close connection
-        self.close()
+        return self._obd.interface.set_baudrate(value)
 
-        # Open connection again with new baudrate
-        try:
-            self._baudrate = new
-            self.open()
-        except:
-            self._baudrate = old
+    def monitor_all(self, **kwargs):
+        self.ensure_open()
 
-            log.exception("Failed to switch to new baudrate {:} - now reverted back to {:}".format(new, old))
-
+        # Format messages
+        return [l.replace(" ", "#", 1).replace(" ", "") for l in self._obd.interface.monitor_all(**kwargs)]
