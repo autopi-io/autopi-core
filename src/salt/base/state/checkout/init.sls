@@ -1,6 +1,6 @@
 include:
   - ec2x.gnss.update
-  - test
+  - checkout.test
 
 # Re-generate ssh host keys
 "rm -v /etc/ssh/ssh_host_*":
