@@ -50,6 +50,6 @@ modem-device-found:
   cmd.run:
     - name: "lsusb | grep -q \"2c7c:0121\""
 
-# assert-modem-ttyusb:
-#   cmd.run:
-#     - name: "ls /dev/ | grep -e \"ttyUSB0\" -e \"ttyUSB1\" -e \"ttyUSB2\" -e \"ttyUSB3\""
+assert-modem-ttyusb:
+  cmd.run:
+    - name: "ls /dev/ | grep -e \"ttyUSB0\" && ls /dev/ | grep -e \"ttyUSB1\" && ls /dev/ | grep -e \"ttyUSB2\" && ls /dev/ | grep -e \"ttyUSB3\""
