@@ -81,8 +81,8 @@ def main():
     cmd = args.pop(0)
 
     # Parse arguments
-    args = []
-    kwargs = {}
+    cmd_args = []
+    cmd_kwargs = {}
     for arg in args:
         if "=" in arg:
             key, val = arg.split("=", 1)
@@ -94,11 +94,11 @@ def main():
             elif val.lower() in ["true", "false"]:
                 val = bool(val)
 
-            kwargs[key] = val
+            cmd_kwargs[key] = val
         else:
-            args.append(arg)
+            cmd_args.append(arg)
 
-    res = execute(cmd, *args, **kwargs)
+    res = execute(cmd, *cmd_args, **cmd_kwargs)
 
     if cmd.startswith("state."):
         state_output(res)
