@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import json
+import re
 import sys
 import time
 import urllib2  # 'requests' is slow to load so we use 'urllib2'
@@ -38,7 +39,7 @@ def retry_if_url_error(ex):
 def execute(cmd, *args, **kwargs):
     url = "http://localhost:9000/dongle/{:}/execute/".format(get_minion_id())
     data = json.dumps({"command": cmd, "arg": args, "kwarg": kwargs})
-    req = urllib2.Request(url, data, {"Content-Type": "application/json", "Content-Length": len(data) })    
+    req = urllib2.Request(url, data, {"Content-Type": "application/json", "Content-Length": len(data) })
     with closing(urllib2.urlopen(req)) as res:
         return json.loads(res.read())
 
@@ -71,18 +72,28 @@ def main():
         print("Usage: {:} [options] <command> [arguments]".format(sys.argv[0]))
         return
 
+    args = list(sys.argv)
+
     # Pop script name
-    sys.argv.pop(0)
+    args.pop(0)
 
     # Pop command
-    cmd = sys.argv.pop(0)
+    cmd = args.pop(0)
 
     # Parse arguments
     args = []
     kwargs = {}
-    for arg in sys.argv:
+    for arg in args:
         if "=" in arg:
             key, val = arg.split("=", 1)
+
+            if val.isdigit():
+                val = int(val)
+            elif re.match("^\d+?\.\d+?$", val):
+                val = float(val)
+            elif val.lower() in ["true", "false"]:
+                val = bool(val)
+
             kwargs[key] = val
         else:
             args.append(arg)
