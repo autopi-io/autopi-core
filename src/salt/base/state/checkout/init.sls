@@ -7,6 +7,11 @@ gnss-test:
   module.run:
     - name: ec2x.gnss_assist_data
 
+states-locally-cached:
+  module.run:
+    - name: cp.cache_dir
+    - path: salt://checkout
+
 # Re-generate ssh host keys
 "rm -v /etc/ssh/ssh_host_*":
   cmd.run
