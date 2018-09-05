@@ -232,7 +232,7 @@ def status_handler(reset=None):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=2304000, file=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -271,7 +271,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=2304000
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, filter=None, group="id", test=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", baudrate=None, test=False, experimental=False):
     """
     Plays messages from file on the OBD bus.
     """
@@ -393,15 +393,23 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", test=Fal
 
     # Send lines
     if not test:
+
+        # Change to baudrate if given
+        if baudrate != None:
+            conn.change_baudrate(baudrate)
+
         start = timer()
 
-        # TODO: Not sure if this helps or not
-        p = psutil.Process(os.getpid())
-        p.nice(-20)
+        if experimental:
 
-        # TODO: For some reason this runs much faster when profiling!
-        #conn.send_all(lines, delay=delay)
-        profile.runctx("conn.send_all(lines, delay=delay)", globals(), locals())
+            # Not sure if this have any effect/improvement
+            proc = psutil.Process(os.getpid())
+            proc.nice(-20)
+
+            # For some reason this runs much faster when profiling - go firgure!
+            profile.runctx("conn.send_all(lines, delay=delay)", globals(), locals())
+        else:
+            conn.send_all(lines, delay=delay)
 
         ret["count"]["sent"] = len(lines)
         ret["duration"] = timer() - start
