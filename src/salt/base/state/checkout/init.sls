@@ -1,6 +1,11 @@
 include:
-  - ec2x.gnss.update
   - checkout.test
+  - ec2x.gnss.update
+  - power.config
+
+gnss-test:
+  module.run:
+    - name: ec2x.gnss_assist_data
 
 # Re-generate ssh host keys
 "rm -v /etc/ssh/ssh_host_*":

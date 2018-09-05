@@ -1,3 +1,3 @@
 include:
-  - power.config
   - checkout.test
+  - power.config
