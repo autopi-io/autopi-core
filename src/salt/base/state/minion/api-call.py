@@ -47,9 +47,9 @@ def state_output(res):
 
     for key in res.keys():
         if res[key]["result"]:
-            print("{:} ✔  {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print(u"{:} \u2714 {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
         else:
-            print("{:} ✘  {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
+            print(u"{:} \u2718 {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
             errors.append(res[key])
 
     print("")
@@ -69,6 +69,7 @@ def main():
 
     if len(sys.argv) < 2:
         print("Usage: {:} [options] <command> [arguments]".format(sys.argv[0]))
+        return
 
     # Pop script name
     sys.argv.pop(0)
