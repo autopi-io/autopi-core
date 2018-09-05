@@ -47,9 +47,9 @@ def state_output(res):
 
     for key in res.keys():
         if res[key]["result"]:
-            print(u"{:} \u2714 {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print("{:} OK  {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
         else:
-            print(u"{:} \u2718 {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
+            print("{:} FAIL  {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
             errors.append(res[key])
 
     print("")
