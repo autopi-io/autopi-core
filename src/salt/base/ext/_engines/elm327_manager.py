@@ -155,7 +155,7 @@ def commands_handler(mode=None):
 
 
 @edmp.register_hook()
-def protocol_handler(set=None, baudrate=None):
+def protocol_handler(set=None, baudrate=None, confirm=None):
     """
     Configures protocol or lists all supported.
     """
@@ -171,6 +171,11 @@ def protocol_handler(set=None, baudrate=None):
         if id == "AUTO":
             conn.change_protocol(None)
         elif id in conn.supported_protocols():
+            if not confirm == True:
+                raise Exception(
+                    "Please be advised that current active workers can send unwanted data with " + \
+                    "the manually selected protocol - add parameter 'confirm=true' to continue anyway")
+
             conn.change_protocol(id, baudrate=baudrate)
         else:
             raise Exception("Unsupported protocol specified")
