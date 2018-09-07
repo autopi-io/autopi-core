@@ -63,8 +63,13 @@ def _change(cmd, **kwargs):
     Private helper function to perform change settings commands.
     """
 
+    # Request warm reset for changes to take effect
+    if not "reset" in kwargs:
+        kwargs["reset"] = "warm"
+
     res = _execute(cmd, **kwargs)
 
+    # Change commands must return OK
     if res.get("value", None) != "OK":
         raise salt.exceptions.CommandExecutionError(
             "Change settings command '{:s}' failed".format(cmd))
@@ -81,15 +86,6 @@ def info():
 
 def serial():
     res = _execute("STSN")
-
-    return res
-
-
-def reset():
-    res = _execute("ATZ")
-    if not res.get("value", "").startswith("ELM"):
-        raise salt.exceptions.CommandExecutionError(
-            "Reset device command failed")
 
     return res
 
@@ -125,18 +121,16 @@ def power_pin_polarity(invert=None):
 
     # Read out current settings
     if invert == None:
-        res = power_config()
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["pwr_ctrl"]
+        cfg = power_config()
+
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["pwr_ctrl"]
 
         return ret
 
     # Write settings
     res = _change("STSLPCP {:d}".format(invert))
     ret.update(res)
-
-    # Reset for changes to take effect
-    reset()
 
     return ret
 
@@ -147,7 +141,7 @@ def sleep(delay_sec, keep_conn=False):
     The OBD connection is closed as default in order to prevent STN wake up on UART communication.
     """
 
-    res = _change("STSLEEP {:d}".format(delay_sec), keep_conn=keep_conn)
+    res = _change("STSLEEP {:d}".format(delay_sec), reset=False, keep_conn=keep_conn)
 
     return res
 
@@ -160,22 +154,15 @@ def uart_wake(enable=None, min_us=0, max_us=30000, rule=None):
     ret = {}
 
     # Read out current settings
-    res = power_config()
+    cfg = power_config()
 
     if enable == None:
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["uart_wake"]
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["uart_wake"]
 
         return ret
 
-    # Enable/disable
-    res = _change("STSLU {:s}, {:s}".format(
-        "on" if res["uart_sleep"].startswith("ON") else "off",
-        "on" if enable else "off")
-    )
-    ret.update(res)
-
-    # Write rule settings if enabled
+    # Write rule settings if enable
     if enable:
         kwargs = _parse_rule(rule, UART_WAKE_RULE_PATTERN) if rule else {
             "min_us": min_us,
@@ -184,8 +171,12 @@ def uart_wake(enable=None, min_us=0, max_us=30000, rule=None):
         res = _change("STSLUWP {min_us:}, {max_us:}".format(**kwargs))
         ret.update(res)
 
-    # Reset for changes to take effect
-    reset()
+    # Enable/disable
+    res = _change("STSLU {:s}, {:s}".format(
+        "on" if cfg["uart_sleep"].startswith("ON") else "off",
+        "on" if enable else "off")
+    )
+    ret.update(res)
 
     return ret
 
@@ -198,22 +189,15 @@ def uart_sleep(enable=None, timeout_sec=1200, rule=None):
     ret = {}
 
     # Read out current settings
-    res = power_config()
+    cfg = power_config()
 
     if enable == None:
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["uart_sleep"]
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["uart_sleep"]
 
         return ret
 
-    # Enable/disable
-    res = _change("STSLU {:s}, {:s}".format(
-        "on" if enable else "off",
-        "on" if res["uart_wake"].startswith("ON") else "off"
-    ))
-    ret.update(res)
-
-    # Write rule settings if enabled
+    # Write rule settings if enable
     if enable:
         kwargs = _parse_rule(rule, UART_SLEEP_RULE_PATTERN) if rule else {
             "sec": timeout_sec
@@ -221,8 +205,12 @@ def uart_sleep(enable=None, timeout_sec=1200, rule=None):
         res = _change("STSLUIT {sec:}".format(**kwargs))
         ret.update(res)
 
-    # Reset for changes to take effect
-    reset()
+    # Enable/disable
+    res = _change("STSLU {:s}, {:s}".format(
+        "on" if enable else "off",
+        "on" if cfg["uart_wake"].startswith("ON") else "off"
+    ))
+    ret.update(res)
 
     return ret
 
@@ -233,7 +221,7 @@ def volt_calibrate(value=0000):
     Default value '0000' will restore to the factory calibration.
     """
 
-    res = _change("ATCV {:04d}".format(value))
+    res = _change("ATCV {:04d}".format(value), reset=False)
 
     return res
 
@@ -247,17 +235,14 @@ def volt_change_wake(enable=None, volts_diff="0.2", ms=1000, rule=None):
 
     # Read out current settings
     if enable == None:
-        res = power_config()
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["vchg_wake"]
+        cfg = power_config()
+
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["vchg_wake"]
 
         return ret
 
-    # Enable/disable
-    res = _change("STSLVG {:s}".format("on" if enable else "off"))
-    ret.update(res)
-
-    # Write rule settings if enabled
+    # Write rule settings if enable
     if enable:
         kwargs = _parse_rule(rule, VOLT_CHANGE_RULE_PATTERN) if rule else {
             "volts_diff": volts_diff,
@@ -266,8 +251,9 @@ def volt_change_wake(enable=None, volts_diff="0.2", ms=1000, rule=None):
         res = _change("STSLVGW {volts_diff:}, {ms:}".format(**kwargs))
         ret.update(res)
 
-    # Reset for changes to take effect
-    reset()
+    # Enable/disable
+    res = _change("STSLVG {:s}".format("on" if enable else "off"))
+    ret.update(res)
 
     return ret
 
@@ -280,22 +266,15 @@ def volt_level_wake(enable=None, volts=">13.2", sec=1, rule=None):
     ret = {}
 
     # Read out current settings
-    res = power_config()
+    cfg = power_config()
 
     if enable == None:
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["vl_wake"]
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["vl_wake"]
 
         return ret
 
-    # Enable/disable
-    res = _change("STSLVL {:s}, {:s}".format(
-        "on" if res["vl_sleep"].startswith("ON") else "off",
-        "on" if enable else "off"
-    ))
-    ret.update(res)
-
-    # Write rule settings if enabled
+    # Write rule settings if enable
     if enable:
         kwargs = _parse_rule(rule, VOLT_LEVEL_RULE_PATTERN) if rule else {
             "volts": volts,
@@ -304,8 +283,12 @@ def volt_level_wake(enable=None, volts=">13.2", sec=1, rule=None):
         res = _change("STSLVLW {volts:}, {sec:}".format(**kwargs))
         ret.update(res)
 
-    # Reset for changes to take effect
-    reset()
+    # Enable/disable
+    res = _change("STSLVL {:s}, {:s}".format(
+        "on" if cfg["vl_sleep"].startswith("ON") else "off",
+        "on" if enable else "off"
+    ))
+    ret.update(res)
 
     return ret
 
@@ -318,22 +301,15 @@ def volt_level_sleep(enable=None, volts="<13.0", sec=600, rule=None):
     ret = {}
 
     # Read out current settings
-    res = power_config()
+    cfg = power_config()
 
     if enable == None:
-        ret["_stamp"] = res["_stamp"]
-        ret["value"] = res["vl_sleep"]
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["vl_sleep"]
 
         return ret
 
-    # Enable/disable
-    res = _change("STSLVL {:s}, {:s}".format(
-        "on" if enable else "off",
-        "on" if res["vl_wake"].startswith("ON") else "off"
-    ))
-    ret.update(res)
-
-    # Write rule settings if enabled
+    # Write rule settings if enable
     if enable:
         kwargs = _parse_rule(rule, VOLT_LEVEL_RULE_PATTERN) if rule else {
             "volts": volts,
@@ -342,7 +318,11 @@ def volt_level_sleep(enable=None, volts="<13.0", sec=600, rule=None):
         res = _change("STSLVLS {volts:}, {sec:}".format(**kwargs))
         ret.update(res)
 
-    # Reset for changes to take effect
-    reset()
+    # Enable/disable
+    res = _change("STSLVL {:s}, {:s}".format(
+        "on" if enable else "off",
+        "on" if cfg["vl_wake"].startswith("ON") else "off"
+    ))
+    ret.update(res)
 
     return ret

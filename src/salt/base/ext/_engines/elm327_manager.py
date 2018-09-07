@@ -128,7 +128,7 @@ def send_handler(msg, **kwargs):
 
 
 @edmp.register_hook()
-def execute_handler(cmd, keep_conn=True):
+def execute_handler(cmd, reset=None, keep_conn=True):
     """
     Executes an AT/ST command.
     """
@@ -156,6 +156,9 @@ def execute_handler(cmd, keep_conn=True):
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got execute result: {:}".format(res))
+
+    if reset:
+        conn.reset(mode=reset)
 
     # Close connection if requested (required when putting STN to sleep)
     if not keep_conn:
