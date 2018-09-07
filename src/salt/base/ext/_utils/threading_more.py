@@ -107,6 +107,7 @@ class ThreadRegistry(object):
             if not self.find_all_by(thread.name):
                 self._threads.add(thread)
                 return True
+
             return False
 
     def remove(self, thread):
@@ -114,6 +115,7 @@ class ThreadRegistry(object):
             if thread in self._threads:
                 self._threads.remove(thread)
                 return True
+                
             return False
 
     def has(self, thread):
@@ -132,19 +134,30 @@ class ThreadRegistry(object):
             threads = self.find_all_by(name)
             for t in threads:
                 t.start()
+
             return threads
 
     def kill_all_for(self, name):
         with self._lock:
+            ret = []
+
             threads = self.find_all_by(name)
             for t in [t for t in threads if hasattr(t, "kill")]:
+
+                # Names starting with an underscore must be killed explicitly
+                if t.name.startswith("_") and t.name != name:
+                    continue
+
                 t.kill()
-            return threads
+                ret.append(t)
+
+            return ret
 
     def modify_all_for(self, name, callback):
         with self._lock:
             threads = self.find_all_by(name)
             for t in threads:
                 callback(t)
+
             return threads
 
