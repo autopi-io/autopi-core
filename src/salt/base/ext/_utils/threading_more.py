@@ -137,7 +137,7 @@ class ThreadRegistry(object):
 
             return threads
 
-    def kill_all_for(self, name):
+    def kill_all_for(self, name, force_wildcard=False):
         with self._lock:
             ret = []
 
@@ -145,7 +145,7 @@ class ThreadRegistry(object):
             for t in [t for t in threads if hasattr(t, "kill")]:
 
                 # Names starting with an underscore must be killed explicitly
-                if t.name.startswith("_") and t.name != name:
+                if not force_wildcard and t.name.startswith("_") and t.name != name:
                     continue
 
                 t.kill()

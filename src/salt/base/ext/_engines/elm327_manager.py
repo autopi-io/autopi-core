@@ -1,15 +1,13 @@
 import battery_util
 import cProfile as profile
-import gpio_pin
 import logging
 import math
 import obd
 import os
 import psutil
-import RPi.GPIO as gpio
 import salt.loader
 
-from elm327_conn import ELM327Conn
+from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
 from timeit import default_timer as timer
 
@@ -19,8 +17,8 @@ log = logging.getLogger(__name__)
 # Message processor
 edmp = EventDrivenMessageProcessor("elm327", default_hooks={"workflow": "extended", "handler": "query"})
 
-# ELM327 connection
-conn = ELM327Conn()
+# OBD connection
+conn = OBDConn()
 
 returner_func = None
 
@@ -48,24 +46,8 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
     Queries an OBD command.
     """
 
-    global conn
-
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
-
-    # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
-    # Check if STN has powered down while connection was open (might be due to low battery)
-    if conn != None and conn.is_open() and gpio.input(gpio_pin.STN_PWR) == 0:
-        conn.close()
-        conn = None  # Ensure no UART communication that can wake up STN
-
-        log.warn("Closed ELM327 connection because STN powered off")
-
-        edmp.close()  # Will kill all active workers
-
-    # Check if connection is available
-    if conn == None:
-        raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
 
     if obd.commands.has_name(name.upper()):
         cmd = obd.commands[name.upper()]
@@ -133,41 +115,22 @@ def execute_handler(cmd, reset=None, keep_conn=True):
     Executes an AT/ST command.
     """
 
-    global conn
-
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Executing: %s", cmd)
-
-    # TODO: Move this logic to new callback function in ELM327Conn to ensure is is always called before UART activity
-    # Check if STN has powered down while connection was open (might be due to low battery)
-    if conn != None and conn.is_open() and gpio.input(gpio_pin.STN_PWR) == 0:
-        conn.close()
-        conn = None  # Ensure no UART communication that can wake up STN
-
-        log.warn("Closed ELM327 connection because STN powered off")
-
-        edmp.close()  # Will kill all active workers
-
-    # Check if connection is available
-    if conn == None:
-        raise Warning("ELM327 connection is no longer available as it has been forcibly closed")
 
     res = conn.execute(cmd)
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got execute result: {:}".format(res))
 
+    # Reset interface if requested
     if reset:
         conn.reset(mode=reset)
 
     # Close connection if requested (required when putting STN to sleep)
     if not keep_conn:
-        conn.close()
-        conn = None  # Ensure no UART communication that can wake up STN
-
-        log.warn("Closed ELM327 connection upon request")
-
-        edmp.close()  # Will kill all active workers
+        conn.close(permanent=True)
+        log.warn("Closed connection permanently after executing command: {:}".format(cmd))
 
     # Prepare return value(s)
     ret = {}
@@ -534,10 +497,6 @@ def start(serial_conn, returner, workers, **kwargs):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting ELM327 manager")
 
-        # Setup GPIO to listen on STN power pin
-        gpio.setmode(gpio.BOARD)
-        gpio.setup(gpio_pin.STN_PWR, gpio.IN)
-
         # Prepare returner function
         global returner_func
         returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
@@ -546,8 +505,9 @@ def start(serial_conn, returner, workers, **kwargs):
         context["battery"]["critical_limit"] = __salt__["grains.get"]("battery:critical_limit", battery_util.DEFAULT_CRITICAL_LIMIT)
         log.info("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
-        # Initialize ELM327 connection
-        conn.init(serial_conn)
+        # Configure connection
+        conn.setup(serial_conn)
+        conn.on_closing = lambda: edmp.close()  # Will kill active workers
 
         # Initialize and run message processor
         edmp.init(__opts__, workers=workers)

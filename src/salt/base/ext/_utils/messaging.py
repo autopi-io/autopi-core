@@ -50,7 +50,7 @@ class MessageProcessor(object):
     def close(self):
 
         # Kill all worker threads if any
-        threads = self._worker_threads.kill_all_for("*")
+        threads = self._worker_threads.kill_all_for("*", force_wildcard=True)
         if threads:
             log.info("Killing all worker thread(s): {:s}".format(", ".join([t.name for t in threads])))
 
