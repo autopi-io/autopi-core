@@ -22,12 +22,11 @@ pip-requirements-installed:
     - upgrade: true  # Needed in order to get newest changes from git repos
     - require:
       - file: /etc/pip-requirements.txt
-    - onlyif: diff /etc/pip-requirements.txt /etc/pip-requirements-installed.txt
+    - unless: diff /etc/pip-requirements.txt /etc/pip-requirements-installed.txt
 
-pip-requirements-installation-logged:
-  file.copy:
+pip-requirements-installation-completed:
+  file.managed:
     - name: /etc/pip-requirements-installed.txt
     - source: /etc/pip-requirements.txt
-    - force: true
     - watch:
       - pip: pip-requirements-installed
