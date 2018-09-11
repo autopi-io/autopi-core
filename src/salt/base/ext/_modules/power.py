@@ -109,8 +109,8 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
 
     # Kill heartbeat worker thread to enforce RPi power off if something goes south/hangs
     try:
-        res = __salt__["spm.manage"]("worker", "kill", "heartbeat")
-        if not "heartbeat" in res.get("killed", []):
+        res = __salt__["spm.manage"]("worker", "kill", "_heartbeat")
+        if not "_heartbeat" in res.get("killed", []):
             log.warn("No heartbeat worker thread found to kill")
     except:
         log.exception("Failed to kill heartbeat worker")

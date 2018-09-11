@@ -93,29 +93,36 @@ def update_release(force=False, dry_run=False):
     Update a minion to newest release by running a highstate if not already up-to-date.
     """
 
-    old = __salt__["grains.get"]("release:id", default=None)
-    new = __salt__["pillar.get"]("latest_release_id")
+    old = __salt__["grains.get"]("release:id", default={"id": None, "state": None})
+    new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
 
+    # Determine if latest release is already updated or pending
+    if old["id"] == new["id"] and old["state"] = "updated":
+        new["state"] = "updated"
+
+        log.info("Current release '{:}' is the latest".format(old["id"]))
+    else:
+        new["state"] = "pending"
+
+        log.info("New release '{:}' is pending for update".format(new["id"]))
+
+    # Prepare return value
     ret = {
         "release": {
             "old": old,
             "new": new,
-        },
-        "summary": "unchanged"
+        }
     }
 
-    pending = old != new
-    if pending:
-        log.info("New release '{:}' is pending for update".format(new))
-    else:
-        log.info("Current release '{:}' is the latest".format(old))
-
-    if force or not dry_run and pending:
+    if force or not dry_run and new["state"] == "pending":
 
         if __salt__["saltutil.is_running"]("minionutil.update_release"):
             raise salt.exceptions.CommandExecutionError("Update is currently running - please wait and try again later")
 
-        log.info("Updating from release '{:}' to '{:}'".format(old, new))
+        log.info("Updating from release '{:}' to '{:}'".format(old["id"], new["id"]))
+
+        # Register pending release in grains
+        __salt__["grains.set"]("release", new, force=True)
 
         # Ensure dynamic modules are updated
         res = __salt__["saltutil.sync_all"](refresh=False)
@@ -128,37 +135,30 @@ def update_release(force=False, dry_run=False):
 
         ret["highstate"] = res
 
-        # Pillar data has been refreshed during highstate so latest release id might have changed
-        new = __salt__["pillar.get"]("latest_release_id")
-        ret["release"]["new"] = new
+        # Pillar data has been refreshed during highstate so latest release ID might have changed
+        new["id"] = __salt__["pillar.get"]("latest_release_id")
 
         # TODO: If above highstate chooses to restart below code will not run
         # (another update/highstate will run afterwards that will set release id)
         if all(v.get("result", False) for k, v in res.iteritems()):
-            log.info("Completed highstate for release '{:}'".format(new))
+            log.info("Completed highstate for release '{:}'".format(new["id"]))
 
-            __salt__["grains.set"]("release:id", new, force=True)
-
-            ret["summary"] = "updated"
-
-            # Fire a release event
-            __salt__["event.fire"]({
-                    "id": new
-                },
-                "release/updated"
-            )
+            new["state"] = "updated"
 
         else:
-            log.warn("Unable to complete highstate for release '{:}'".format(new))
+            log.warn("Unable to complete highstate for release '{:}'".format(new["id"]))
 
-            ret["summary"] = "failed"
+            new["state"] = "failed"
 
-            # Fire a release event
-            __salt__["event.fire"]({
-                    "id": new
-                },
-                "release/failed"
-            )
+        # Register updated or failed release in grains
+        __salt__["grains.set"]("release", new, force=True)
+
+        # Fire a release event
+        __salt__["event.fire"]({
+                "id": new["id"]
+            },
+            "release/{:}".format(new["state"])
+        )
 
     return ret
 
