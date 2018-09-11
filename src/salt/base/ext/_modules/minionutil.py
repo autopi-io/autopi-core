@@ -88,7 +88,7 @@ def request_restart(pending=True, immediately=False):
     }
 
 
-def update_release(force=False, dry_run=False):
+def update_release(force=False, dry_run=False, only_retry=False):
     """
     Update a minion to newest release by running a highstate if not already up-to-date.
     """
@@ -99,14 +99,17 @@ def update_release(force=False, dry_run=False):
     new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
 
     # Determine if latest release is already updated or pending
-    if old["id"] == new["id"] and old["state"] == "updated":
+    if old["state"] == "updated" and old["id"] == new["id"]:
         new["state"] = "updated"
 
-        log.info("Current release '{:}' is the latest".format(old["id"]))
-    else:
-        new["state"] = "pending"
+        log.info("Current release '{:}' is the latest and already updated".format(old["id"]))
+    else
+        if old["state"] in ["pending", "retrying", "failed"]:
+            new["state"] = "retrying" 
+        else:
+            new["state"] = "pending"
 
-        log.info("New release '{:}' is pending for update".format(new["id"]))
+        log.info("Release '{:}' is pending for update".format(new["id"]))
 
     # Prepare return value
     ret = {
@@ -116,14 +119,32 @@ def update_release(force=False, dry_run=False):
         }
     }
 
-    if force or not dry_run and new["state"] == "pending":
+    if dry_run:
+        return ret
+
+    if only_retry and new["state"] != "retrying":
+        log.info("No failed update is pending for retry")
+
+        return ret
+
+    if force or new["state"] in ["pending", "retrying"]:
 
         if __salt__["saltutil.is_running"]("minionutil.update_release"):
             raise salt.exceptions.CommandExecutionError("Update is currently running - please wait and try again later")
 
-        log.info("Updating from release '{:}' to '{:}'".format(old["id"], new["id"]))
+        if new["state"] == "retrying":
+            log.warn("Retrying update of release '{:}' => '{:}'".format(old["id"], new["id"]))
 
-        # Register pending release in grains
+            # Fire an extra release event
+            __salt__["event.fire"]({
+                    "id": new["id"]
+                },
+                "release/{:}".format(new["state"])
+            )
+        else:
+            log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
+
+        # Register 'pending' or 'retrying' release in grains
         res = __salt__["grains.set"]("release", new, force=True, destructive=True)
         if not res.get("result", False):
             log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
@@ -154,7 +175,7 @@ def update_release(force=False, dry_run=False):
 
             new["state"] = "failed"
 
-        # Register updated or failed release in grains
+        # Register 'updated' or 'failed' release in grains
         res = __salt__["grains.set"]("release", new, force=True, destructive=True)
         if not res.get("result", False):
             log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))

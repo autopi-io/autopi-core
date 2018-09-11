@@ -65,7 +65,7 @@ set-ssid-to-initial:
 regenerate-ssh-host-keys-configured:
   file.managed:
     - name: /lib/systemd/system/regenerate-ssh-host-keys.service
-    - source: salt://reconfigure-ssh-host-keys.service
+    - source: salt://anonymize/reconfigure-ssh-host-keys.service
     - mode: 777
     - user: root
     - group: root
