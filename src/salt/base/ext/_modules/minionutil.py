@@ -24,7 +24,7 @@ def run_job(name, *args, **kwargs):
 
     # Use the event result returner as default
     returner  = kwargs.pop("_returner", "event_result")
-    
+
     jid = salt.utils.jid.gen_jid()
 
     if (kwargs):
@@ -93,11 +93,13 @@ def update_release(force=False, dry_run=False):
     Update a minion to newest release by running a highstate if not already up-to-date.
     """
 
-    old = __salt__["grains.get"]("release:id", default={"id": None, "state": None})
+    old = __salt__["grains.get"]("release", default={"id": None, "state": None})
+    if not "state" in old:  # Added for backwards compatibility
+        old["state"] = "updated"
     new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
 
     # Determine if latest release is already updated or pending
-    if old["id"] == new["id"] and old["state"] = "updated":
+    if old["id"] == new["id"] and old["state"] == "updated":
         new["state"] = "updated"
 
         log.info("Current release '{:}' is the latest".format(old["id"]))
@@ -122,7 +124,9 @@ def update_release(force=False, dry_run=False):
         log.info("Updating from release '{:}' to '{:}'".format(old["id"], new["id"]))
 
         # Register pending release in grains
-        __salt__["grains.set"]("release", new, force=True)
+        res = __salt__["grains.set"]("release", new, force=True, destructive=True)
+        if not res.get("result", False):
+            log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
 
         # Ensure dynamic modules are updated
         res = __salt__["saltutil.sync_all"](refresh=False)
@@ -151,7 +155,9 @@ def update_release(force=False, dry_run=False):
             new["state"] = "failed"
 
         # Register updated or failed release in grains
-        __salt__["grains.set"]("release", new, force=True)
+        res = __salt__["grains.set"]("release", new, force=True, destructive=True)
+        if not res.get("result", False):
+            log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
 
         # Fire a release event
         __salt__["event.fire"]({
