@@ -6,12 +6,12 @@ uart-wake-trigger:
     - enable: True
     - rule: "0-30000 us"
 
-# Power off STN upon UART inactivity (prevents permanent sleep)
+# Power off STN upon UART inactivity (prevents permanent sleep where RPi is off and STN is on)
 uart-sleep-trigger:
   stn.power_trigger:
     - name: uart_sleep
     - enable: True
-    - rule: "600 s"  # 10 min
+    - rule: "900 s"  # 15 min
 
 voltage-level-wake-trigger:
   stn.power_trigger:
