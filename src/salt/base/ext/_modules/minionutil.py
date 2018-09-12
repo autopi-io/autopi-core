@@ -95,7 +95,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
     old = __salt__["grains.get"]("release", default={"id": None, "state": None})
     if not "state" in old:  # Added for backwards compatibility
-        old["state"] = "updated"
+        old["state"] = None
     new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
 
     # Determine if latest release is already updated or pending
@@ -103,9 +103,9 @@ def update_release(force=False, dry_run=False, only_retry=False):
         new["state"] = "updated"
 
         log.info("Current release '{:}' is the latest and already updated".format(old["id"]))
-    else
+    else:
         if old["state"] in ["pending", "retrying", "failed"]:
-            new["state"] = "retrying" 
+            new["state"] = "retrying"
         else:
             new["state"] = "pending"
 
@@ -145,7 +145,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
             log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
 
         # Register 'pending' or 'retrying' release in grains
-        res = __salt__["grains.set"]("release", new, force=True, destructive=True)
+        res = __salt__["grains.setval"]("release", new, destructive=True)
         if not res.get("result", False):
             log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
 
@@ -176,7 +176,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
             new["state"] = "failed"
 
         # Register 'updated' or 'failed' release in grains
-        res = __salt__["grains.set"]("release", new, force=True, destructive=True)
+        res = __salt__["grains.setval"]("release", new, destructive=True)
         if not res.get("result", False):
             log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
 
