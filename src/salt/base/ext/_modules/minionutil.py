@@ -129,8 +129,12 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
     if force or new["state"] in ["pending", "retrying"]:
 
+        # Check if already running
         if __salt__["saltutil.is_running"]("minionutil.update_release"):
-            raise salt.exceptions.CommandExecutionError("Update is currently running - please wait and try again later")
+            raise salt.exceptions.CommandExecutionError("Update is already running - please wait and try again later")
+        # If started through startup states we also need to check this
+        if __salt__["saltutil.is_running"]("state.*"):
+            raise salt.exceptions.CommandExecutionError("Another state run is currently active - please wait and try again later")
 
         if new["state"] == "retrying":
             log.warn("Retrying update of release '{:}' => '{:}'".format(old["id"], new["id"]))
@@ -146,8 +150,8 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         # Register 'pending' or 'retrying' release in grains
         res = __salt__["grains.setval"]("release", new, destructive=True)
-        if not res.get("result", False):
-            log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
+        if not res:
+            log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
         # Ensure dynamic modules are updated
         res = __salt__["saltutil.sync_all"](refresh=False)
@@ -177,8 +181,8 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         # Register 'updated' or 'failed' release in grains
         res = __salt__["grains.setval"]("release", new, destructive=True)
-        if not res.get("result", False):
-            log.error("Failed to store {:} release '{:}' in grains data: {:}".format(new["state"], new["id"], res))
+        if not res:
+            log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
         # Fire a release event
         __salt__["event.fire"]({
