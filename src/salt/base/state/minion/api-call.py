@@ -33,7 +33,10 @@ def get_minion_id():
     return minion_id
 
 def retry_if_url_error(ex):
-    return isinstance(ex, urllib2.URLError)
+    print("API not ready, retrying. Please wait...")
+    if not isinstance(ex, urllib2.HTTPError):
+        return isinstance(ex, urllib2.URLError)
+    return False
 
 @retry(retry_on_exception=retry_if_url_error, stop_max_attempt_number=30, wait_fixed=2000)
 def execute(cmd, *args, **kwargs):
@@ -48,18 +51,17 @@ def state_output(res):
 
     for key in res.keys():
         if res[key]["result"]:
-            print("{:} OK  {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print("{:} [ OK   ] {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print("")
         else:
-            print("{:} FAIL  {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
+            print("{:} [ FAIL ] {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
             errors.append(res[key])
+            print("")
 
     print("")
 
     if errors:
-        print (Colors.FAIL + "Error details" + Colors.ENDC)
-        for error in errors:
-            print("{:}{:}{:}".format(Colors.FAIL, json.dumps(error, indent=4), Colors.ENDC))
-        print("")
+        print(Colors.FAIL + "Errors found" + Colors.ENDC)
     else:
         print (Colors.OKGREEN + "Success" + Colors.ENDC)
 
@@ -100,7 +102,7 @@ def main():
 
     res = execute(cmd, *cmd_args, **cmd_kwargs)
 
-    if cmd.startswith("state."):
+    if cmd.startswith("state.") and isinstance(res,dict):
         state_output(res)
     else:
         print(yaml.safe_dump(res, default_flow_style=False))
