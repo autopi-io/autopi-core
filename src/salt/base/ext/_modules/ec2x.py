@@ -278,6 +278,25 @@ def ri_signal_config(value=None):
     return res
 
 
+def data_usage(reset=False):
+    """
+    Check how many bytes are sent to and received by the module.
+    """
+
+    res = query("AT+QGDCNT?")
+    if "data" in res:
+        row = _parse_dict(res.pop("data"))["+QGDCNT"].split(",")
+        res.update({
+            "sent": int(row[0]),
+            "recv": int(row[1])
+        })
+
+    if reset:
+        query("AT+QGDCNT=0")
+
+    return res
+
+
 def gnss(enable=None, mode=1, fix_max_time=30, fix_max_dist=50, fix_count=0, fix_rate=1):
     """
     The command is used to turn on GNSS function. Currently <mode> only supports
