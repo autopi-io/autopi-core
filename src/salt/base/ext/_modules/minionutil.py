@@ -138,13 +138,6 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         if new["state"] == "retrying":
             log.warn("Retrying update of release '{:}' => '{:}'".format(old["id"], new["id"]))
-
-            # Fire an extra release event
-            __salt__["event.fire"]({
-                    "id": new["id"]
-                },
-                "release/{:}".format(new["state"])
-            )
         else:
             log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
 
@@ -152,6 +145,13 @@ def update_release(force=False, dry_run=False, only_retry=False):
         res = __salt__["grains.setval"]("release", new, destructive=True)
         if not res:
             log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
+
+        # Fire a release event with initial state
+        __salt__["event.fire"]({
+                "id": new["id"]
+            },
+            "release/{:}".format(new["state"])
+        )
 
         # Ensure dynamic modules are updated (refresh of modules is done in highstate)
         res = __salt__["saltutil.sync_all"](refresh=False)
@@ -184,7 +184,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
         if not res:
             log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
-        # Fire a release event
+        # Fire a release event with final state
         __salt__["event.fire"]({
                 "id": new["id"]
             },
