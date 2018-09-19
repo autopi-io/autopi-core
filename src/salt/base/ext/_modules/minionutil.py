@@ -153,7 +153,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
         if not res:
             log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
-        # Ensure dynamic modules are updated
+        # Ensure dynamic modules are updated (refresh of modules is done in highstate)
         res = __salt__["saltutil.sync_all"](refresh=False)
         ret["dynamic"] = res
 
