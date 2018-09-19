@@ -1,7 +1,8 @@
 include:
   - checkout.test
   - ec2x.gnss.update
-  - power.config
+  - power.stn.config
+  - power.spm.install
 
 gnss-test:
   module.run:

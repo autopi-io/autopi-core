@@ -10,4 +10,4 @@ base:
     - redis.server
     - ec2x.config
     - ui
-    - power.config  # Highest risk last
+    - power.spm.install  # Highest risk last
