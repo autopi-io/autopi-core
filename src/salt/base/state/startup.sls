@@ -2,6 +2,7 @@ include:
   - ec2x.startup
   - ec2x.gnss.update
 #  - acc.config # TODO: Test this
+  - power.stn.config
 
 {%- if salt["pillar.get"]("auto_update", False) %}
 auto-update-release-retried:

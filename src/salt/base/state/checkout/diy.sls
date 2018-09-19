@@ -1,3 +1,4 @@
 include:
   - checkout.test
-  - power.config
+  - power.stn.config
+  - power.spm.install
