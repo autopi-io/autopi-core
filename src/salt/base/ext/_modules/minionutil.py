@@ -100,11 +100,14 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
     # Determine if latest release is already updated or pending
     if old["state"] == "updated" and old["id"] == new["id"]:
-        new["state"] = "updated"
+        if force:
+            new["state"] = "forcing"
+        else:
+            new["state"] = "updated"
 
-        log.info("Current release '{:}' is the latest and already updated".format(old["id"]))
+            log.info("Current release '{:}' is the latest and already updated".format(old["id"]))
     else:
-        if old["state"] in ["pending", "retrying", "failed"]:
+        if old["state"] in ["pending", "forcing", "retrying", "failed"]:
             new["state"] = "retrying"
         else:
             new["state"] = "pending"
@@ -127,7 +130,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         return ret
 
-    if force or new["state"] in ["pending", "retrying"]:
+    if new["state"] in ["pending", "forcing", "retrying"]:
 
         # Check if already running
         if __salt__["saltutil.is_running"]("minionutil.update_release"):
@@ -136,10 +139,10 @@ def update_release(force=False, dry_run=False, only_retry=False):
         if __salt__["saltutil.is_running"]("state.*"):
             raise salt.exceptions.CommandExecutionError("Another state run is currently active - please wait and try again later")
 
-        if new["state"] == "retrying":
-            log.warn("Retrying update of release '{:}' => '{:}'".format(old["id"], new["id"]))
-        else:
+        if new["state"] == "pending":
             log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
+        else
+            log.warn("{:} update of release '{:}' => '{:}'".format(new["state"].title(), old["id"], new["id"]))
 
         # Register 'pending' or 'retrying' release in grains
         res = __salt__["grains.setval"]("release", new, destructive=True)
