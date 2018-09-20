@@ -141,7 +141,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         if new["state"] == "pending":
             log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
-        else
+        else:
             log.warn("{:} update of release '{:}' => '{:}'".format(new["state"].title(), old["id"], new["id"]))
 
         # Register 'pending' or 'retrying' release in grains
