@@ -93,8 +93,8 @@ def main():
                 val = int(val)
             elif re.match("^\d+?\.\d+?$", val):
                 val = float(val)
-            elif val.lower() in ["true", "false"]:
-                val = bool(val)
+            elif val.lower() in ["true", "false", "yes", "no"]:
+                val = val.lower() in ["true", "yes"]
 
             cmd_kwargs[key] = val
         else:
