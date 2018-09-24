@@ -23,11 +23,11 @@ def help():
 
 
 def status(interface="wlan0"):
-	"""
-	Get current WPA/EAPOL/EAP status.
-	"""
+    """
+    Get current WPA/EAPOL/EAP status.
+    """
 
-	res = __salt__["cmd.run"]("wpa_cli -i {:} status".format(interface))
+    res = __salt__["cmd.run"]("wpa_cli -i {:} status".format(interface))
     ret = parsing.into_dict_parser(res, separator="=")
 
     return ret
