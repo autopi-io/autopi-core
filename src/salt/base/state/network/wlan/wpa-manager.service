@@ -1,0 +1,11 @@
+[Unit]
+Description=WPA Supplicant Manager Service
+After=hostapd.service
+
+[Service]
+ExecStart=/sbin/wpa_supplicant -c/etc/wpa_supplicant/wpa_supplicant.conf -iwlan0 -Dnl80211,wext
+Restart=on-failure
+Type=simple
+
+[Install]
+WantedBy=multi-user.target

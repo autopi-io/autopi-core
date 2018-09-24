@@ -215,7 +215,7 @@ minion:
 # WiFi hotspot
 hostapd:
   cardlist:
-    wlan0:                                 # The interface used by the AP
+    uap0:                                  # The interface used by the AP
       driver: nl80211                      # Use the nl80211 driver with the brcmfmac driver
       hw_mode: g                           # Use the 2.4GHz band (g)
       channel: 6                           # Use channel 6
@@ -241,7 +241,7 @@ dnsmasq:
   dnsmasq_hosts: salt://dnsmasq/files/dnsmasq.hosts
   settings:
     interface:
-      - wlan0
+      - uap0
     dhcp-range: 192.168.4.2,192.168.4.20,255.255.255.0,24h
     domain-needed: true
   hosts:

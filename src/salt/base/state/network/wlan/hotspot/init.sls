@@ -3,6 +3,16 @@ include:
   - hostapd
   - dnsmasq
 
+reboot-requested-after-ap-udev-rules-changed:
+  module.wait:
+    - name: power.request_reboot
+
+/etc/udev/rules.d/90-ap.rules:
+  file.managed:
+    - source: salt://network/wlan/hotspot/udev.rules
+    - watch_in:
+      - module: reboot-requested-after-ap-udev-rules-changed:
+
 dhcpcd-static-ip-config:
   file.managed:
     - name: /etc/dhcpcd.conf

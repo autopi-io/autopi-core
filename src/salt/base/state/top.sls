@@ -5,7 +5,7 @@ base:
     - raspi.config
     - minion.config
     - network.wwan.qmi
-    - network.wlan.hotspot.config
+    - network.wlan
     - audio.config
     - redis.server
     - ec2x.config
