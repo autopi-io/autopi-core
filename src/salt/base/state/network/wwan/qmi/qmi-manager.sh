@@ -145,7 +145,7 @@ up ()
     [ $? -eq 0 ] && echo "[ERROR] uDHCP client process already running for interface '$INTERFACE'" && return $ERROR
 
     # Start uDHCP client
-    udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5
+    udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script
     [ $? -gt 0 ] && echo "[ERROR] Failed to start uDHCP client for interface '$INTERFACE'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started uDHCP client for interface '$INTERFACE'"
 

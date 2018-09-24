@@ -10,6 +10,16 @@ libqmi:
 udhcpc:
   pkg.installed
 
+udhcpc-script-installed:
+  file.managed:
+    - name: /etc/udhcp/qmi.script
+    - source: salt://network/wwan/qmi/udhcpc.script
+    - mode: 755
+    - user: root
+    - group: root
+    - require:
+      - pkg: udhcpc
+
 reboot-requested-after-qmi-udev-rules-changed:
   module.wait:
     - name: power.request_reboot
