@@ -3,6 +3,11 @@ include:
   - hostapd
   - dnsmasq
 
+# No hotspot on 'wlan0' interface - only on 'uap0'
+# TODO: Remove again at some point
+/etc/hostapd/hostapd_wlan0.conf:
+  file.absent
+
 reboot-requested-after-ap-udev-rules-changed:
   module.wait:
     - name: power.request_reboot
@@ -11,7 +16,7 @@ reboot-requested-after-ap-udev-rules-changed:
   file.managed:
     - source: salt://network/wlan/hotspot/udev.rules
     - watch_in:
-      - module: reboot-requested-after-ap-udev-rules-changed:
+      - module: reboot-requested-after-ap-udev-rules-changed
 
 dhcpcd-static-ip-config:
   file.managed:

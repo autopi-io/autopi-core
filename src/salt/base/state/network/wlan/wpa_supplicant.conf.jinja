@@ -1,0 +1,9 @@
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+{%- for network in salt['grains.get']('wpa_supplicant:networks', []) %}
+network={
+{%- for key, val in network.iteritems() %}
+    {{ key }}={{ val|tojson|safe }}
+{%- endfor %}
+}
+{%- endfor %}
