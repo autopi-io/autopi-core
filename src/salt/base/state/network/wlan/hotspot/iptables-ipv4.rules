@@ -13,8 +13,10 @@ COMMIT
 -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
 -A INPUT -i lo -j ACCEPT
 -A INPUT -s 192.168.4.0/24 -i uap0 -p icmp -j ACCEPT
--A INPUT -s 192.168.4.0/24 -i uap0 -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT  # SSH
--A INPUT -s 192.168.4.0/24 -i uap0 -p udp -m state --state NEW -m udp --dport 67 -j ACCEPT  # DHCP
+-A INPUT -s 192.168.4.0/24 -i uap0 -p tcp -m state --state NEW -m tcp --dport 22 -j ACCEPT
+-A INPUT -s 192.168.4.0/24 -i uap0 -p tcp -m state --state NEW -m tcp --dport 53 -j ACCEPT
+-A INPUT -s 192.168.4.0/24 -i uap0 -p udp -m state --state NEW -m udp --dport 53 -j ACCEPT
+-A INPUT -s 192.168.4.0/24 -i uap0 -p udp -m state --state NEW -m udp --dport 67 -j ACCEPT
 -A INPUT -s 192.168.4.0/24 -i uap0 -j REJECT --reject-with icmp-host-prohibited
 -A INPUT -j DROP
 -A FORWARD -d 192.168.4.0/24 -i uap0 -j DROP
