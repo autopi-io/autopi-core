@@ -12,7 +12,7 @@ udhcpc:
 
 udhcpc-script-installed:
   file.managed:
-    - name: /etc/udhcp/qmi.script
+    - name: /etc/udhcpc/qmi.script
     - source: salt://network/wwan/qmi/udhcpc.script
     - mode: 755
     - user: root
