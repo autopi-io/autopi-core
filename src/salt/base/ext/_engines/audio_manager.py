@@ -33,7 +33,7 @@ def _ensure_mixer():
 
         gpio.setwarnings(False)
         gpio.setmode(gpio.BOARD)
-        
+
         gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
         gpio.output(gpio_pin.AMP_ON, gpio.LOW)
         log.debug("GPIO pin #%d is set low", gpio_pin.AMP_ON)
@@ -88,7 +88,7 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
     # TODO: Power off when stopped playing - use: set_endevent()
     # Power off amplifier
     #gpio.output(gpio_pin.AMP_ON, gpio.LOW)
-    
+
     return {
         "playing": True
     }
@@ -118,7 +118,7 @@ def stop_handler():
     if busy:
         log.info("Stopping playback of all audio")
         pygame.mixer.music.stop()
-    
+
     return {
         "was_playing": bool(busy)
     }
@@ -131,20 +131,22 @@ def volume_handler(value=None):
     if value != None:
         log.info("Setting volume to: %d%%", value*100)
         pygame.mixer.music.set_volume(value)
-    
+
     return {
         "value": pygame.mixer.music.get_volume()
     }
 
 
 @edmp.register_hook()
-def speak_handler(text):
+def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10):
 
-    res = __salt__["cmd.run_all"]("espeak '{:}'".format(text))
-    #if res["retcode"] != 0:
-    #    raise salt.exceptions.CommandExecutionError(res["stderr"])
+    res = __salt__["cmd.run_all"]("espeak -a {:d} -v {:s} -p {:d} -s {:d} -g {:d} -X '{:s}'".format(volume, language, pitch, speed, word_gap, text))
+    if res["retcode"] != 0:
+        raise salt.exceptions.CommandExecutionError(res["stderr"])
 
-    return res
+    ret = {}
+    ret["result"] = res["stdout"]
+    return ret
 
 
 def start(mixer, **kwargs):
