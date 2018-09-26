@@ -65,7 +65,7 @@ def volume(value=None):
     return client.send_sync(msg_pack(value=value, _handler="volume"))
 
 
-def speak(text):
+def speak(text, **kwargs):
     """
     Speak given text.
 
@@ -73,5 +73,5 @@ def speak(text):
         text (str): 
     """
 
-    return client.send_sync(msg_pack(text, _handler="speak"))
+    return client.send_sync(msg_pack(text, _handler="speak", **kwargs))
 

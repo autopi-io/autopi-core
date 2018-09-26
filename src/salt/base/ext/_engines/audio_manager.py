@@ -2,6 +2,7 @@ import gpio_pin
 import importlib
 import logging
 import RPi.GPIO as gpio
+import salt.exceptions
 
 from messaging import EventDrivenMessageProcessor
 from retrying import retry
@@ -138,11 +139,12 @@ def volume_handler(value=None):
 
 @edmp.register_hook()
 def speak_handler(text):
-    # TODO: Implement this using 'espeak'
 
-    return {
-        "not_supported_yet": True
-    }
+    res = __salt__["cmd.run_all"]("espeak '{:}'".format(text))
+    #if res["retcode"] != 0:
+    #    raise salt.exceptions.CommandExecutionError(res["stderr"])
+
+    return res
 
 
 def start(mixer, **kwargs):
