@@ -266,7 +266,8 @@ ec2x:
 cloud_api:
   url: https://api.autopi.io/
 
-spm:
-  version: 1.1.1.0
-  auto_update: true
+power:
+  firmware:
+    version: 1.1.1.0
+    auto_update: true
 

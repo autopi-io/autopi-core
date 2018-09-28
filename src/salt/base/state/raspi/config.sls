@@ -7,5 +7,5 @@ include:
 pi-user-configured:
   user.present:
     - name: pi
-    - password: autopi2018
+    - password: {{ salt['pillar.get']('user:pi:password') }}
     - hash_password: True

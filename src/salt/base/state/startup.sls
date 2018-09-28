@@ -4,7 +4,7 @@ include:
 #  - acc.config # TODO: Test this
   - power.stn.config
 
-{%- if salt["pillar.get"]("auto_update", False) %}
+{%- if salt["pillar.get"]("release:auto_update", False) %}
 auto-update-release-retried:
   module.run:
     - name: minionutil.update_release

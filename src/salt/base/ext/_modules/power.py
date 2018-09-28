@@ -99,7 +99,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         interval = 0  # Assume interval is unset
 
     # Auto update release if enabled
-    if __salt__["pillar.get"]("auto_update", default=False):
+    if __salt__["pillar.get"]("release:auto_update", default=False):
         try:
             __salt__["minionutil.run_job"]("minionutil.update_release", _timeout=600)
         except:

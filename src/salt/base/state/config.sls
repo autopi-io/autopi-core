@@ -1,0 +1,2 @@
+include:
+  - power.stn.config
