@@ -90,8 +90,8 @@ def dtc(clear=False, **kwargs):
     cmd = "GET_DTC" if not clear else "CLEAR_DTC"
 
     res = query(cmd, **kwargs)
-    if res.get("return"):
-        res["return"] = {r[0]: r[1] for r in res["return"]}
+    if "value" in res:
+        res["values"] = {r[0]: r[1] for r in res.pop("value")}
 
     return res
 
