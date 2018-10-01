@@ -91,8 +91,8 @@ def dtc(clear=False, **kwargs):
 
     res = query(cmd, **kwargs)
     if "value" in res:
-        res["_type"] = "dtc"
         res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
+        res.pop("_type")
 
     return res
 
