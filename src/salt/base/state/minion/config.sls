@@ -22,20 +22,20 @@ minion-pillar-data-present:
     - prereq:
       - file: /etc/salt/minion
 
-minion-config-backed-up:
-  file.copy:
-    - name: /etc/salt/minion.bak
-    - source: /etc/salt/minion
-    - force: true
-    - prereq:
-      - file: /etc/salt/minion
-
 minion-configured:
   file.serialize:
     - name: /etc/salt/minion
     - dataset_pillar: minion
     - formatter: yaml
     - show_changes: True
+
+minion-config-backed-up:
+  file.copy:
+    - name: /etc/salt/minion.bak
+    - source: /etc/salt/minion
+    - force: true
+    - onchanges:
+      - file: /etc/salt/minion
 
 minion-api-call-script-installed:
   file.managed:
