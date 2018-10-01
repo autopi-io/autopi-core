@@ -36,8 +36,6 @@ minion-configured:
     - dataset_pillar: minion
     - formatter: yaml
     - show_changes: True
-    - onlyif:
-      - {{ salt['pillar.filter_by']('{"*": True, default: False}', 'minion:master') }}
 
 minion-api-call-script-installed:
   file.managed:
