@@ -39,6 +39,29 @@ minion-script-rolled-back:
       - file: minion-script-001-patched
 #      - file: minion-script-002-patched
 
+fileclient-script-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py
+    - force: true
+    - prereq:
+      - file: fileclient-script-001-patched
+fileclient-script-001-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
+    - source: salt://minion/patch/fileclient.py.patch001
+    - hash: 422b3a0877b468ad09327b50322274cc71b829f4
+    # IMPORTANT: No 'onlyif' requisite for latest patch
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+fileclient-script-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
+    - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: fileclient-script-001-patched
+
 utils-schedule-script-backed-up:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/utils/schedule.py.{{ _timestamp }}
