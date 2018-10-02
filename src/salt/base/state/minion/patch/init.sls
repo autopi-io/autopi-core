@@ -50,7 +50,7 @@ fileclient-script-001-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
     - source: salt://minion/patch/fileclient.py.patch001
-    - hash: 422b3a0877b468ad09327b50322274cc71b829f4
+    - hash: 2ed2f597d4f69ec85bc65e8a7002ca507c3cfc9a
     # IMPORTANT: No 'onlyif' requisite for latest patch
     - watch_in:
       - module: minion-restart-requested-after-patching
