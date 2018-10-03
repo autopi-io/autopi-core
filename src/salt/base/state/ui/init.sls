@@ -2,7 +2,7 @@
 frontend-release-installed:
   git.latest:
     - name: "https://oauth2:2rJ32Xsb-12Z7XijePyS@gitlab.com/AutoPi.io/frontend_releases.git"
-    - rev: 1be75e3980ce3507eb32b1d63a6376e26af1747c
+    - rev: b5b8a92ae481ce2d1f0e54a285295d0efee9d3ab
     - force_reset: True
     - force_clone: True
     - target: /var/www/html
