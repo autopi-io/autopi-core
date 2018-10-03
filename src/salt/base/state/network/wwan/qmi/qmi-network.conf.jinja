@@ -1,8 +1,8 @@
-APN={{ salt['grains.get']('qmi:apn', 'internet') }}
+APN={{ salt['grains.get']('qmi:apn', default='internet') }}
 {%- if salt['grains.get']('qmi:user') %}
 APN_USER={{ salt['grains.get']('qmi:user') }}
 {%- endif %}
 {%- if salt['grains.get']('qmi:pass') %}
 APN_PASS={{ salt['grains.get']('qmi:pass') }}
 {%- endif %}
-IP_TYPE={{ salt['grains.get']('qmi:ip_type', 4) }}
+IP_TYPE={{ salt['grains.get']('qmi:ip_type', default=4) }}

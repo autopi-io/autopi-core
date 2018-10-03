@@ -4,7 +4,7 @@ avrdude-configured:
     - name: /etc/avrdude.conf
     - source: salt://power/spm/avrdude.conf
 
-{%- if salt["pillar.get"]("power:firmware:auto_update", False) %}
+{%- if salt["pillar.get"]("power:firmware:auto_update", default=False) %}
 spm-release-distributed:
   file.managed:
     - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.hex

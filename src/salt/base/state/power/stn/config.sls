@@ -24,11 +24,11 @@ voltage-change-wake-trigger:
   stn.power_trigger:
     - name: volt_change_wake
     - enable: True
-    - rule: "{{ salt['pillar.get']('power:wake_trigger:voltage_change', '+0.20') }}V IN {{ salt['pillar.get']('power:wake_trigger:duration', '1000') }} ms"
+    - rule: "{{ salt['pillar.get']('power:wake_trigger:voltage_change', default='+0.20') }}V IN {{ salt['pillar.get']('power:wake_trigger:duration', default='1000') }} ms"
 
 # Power off on low battery
 voltage-level-sleep-trigger:
   stn.power_trigger:
     - name: volt_level_sleep
     - enable: True
-    - rule: "<{{ salt['pillar.get']('power:safety_cut-out:voltage', '12.20') }}V FOR {{ salt['pillar.get']('power:safety_cut-out:duration', '300') }} s"
+    - rule: "<{{ salt['pillar.get']('power:safety_cut-out:voltage', default='12.20') }}V FOR {{ salt['pillar.get']('power:safety_cut-out:duration', default='300') }} s"

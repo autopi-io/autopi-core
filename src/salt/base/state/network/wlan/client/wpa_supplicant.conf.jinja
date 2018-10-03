@@ -1,7 +1,7 @@
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 update_config=1
-country={{ salt['pillar.get']('locale:country_code', 'GB') }}
-{%- for network in salt['grains.get']('wpa_supplicant:networks', []) %}
+country={{ salt['pillar.get']('locale:country_code', default='GB') }}
+{%- for network in salt['grains.get']('wpa_supplicant:networks', default=[]) %}
 network={
 {%- for key, val in network.iteritems() %}
     {{ key }}={{ val|tojson|safe }}
