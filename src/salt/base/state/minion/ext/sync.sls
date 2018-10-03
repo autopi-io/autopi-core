@@ -7,7 +7,7 @@ minion-custom-modules-synced:
   {%- if module.get('enabled', False) %}
   file.managed:
     - name: /opt/autopi/salt/{{ module['type'] }}s/{{ module['name'] }}.py
-    - source: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_api:token'))) }}/dongle/module/{{ module['id'] }}?format=file
+    - source: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_api:token'))) }}/dongle/modules/{{ module['id'] }}?format=file
     - source_hash: {{ module['hash'] }}
     - makedirs: true
   {%- else %}
