@@ -1,6 +1,8 @@
 include:
+  {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "ec2x" %}
   - ec2x.startup
   - ec2x.gnss.update
+  {%- endif %}
 #  - acc.config # TODO: Test this
   - power.stn.config
 
