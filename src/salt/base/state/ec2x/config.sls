@@ -1,6 +1,5 @@
 
 include:
-  - .startup
   - .gnss.config
 
 urc-port-configured:
