@@ -26,18 +26,6 @@ redis-flushed:
 "rm -v /etc/ssh/ssh_host_*":
   cmd.run
 
-# Delete Salt files
-/etc/salt/pki/minion/:
-  file.absent
-/etc/salt/minion_id:
-  file.absent
-/etc/salt/grains:
-  file.absent
-/etc/salt/minion.d/:
-  file.absent
-# /var/cache/salt/minion/:
-#   file.absent
-
 # Truncate log files
 "truncate -s 0 /var/log/*.log":  # First level
   cmd.run
@@ -76,6 +64,18 @@ regenerate-ssh-host-keys-enabled:
     - enable: true
     - require:
       - file: /lib/systemd/system/regenerate-ssh-host-keys.service
+
+# Delete Salt files
+/etc/salt/pki/minion/:
+  file.absent
+/etc/salt/minion_id:
+  file.absent
+/etc/salt/grains:
+  file.absent
+/etc/salt/minion.d/:
+  file.absent
+# /var/cache/salt/minion/:
+#   file.absent
 
 salt-minion:
   service.dead
