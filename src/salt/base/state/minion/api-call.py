@@ -100,7 +100,19 @@ def main():
         else:
             cmd_args.append(arg)
 
-    res = execute(cmd, *cmd_args, **cmd_kwargs)
+    try:
+        res = execute(cmd, *cmd_args, **cmd_kwargs)
+    except urllib2.HTTPError as e:
+        response_text = e.read()
+        code = e.code if e.code != 500 else ''
+        try:
+            response_dict = json.loads(response_text)
+            response_text = yaml.safe_dump(response_dict, default_flow_style=False)
+        except Exception:
+            pass
+
+        print(Colors.FAIL + code + response_text + Colors.ENDC)
+        return
 
     if cmd.startswith("state.") and isinstance(res,dict):
         state_output(res)
