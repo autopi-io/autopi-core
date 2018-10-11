@@ -1,0 +1,3 @@
+600a601,602
+>             # We need to clear username from url data so we parse fixed url
+>             url_data = urlparse(fixed_url)
