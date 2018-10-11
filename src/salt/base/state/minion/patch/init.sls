@@ -26,7 +26,7 @@ minion-script-001-rolled-back:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
     - force: true
-    - onfail_any:
+    - onfail:
       - file: minion-script-001-patched
 minion-script-002-backed-up:
   file.copy:
@@ -48,7 +48,7 @@ minion-script-002-rolled-back:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
     - force: true
-    - onfail_any:
+    - onfail:
       - file: minion-script-002-patched
 
 fileclient-script-001-backed-up:
