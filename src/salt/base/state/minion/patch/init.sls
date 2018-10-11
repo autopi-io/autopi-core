@@ -5,14 +5,13 @@ minion-restart-requested-after-patching:
   module.wait:
     - name: minionutil.request_restart
 
-minion-script-backed-up:
+minion-script-001-backed-up:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py
     - force: true
     - prereq:
       - file: minion-script-001-patched
-      - file: minion-script-002-patched
 minion-script-001-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
@@ -22,6 +21,20 @@ minion-script-001-patched:
     - onlyif: cd /usr/lib/python2.7/dist-packages/salt/ && echo '31fa372f166f5d1e27394022780709de6e03e337 minion.py' | sha1sum -c -
     - watch_in:
       - module: minion-restart-requested-after-patching
+minion-script-001-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/minion.py
+    - source: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
+    - force: true
+    - onfail_any:
+      - file: minion-script-001-patched
+minion-script-002-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/minion.py
+    - force: true
+    - prereq:
+      - file: minion-script-002-patched
 minion-script-002-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
@@ -30,32 +43,44 @@ minion-script-002-patched:
     # IMPORTANT: No 'onlyif' requisite for latest patch
     - watch_in:
       - module: minion-restart-requested-after-patching
-minion-script-rolled-back:
+minion-script-002-rolled-back:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py
     - source: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
     - force: true
     - onfail_any:
-      - file: minion-script-001-patched
       - file: minion-script-002-patched
 
-fileclient-script-backed-up:
+fileclient-script-001-backed-up:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
     - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py
     - force: true
     - prereq:
       - file: fileclient-script-001-patched
-      - file: fileclient-script-002-patched
 fileclient-script-001-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
     - source: salt://minion/patch/fileclient.py.patch001
     - hash: 2ed2f597d4f69ec85bc65e8a7002ca507c3cfc9a
     # Only apply this patch if hash matches specific version
-    - onlyif: cd /usr/lib/python2.7/dist-packages/salt/ && echo '31fa372f166f5d1e27394022780709de6e03e337 minion.py' | sha1sum -c -
+    - onlyif: cd /usr/lib/python2.7/dist-packages/salt/ && echo '08413a2972ac91821ed06f0b0a9bd92c314cbf80 fileclient.py' | sha1sum -c -
     - watch_in:
       - module: minion-restart-requested-after-patching
+fileclient-script-001-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
+    - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: fileclient-script-001-patched
+fileclient-script-002-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py
+    - force: true
+    - prereq:
+      - file: fileclient-script-002-patched
 fileclient-script-002-patched:
   file.patch:
     - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
@@ -64,13 +89,12 @@ fileclient-script-002-patched:
     # IMPORTANT: No 'onlyif' requisite for latest patch
     - watch_in:
       - module: minion-restart-requested-after-patching
-fileclient-script-rolled-back:
+fileclient-script-002-rolled-back:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/fileclient.py
     - source: /usr/lib/python2.7/dist-packages/salt/fileclient.py.{{ _timestamp }}
     - force: true
-    - onfail_any:
-      - file: fileclient-script-001-patched
+    - onfail:
       - file: fileclient-script-002-patched
 
 utils-schedule-script-backed-up:
