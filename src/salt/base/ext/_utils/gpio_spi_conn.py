@@ -51,13 +51,16 @@ class GPIOSPIConn(object):
             gpio.output(self._clk_pin, gpio.HIGH)
             gpio.output(self._clk_pin, gpio.LOW)
 
-    @retry(stop_max_attempt_number=3, wait_fixed=1)
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def recv(self, ack=None):
         """
         Receives arbitrary number of bits.
         """
 
         ret = 0
+
+        # Give ATtiny time to be ready (for RPi3 compatibility)
+        time.sleep(10)
 
         for bit in range(self._num_bits):
             # Pulse clock pin
