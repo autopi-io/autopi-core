@@ -1,4 +1,6 @@
 
+# TODO: Future improvement is to check if git repo is corrupt (git fsck) and delete it entirely if it is
+
 frontend-release-installed:
   git.latest:
     - name: "https://oauth2:2rJ32Xsb-12Z7XijePyS@gitlab.com/AutoPi.io/frontend_releases.git"
@@ -6,6 +8,9 @@ frontend-release-installed:
     - force_reset: True
     - force_clone: True
     - target: /var/www/html
+    - retry:
+        attempts: 3
+        interval: 3
 
 frontend-env-file-created:
   file.managed:
