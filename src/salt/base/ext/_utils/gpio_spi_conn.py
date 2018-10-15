@@ -59,9 +59,6 @@ class GPIOSPIConn(object):
 
         ret = 0
 
-        # Give ATtiny time to be ready (for RPi3 compatibility)
-        time.sleep(10)
-
         for bit in range(self._num_bits):
             # Pulse clock pin
             gpio.output(self._clk_pin, gpio.HIGH)
