@@ -396,6 +396,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         self._tag_regex = re.compile("^{:s}/req/(?P<id>.+)$".format(namespace))
         self._event_matchers = []
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
+        self._outgoing_event_filters = {}
 
     def init(self, opts, workers=None):
         """
@@ -510,15 +511,28 @@ class EventDrivenMessageProcessor(MessageProcessor):
             else:
                 log.warn("No reply to send back for event: {:}".format(event))
 
-    def trigger_event(self, data, tag):
+    def trigger_event(self, data, tag, skip_duplicates_filter=None):
         """
         Trigger an outgoing event.
         """
+
+        # Check for duplicates to skip
+        if skip_duplicates_filter != None:
+            skip_duplicates_filter = "dupl:{:}".format(skip_duplicates_filter)
+
+            if (tag, data) == self._outgoing_event_filters.get(skip_duplicates_filter, None):
+                log.info("Skipping duplicate event with tag '{:s}': {:}".format(tag, data))
+                return
 
         log.info("Triggering event with tag '{:s}': {:}".format(tag, data))
 
         with self._bus_lock:  # Synchronize just to be safe
             self._outgoing_bus.fire_event(data, tag)
+
+        # Register last event for duplicate filter
+        if skip_duplicates_filter != None:
+            self._outgoing_event_filters[skip_duplicates_filter] = (tag, data)
+
 
     def subscribe_to_events(self, tag, match_type="startswith"):
         """

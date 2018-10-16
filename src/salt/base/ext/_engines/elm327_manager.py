@@ -28,10 +28,9 @@ context = {
     },
     "battery": {
         "state": "",
-        "level": 0,
         "recurrences": 0,
         "recurrence_thresholds": {
-            "*": 2,  # Default is two repetitions
+            "*": 3,  # Default is three repetitions
             battery_util.CRITICAL_LEVEL_STATE: 60
         },
         "critical_limit": 0
@@ -476,24 +475,20 @@ def _battery_listener(result):
 
     ctx = context["battery"]
 
-    # Check if state or level has chaged since last time
-    if ctx["state"] != result["state"] or ctx["level"] != result["level"]:
+    # Check if state has chaged since last time
+    if ctx["state"] != result["state"]:
         ctx["state"] = result["state"]
-        ctx["level"] = result["level"]
         ctx["recurrences"] = 1
     else:
         ctx["recurrences"] += 1
 
-    # Trigger only event when state and level is repeated according to recurrence threshold
-    if ctx["recurrences"] == ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)):
+    # Trigger only event when battery state is repeated according to recurrence threshold
+    if ctx["recurrences"] % ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)) == 0:
 
-        # Trigger event
-        edmp.trigger_event({
-                "level": result["level"],
-                "voltage": result["voltage"]
-            },
-            "battery/{:s}".format(result["state"])
-        )
+        # Trigger only event if battery state (in tag) and/or level (in data) has changed
+        edmp.trigger_event({"level": result["level"]},
+            "battery/{:s}".format(result["state"]),
+            skip_duplicates_filter="battery/*")
 
 
 def start(serial_conn, returner, workers, **kwargs):
