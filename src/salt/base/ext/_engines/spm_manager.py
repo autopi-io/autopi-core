@@ -63,15 +63,20 @@ def heartbeat_handler():
             old_state = context["state"]
             new_state = res["last_state"]["up"]
 
+            # Trigger recover state event
+            if old_state == None and res["last_trigger"]["down"] != "rpi":
+                edmp.trigger_event({
+                    "trigger": res["last_trigger"]["down"]
+                }, "power/recover")
+
             # Check if state has changed
             if old_state != new_state:
                 context["state"] = new_state
 
-                # Trigger event
+                # Trigger state event
                 edmp.trigger_event({
-                        "trigger": res["last_trigger"]["up"]
-                    },
-                    "power/{:s}".format(context["state"]))
+                    "trigger": res["last_trigger"]["up"]
+                }, "power/{:}{:}".format("_" if new_state in ["booting"] else "", new_state))
 
     finally:
 
