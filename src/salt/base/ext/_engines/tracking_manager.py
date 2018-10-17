@@ -118,6 +118,11 @@ def gnss_query_handler(cmd, *args, **kwargs):
     try:
         return __salt__["ec2x.gnss_{:s}".format(cmd)](*args, **kwargs)
     except Exception as ex:
+        if isinstance(ex.message, dict):
+            if ex.message.get("type", None) == "CME" and \
+                ex.message.get("reason", None) in ["516", "Not fixed now"]:
+                return {"error": "no_fix"}
+
         return {"error": str(ex)}
 
 
@@ -128,14 +133,10 @@ def gnss_location_to_position_converter(result):
     """
 
     if "error" in result:
-        type = result["error"].get("type", "").upper()
-        reason = result["error"].get("reason", "").upper()
 
-        # Return empty position when not fixed to be used by listener to trigger position unknown state
-        if type == "CME" and reason in ["516", "NOT FIXED NOW"]:
-            return {
-                "_type": "pos",
-            }
+        # Return empty position when no fix (to be used by listener to trigger position unknown state)
+        if result["error"] == "no_fix":
+            return {"_type": "pos"}
 
         log.warn("Unable to determine GNSS location: {:}".format(result["error"]))
         return
