@@ -63,11 +63,26 @@ def heartbeat_handler():
             old_state = context["state"]
             new_state = res["last_state"]["up"]
 
-            # Trigger recover state event
-            if old_state == None and res["last_trigger"]["down"] != "rpi":
-                edmp.trigger_event({
-                    "trigger": res["last_trigger"]["down"]
-                }, "power/recover")
+            # On first time only
+            if old_state == None:
+
+                # Trigger last off state event if timestamp found
+                try:
+                    res = __salt__["rpi.last_off_time"]
+                    if res.get("value", None) == None:
+                        log.warning("Last system off time could not be determined")
+                    else:
+                        edmp.trigger_event({
+                            "timestamp": res["value"]
+                        }, "power/last_off")
+                except:
+                    log.exception("Failed to determine last system off time")
+
+                # Trigger recover state event
+                if res["last_trigger"]["down"] != "rpi":
+                    edmp.trigger_event({
+                        "trigger": res["last_trigger"]["down"]
+                    }, "power/recover")
 
             # Check if state has changed
             if old_state != new_state:
