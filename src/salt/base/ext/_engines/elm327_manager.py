@@ -491,7 +491,7 @@ def _battery_listener(result):
             skip_duplicates_filter="battery/*")
 
 
-def start(serial_conn, returner, workers, **kwargs):
+def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs):
     try:
 
         if log.isEnabledFor(logging.DEBUG):
@@ -502,7 +502,7 @@ def start(serial_conn, returner, workers, **kwargs):
         returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Determine critical limit of battery voltage 
-        context["battery"]["critical_limit"] = __salt__["grains.get"]("battery:critical_limit", default=battery_util.DEFAULT_CRITICAL_LIMIT)
+        context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
         log.info("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Configure connection
