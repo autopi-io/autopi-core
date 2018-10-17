@@ -128,8 +128,16 @@ def gnss_location_to_position_converter(result):
     """
 
     if "error" in result:
-        log.warn("No GNSS location available: {:}".format(result["error"]))
+        type = result["error"].get("type", "").upper()
+        reason = result["error"].get("reason", "").upper()
 
+        # Return empty position when not fixed to be used by listener to trigger position unknown state
+        if type == "CME" and reason in ["516", "NOT FIXED NOW"]:
+            return {
+                "_type": "pos",
+            }
+
+        log.warn("Unable to determine GNSS location: {:}".format(result["error"]))
         return
 
     ret = {
