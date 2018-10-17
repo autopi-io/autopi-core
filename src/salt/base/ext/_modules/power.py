@@ -143,13 +143,13 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     else:
         log.warn("Intentionally going to hibernate until next engine start")
 
-    # Fire a sleep event
+    # Fire a sleep or hibernate event
     __salt__["event.fire"]({
             "delay": delay,
             "interval": interval,
             "reason": reason
         },
-        "power/sleep"
+        "power/{:}".format("sleep" if interval > 0 else "hibernate")
     )
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
