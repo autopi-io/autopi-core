@@ -215,19 +215,14 @@ def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, ke
         return ret
 
     # Download new assist data file to cache
-    cached_file = os.path.join(__opts__["cachedir"], "extrn_files", __env__, "ec2x", urllib.quote_plus(name))
-    cache_res = __salt__["state.single"]("file.managed",
-                                         cached_file,
-                                         source=name,
-                                         skip_verify=True,
-                                         makedirs=True,
-                                         saltenv=__env__,
-                                         test=False)
-    cache_res = cache_res[next(six.iterkeys(cache_res))]
-    if cache_res["result"] is False:
+    cache_dir = os.path.join(__opts__["cachedir"], "extrn_files", __env__, "ec2x")
+    __salt__["file.mkdir"](cache_dir)
+
+    cached_file = os.path.join(cache_dir, urllib.quote_plus(name))
+    res = __salt__["cmd.run_all"]("wget -O {:} {:}".format(cached_file, name))
+    if res["retcode"] != 0:
         ret["result"] = False
-        ret["changes"] = cache_res["changes"]
-        ret["comment"] = cache_res["comment"]
+        ret["comment"] = "Failed to download assist data file: {:}".format(res["stderr"])
         return ret
 
     filename = None
@@ -244,10 +239,9 @@ def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, ke
         filename = res["name"]
         storage = res["storage"]
     finally:
-        # clean up cached file
+        # Clean up cached file
         if not keep_cache:
             os.unlink(cached_file)
-            pass
 
     try:
         # Inject assist time
