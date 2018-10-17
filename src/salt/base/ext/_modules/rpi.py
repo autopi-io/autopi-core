@@ -1,10 +1,13 @@
+import datetime
 import logging
 import re
+import salt.exceptions
 
 
 log = logging.getLogger(__name__)
 
 _gpu_temp_regex = re.compile("^temp=(?P<value>[-+]?[0-9]*\.?[0-9]*)'(?P<unit>.+)$")
+_fake_hwclock_regex = re.compile("^.* fake-hwclock\[\d+\]: (?P<timestamp>.+)$")
 
 
 def help():
@@ -60,3 +63,22 @@ def hw_serial():
 
     return __salt__["cmd.run"]("grep -Po '^Serial\s*:\s*\K[[:xdigit:]]{16}' /proc/cpuinfo")
 
+
+def last_off_time():
+    """
+    Attempts to determine timestamp for last time system powered off.
+    """
+
+    ret = {"value": None}
+
+    res = __salt__["cmd.run"]("grep 'fake-hwclock' /var/log/syslog | tail -1")
+    if not res:
+        return ret
+
+    match = _fake_hwclock_regex.match(res)
+    if not match:
+        raise salt.exceptions.CommandExecutionError("Unable to parse log line: {:}".format(res))
+
+    ret["value"] = datetime.datetime.strptime(match.group("timestamp"), "%a %d %b %H:%M:%S %Z %Y").isoformat()
+
+    return ret
