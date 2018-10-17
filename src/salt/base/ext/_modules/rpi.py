@@ -49,7 +49,7 @@ def temp_gpu():
 
     raw = __salt__["cmd.run"]("vcgencmd measure_temp")
     match = _gpu_temp_regex.match(raw)
-    
+
     ret = match.groupdict()
     ret["value"] = float(ret["value"])
 
@@ -71,7 +71,7 @@ def last_off_time():
 
     ret = {"value": None}
 
-    res = __salt__["cmd.run"]("grep 'fake-hwclock' /var/log/syslog | tail -1")
+    res = __salt__["cmd.shell"]("grep 'fake-hwclock' /var/log/syslog | tail -1")
     if not res:
         return ret
 
