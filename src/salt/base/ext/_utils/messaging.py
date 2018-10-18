@@ -78,7 +78,8 @@ class MessageProcessor(object):
             name = func.__name__
             self._hook_funcs[name] = ret_func
 
-            log.debug("Registered hook function '%s'", name)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Registered hook function '%s'", name)
 
             return ret_func
 
@@ -90,7 +91,9 @@ class MessageProcessor(object):
         """
 
         def decorator(func):
-            log.debug("Registered listener function '%s'", func.__name__)
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Registered listener function '%s'", func.__name__)
 
             self._listeners.append({
                 "func": func,
@@ -179,7 +182,8 @@ class MessageProcessor(object):
             if kill_upon_success and success:
                 thread.kill()
 
-                log.debug("Killed worker thread '{:}' upon successful run".format(thread.name))
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Killed worker thread '{:}' upon successful run".format(thread.name))
 
         # Auto start is default
         auto_start = settings.pop("start", True)
@@ -418,8 +422,11 @@ class EventDrivenMessageProcessor(MessageProcessor):
             listen=False)
 
         # Prepare match functions for already registered event matchers
+        def _custom_match_tag_regex(event_tag, search_tag):
+            return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)
         for em in self._event_matchers:
-            em["match_func"] = self._incoming_bus._get_match_func(em["match_type"])
+            em["match_func"] = _custom_match_tag_regex if em["match_type"] is "regex" \
+                else self._incoming_bus._get_match_func(em["match_type"])
 
         # Register matcher for event processor
         self.register_event_matcher(
@@ -462,7 +469,9 @@ class EventDrivenMessageProcessor(MessageProcessor):
             log.info("Starting {:d} worker thread(s): {:s}".format(len(worker_threads), ", ".join([t.name for t in worker_threads])))
 
         # Listen for incoming messages
-        log.debug("Listening for incoming events using %d registered event matcher(s)", len(self._event_matchers))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Listening for incoming events using %d registered event matcher(s)", len(self._event_matchers))
+
         for event in self._incoming_bus.iter_events(full=True, auto_reconnect=True):
             if not event:
                 log.warn("Skipping empty event")
@@ -470,17 +479,19 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
             try:
                 for matcher in self._event_matchers:
-                    if not matcher["match_func"](event["tag"], matcher["tag"]):
+                    match = matcher["match_func"](event["tag"], matcher["tag"]) 
+                    if not match:
                         continue
 
-                    log.debug("Matched event: %s", repr(event))
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("Matched event: %s", repr(event))
 
-                    matcher["func"](event)
+                    matcher["func"](event, match=match)
 
             except Exception:
                 log.exception("Failed to process received event: {:}".format(event))
 
-    def process_event(self, event):
+    def process_event(self, event, **kwargs):
         """
         Process a received event.
         """
@@ -524,6 +535,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             if (tag, data) == self._outgoing_event_filters.get(skip_duplicates_filter, None):
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("Skipping duplicate event with tag '{:s}': {:}".format(tag, data))
+
                 return
 
         log.info("Triggering event with tag '{:s}': {:}".format(tag, data))
@@ -563,7 +575,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
         groups = match.groupdict()
         tag = "{:s}/res/{:s}".format(self._namespace, groups["id"])
 
-        log.debug("Sending reply mesage with tag '{:s}': {:}".format(tag, data))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Sending reply mesage with tag '{:s}': {:}".format(tag, data))
 
         # Send reply event
         with self._bus_lock:  # Synchronize just to be safe
@@ -608,7 +621,9 @@ class EventDrivenMessageClient(object):
         correlation_id = uuid.uuid4()
         tag = "{:s}/req/{:s}".format(self._namespace, correlation_id)
 
-        log.debug("Sending request message with tag '%s': %s", tag, message)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Sending request message with tag '%s': %s", tag, message)
+
         self._outgoing_bus.fire_event(message, tag)
 
         return correlation_id

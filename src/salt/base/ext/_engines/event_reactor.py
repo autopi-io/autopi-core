@@ -12,6 +12,8 @@ edmp = EventDrivenMessageProcessor("reactor")
 
 returners = None
 
+context = {}
+
 
 @edmp.register_hook()
 def module_handler(name, *args, **kwargs):
@@ -41,6 +43,20 @@ def returner_handler(name, result):
 
 
 @edmp.register_hook()
+def context_handler(key=None, **kwargs):
+    """
+    """
+
+    if key != None:
+        if not key in context:
+            context[key] = {}
+
+        context[key].update(kwargs)
+
+    return context
+
+
+@edmp.register_hook()
 def echo_handler(result):
     """
     For testing.
@@ -64,12 +80,12 @@ def start(mappings, **kwargs):
         for mapping in mappings:
 
             # Define function to handle events when matched
-            def on_event(event, mapping=mapping):
+            def on_event(event, match=None, mapping=mapping):
 
                 # Check condition if defined
                 condition = mapping.get("condition", None)
                 if condition:
-                    if keyword_resolve(condition, keywords={"event": event}):
+                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": context}):
                         log.info("Event meets condition '{:}': {:}".format(condition, event))
                     else:
                         return
@@ -79,7 +95,7 @@ def start(mappings, **kwargs):
 
                     # Check if keyword resolving is enabled
                     if mapping.get("keyword_resolve", False):
-                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event})
+                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": context})
                         log.debug("Keyword resolved message: {:}".format(resolved_message))
 
                         edmp.process(resolved_message)
