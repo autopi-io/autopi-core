@@ -210,7 +210,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
     ret = {}
 
     # Check if baudrate is sufficient compared to protocol baudrate
-    protocol_baudrate = conn.protocol_info().get("baudrate", 0) 
+    protocol_baudrate = conn.protocol_info().get("baudrate", 0)
     if protocol_baudrate > baudrate:
         raise Exception("Connection baudrate '{:}' is lower than protocol baudrate '{:}'".format(baudrate, protocol_baudrate))
 
@@ -228,7 +228,8 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
 
     # Write result to file if specified
     if file != None:
-        path = file if os.path.isabs(file) else os.path.join(__opts__["cachedir"], file)
+        path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
+        __salt__["file.mkdir"](os.path.dirname(path))
         with open(path, "w") as f:
             for line in res:
                 f.write(line + os.linesep)
