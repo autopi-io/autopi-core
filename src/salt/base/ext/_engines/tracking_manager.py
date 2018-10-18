@@ -4,6 +4,7 @@ import pynmea2
 import salt.loader
 
 from messaging import EventDrivenMessageProcessor
+from salt_more import SuperiorCommandExecutionError
 from serial_conn import SerialConn
 
 
@@ -117,13 +118,13 @@ def gnss_query_handler(cmd, *args, **kwargs):
 
     try:
         return __salt__["ec2x.gnss_{:s}".format(cmd)](*args, **kwargs)
-    except Exception as ex:
-        if isinstance(ex.message, dict):
-            if ex.message.get("type", None) == "CME" and \
-                ex.message.get("reason", None) in ["516", "Not fixed now"]:
-                return {"error": "no_fix"}
-
-        return {"error": str(ex)}
+    except SuperiorCommandExecutionError as scee:
+        if scee.data.get("type", None) == "CME" and \
+            scee.data.get("reason", None) in ["516", "Not fixed now"]:
+            return {"error": "no_fix"}
+        return {"error": str(scee)}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @edmp.register_hook()

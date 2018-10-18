@@ -9,6 +9,8 @@ import time
 import urlparse
 import uuid
 
+from salt_more import SuperiorCommandExecutionError
+
 
 log = logging.getLogger(__name__)
 
@@ -635,6 +637,8 @@ class EventDrivenMessageClient(object):
 
         # Check for error
         if "error" in message:
+            if isinstance(message["error"], dict):
+                raise SuperiorCommandExecutionError(str(message["error"]), data=message["error"])
             raise salt.exceptions.CommandExecutionError(message["error"])
 
         return message
