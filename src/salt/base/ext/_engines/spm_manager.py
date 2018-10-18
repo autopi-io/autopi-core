@@ -66,17 +66,18 @@ def heartbeat_handler():
             # On first time only
             if old_state == None:
 
-                # Trigger last off state event if timestamp found
+                # Trigger last off state event if last boot time is found
                 try:
-                    res = __salt__["rpi.last_off_time"]
-                    if res.get("value", None) == None:
-                        log.warning("Last system off time could not be determined")
+                    boot_time = __salt__["rpi.boot_time"]().get("value", None)
+                    if boot_time == None:
+                        log.warning("Last boot time could not be determined")
                     else:
+                       # Last boot time is considered identical to last power off time because of 'fake-hwclock'
                         edmp.trigger_event({
-                            "timestamp": res["value"]
+                            "timestamp": boot_time
                         }, "power/last_off")
                 except:
-                    log.exception("Failed to determine last system off time")
+                    log.exception("Failed to trigger last system off event")
 
                 # Trigger recover state event
                 if res["last_trigger"]["down"] != "rpi":

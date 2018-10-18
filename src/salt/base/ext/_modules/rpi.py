@@ -7,7 +7,7 @@ import salt.exceptions
 log = logging.getLogger(__name__)
 
 _gpu_temp_regex = re.compile("^temp=(?P<value>[-+]?[0-9]*\.?[0-9]*)'(?P<unit>.+)$")
-_fake_hwclock_regex = re.compile("^.* fake-hwclock\[\d+\]: (?P<timestamp>.+)$")
+_linux_boot_log_regex = re.compile("^(?P<timestamp>.+) raspberrypi kernel: .+$")
 
 
 def help():
@@ -64,21 +64,26 @@ def hw_serial():
     return __salt__["cmd.run"]("grep -Po '^Serial\s*:\s*\K[[:xdigit:]]{16}' /proc/cpuinfo")
 
 
-def last_off_time():
+def boot_time():
     """
-    Attempts to determine timestamp for last time system powered off.
+    Get timestamp for last boot of system.
     """
 
     ret = {"value": None}
 
-    res = __salt__["cmd.shell"]("grep 'fake-hwclock' /var/log/syslog | tail -1")
+    res = __salt__["cmd.shell"]("grep 'Booting Linux' /var/log/syslog | tail -1")
     if not res:
         return ret
 
-    match = _fake_hwclock_regex.match(res)
+    match = _linux_boot_log_regex.match(res)
     if not match:
         raise salt.exceptions.CommandExecutionError("Unable to parse log line: {:}".format(res))
 
-    ret["value"] = datetime.datetime.strptime(match.group("timestamp"), "%a %d %b %H:%M:%S %Z %Y").isoformat()
+    now = datetime.datetime.now()
+    last_off = datetime.datetime.strptime(match.group("timestamp"), "%b %d %H:%M:%S").replace(year=now.year)
+    if last_off > now:
+        last_off = last_off.replace(year=now.year-1)
+
+    ret["value"] = last_off.isoformat()
 
     return ret
