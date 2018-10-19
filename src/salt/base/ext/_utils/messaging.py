@@ -449,7 +449,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         em = {
             "tag": tag,
             "match_type": match_type,
-            "match_func": self._custom_match_tag_regex if match_type is "regex" else self._incoming_bus._get_match_func(match_type),
+            "match_func": self._custom_match_tag_regex if match_type == "regex" else self._incoming_bus._get_match_func(match_type),
             "func": func,
         }
         self._event_matchers.append(em)
