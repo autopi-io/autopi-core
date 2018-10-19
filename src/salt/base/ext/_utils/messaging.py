@@ -421,13 +421,6 @@ class EventDrivenMessageProcessor(MessageProcessor):
             transport=opts["transport"],
             listen=False)
 
-        # Prepare match functions for already registered event matchers
-        def _custom_match_tag_regex(event_tag, search_tag):
-            return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)
-        for em in self._event_matchers:
-            em["match_func"] = _custom_match_tag_regex if em["match_type"] is "regex" \
-                else self._incoming_bus._get_match_func(em["match_type"])
-
         # Register matcher for event processor
         self.register_event_matcher(
             self._tag_regex.pattern,
@@ -445,6 +438,9 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 for message in messages:
                     self.dedicated_worker(message, enqueue=worker["name"])
 
+    def _custom_match_tag_regex(self, event_tag, search_tag):
+        return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)
+
     def register_event_matcher(self, tag, func, match_type="startswith"):
         """
         Register additional event matchers to catch other events.
@@ -453,7 +449,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         em = {
             "tag": tag,
             "match_type": match_type,
-            "match_func": self._incoming_bus._get_match_func(match_type),
+            "match_func": self._custom_match_tag_regex if match_type is "regex" else self._incoming_bus._get_match_func(match_type),
             "func": func,
         }
         self._event_matchers.append(em)
