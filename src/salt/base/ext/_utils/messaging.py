@@ -692,7 +692,7 @@ def keyword_resolve(data, keywords={}, symbol="$"):
 
     if isinstance(data, dict):
         for key, val in data.iteritems():
-            data[key] = keyword_resolve(val, keywords)
+            data[keyword_resolve(key, keywords)] = keyword_resolve(val, keywords)
 
     elif isinstance(data, basestring) and symbol in data:
 
