@@ -80,7 +80,7 @@ def heartbeat_handler():
                     log.exception("Failed to trigger last system off event")
 
                 # Trigger recover state event
-                if res["last_trigger"]["down"] != "rpi":
+                if res["last_trigger"]["down"] != None and res["last_trigger"]["down"] != "rpi":
                     edmp.trigger_event({
                         "trigger": res["last_trigger"]["down"]
                     }, "power/recover")
