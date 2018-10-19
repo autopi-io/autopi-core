@@ -168,10 +168,10 @@ def sync_time_handler(force=False):
             log.info("Synchronized system time with network time")
 
             ctx["state"] = "synced"
-            
+
             # Trigger time synced event
             edmp.trigger_event({
-                    "source": "ec2x"
+                    "source": "ec2x",
                     "old": ret["old"],
                     "new": ret["new"],
                 },
