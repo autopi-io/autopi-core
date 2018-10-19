@@ -487,9 +487,11 @@ def _battery_listener(result):
     if ctx["recurrences"] % ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)) == 0:
 
         # Trigger only event if battery state (in tag) and/or level (in data) has changed
-        edmp.trigger_event({"level": result["level"]},
+        edmp.trigger_event(
+            {"level": result["level"]} if result["state"] in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE] else {},
             "battery/{:s}".format(result["state"]),
-            skip_duplicates_filter="battery/*")
+            skip_duplicates_filter="battery/*"
+        )
 
 
 def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs):
