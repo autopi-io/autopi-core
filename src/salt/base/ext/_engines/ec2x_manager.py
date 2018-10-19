@@ -17,6 +17,13 @@ edmp = EventDrivenMessageProcessor("ec2x",
 conn = SerialConn()
 
 error_regex = re.compile("ERROR|\+(?P<type>.+) ERROR: (?P<reason>.+)")
+network_time_regex = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
+
+context = {
+    "time": {
+        "state": None
+    }
+}
 
 
 def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
@@ -111,50 +118,74 @@ def sync_time_handler(force=False):
 
     ret = {}
 
+    ctx = context["time"]
+
     # Check if system time is already NTP synchronized
-    res = __salt__["time.status"]()
-    if not force and res["ntp_synchronized"] == "yes":
+    status = __salt__["time.status"]()
+    if not force and status["ntp_synchronized"] == "yes":
         log.info("System time is already NTP synchronized")
+
+        ctx["state"] = "synced"
+
+        # Trigger time synced event
+        edmp.trigger_event(
+            {"source": "ntp"},
+            "time/{:}".format(ctx["state"])
+        )
+
     else:
 
-        if res["ntp_synchronized"] == "no":
+        # We do not want below log when force
+        if status["ntp_synchronized"] == "no":
             log.info("System time is not NTP synchronized")
 
-        ret["old"] = " ".join(res["universal_time"].split(" ")[1:3])
-
-        # Disable automatic time synchronization
-        if res["network_time_on"] == "yes":
+        # Disable automatic time synchronization 
+        # NOTE: This is done now to minimize time between get network time and adjust system clock 
+        if status["network_time_on"] == "yes":
             __salt__["time.ntp"](enable=False)
 
         try:
 
             # Get current UTC network time
-            pattern = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
             res = _exec("AT+QLTS=1")
             if "error" in res:
                 raise Exception("Unable to retrieve network time: {:}".format(res["error"]))
 
-            match = pattern.match(res["data"])
+            match = network_time_regex.match(res["data"])
             if not match:
                 raise Exception("Failed to match network time result: {:}".format(res["data"]))
 
             time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
 
+            # Set old time before we adjust clock
             ret["old"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+            # Set time manually
             __salt__["time.set"](time, adjust_system_clock=True)
 
             ret["new"] = time
 
             log.info("Synchronized system time with network time")
 
-            if ret["old"] != ret["new"]:
-                # Trigger event
-                edmp.trigger_event({
-                        "old": ret["old"],
-                        "new": ret["new"],
-                    },
-                    "time/synced")
+            ctx["state"] = "synced"
+            
+            # Trigger time synced event
+            edmp.trigger_event({
+                    "source": "ec2x"
+                    "old": ret["old"],
+                    "new": ret["new"],
+                },
+                "time/{:}".format(ctx["state"])
+            )
+
+        except:
+            if ctx["state"] != "uncertain":
+                ctx["state"] = "uncertain"
+
+                # Trigger time uncertain event
+                edmp.trigger_event({}, "time/{:}".format(ctx["state"]))
+
+            raise
 
         finally:
 
@@ -174,7 +205,7 @@ def start(serial_conn, **kwargs):
         # TODO: Get workers from pillar data instead of hardcoded here (but wait until all units have engine that accept **kwargs to prevent error)
         workers = [{
             "name": "sync_time",
-            "interval": 60,  # Run every minute
+            "interval": 5,  # Run every 5 seconds
             "suppress_exceptions": True,  # Exceptions will not kill worker thread
             "kill_upon_success": True,  # Kill after first successful run
             "messages": [
