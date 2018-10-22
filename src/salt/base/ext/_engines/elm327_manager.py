@@ -148,9 +148,7 @@ def commands_handler(mode=None):
     Lists all supported OBD commands found for vehicle.
     """
 
-    ret = conn.supported_commands()
-
-    return ret
+    return {cmd.name: cmd.desc for cmd in conn.supported_commands()}
 
 
 @edmp.register_hook()

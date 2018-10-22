@@ -134,7 +134,7 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def supported_commands(self):
-        return {c.name: c.desc for c in self._obd.supported_commands}
+        return self._obd.supported_commands
 
     @Decorators.ensure_open
     def send(self, msg, **kwargs):
