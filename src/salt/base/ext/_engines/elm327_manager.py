@@ -142,6 +142,22 @@ def execute_handler(cmd, reset=None, keep_conn=True):
     return ret
 
 
+@edmp.register_hook(synchronize=False)
+def dtc_handler(clear=False, **kwargs):
+    """
+    Reads and clears Diagnostics Trouble Codes (DTCs).
+    """
+
+    cmd = "GET_DTC" if not clear else "CLEAR_DTC"
+
+    res = query_handler(cmd, **kwargs)
+    if "value" in res:
+        res["_type"] = "dtc"
+        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
+
+    return res
+
+
 @edmp.register_hook()
 def commands_handler(mode=None):
     """
@@ -434,7 +450,7 @@ def alternating_value_returner(message, result):
     ctx[result["_type"]] = result
 
     # Check if value is unchanged
-    if old_read != None and old_read.get("value", None) == new_read.get("value", None):
+    if old_read != None and old_read == new_read:
         return
 
     # Call Salt returner module

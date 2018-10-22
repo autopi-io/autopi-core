@@ -84,17 +84,10 @@ def battery(**kwargs):
 
 def dtc(clear=False, **kwargs):
     """
-    Readouts Diagnostics Trouble Codes (DTCs).
+    Reads and clears Diagnostics Trouble Codes (DTCs).
     """
 
-    cmd = "GET_DTC" if not clear else "CLEAR_DTC"
-
-    res = query(cmd, **kwargs)
-    if "value" in res:
-        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
-        res.pop("_type")
-
-    return res
+    return client.send_sync(msg_pack(clear=clear, _handler="dtc", **kwargs))
 
 
 def dump(**kwargs):
