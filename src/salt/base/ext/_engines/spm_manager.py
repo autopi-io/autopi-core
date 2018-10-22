@@ -1,5 +1,7 @@
 import gpio_pin
 import logging
+import os
+import psutil
 import RPi.GPIO as gpio
 import time
 
@@ -148,6 +150,9 @@ def flash_firmware_handler(hex_file, no_write=True):
 def start(workers, **kwargs):
     try:
         log.debug("Starting SPM manager")
+
+        # Give process highest 'nice' priority
+        psutil.Process(os.getpid()).nice(-20)
 
         # Setting up SPM connection
         conn.setup()
