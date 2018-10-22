@@ -81,7 +81,9 @@ def returner_job(result):
 
     # TODO: Timestamp can be extracted from JID value
 
-    res = _prepare_recursively(result["return"], result["fun"], timestamp=None)
+    kind = result["fun"] if not "_type" in result["return"] else result["fun"].split(".")[0]
+
+    res = _prepare_recursively(result["return"], kind, timestamp=None)
 
     options = cloud_cache.load_options(__salt__)
     for r in res:
