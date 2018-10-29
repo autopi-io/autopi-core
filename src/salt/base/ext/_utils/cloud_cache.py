@@ -1,152 +1,262 @@
 import datetime
 import json
 import logging
+import random
+import re
 import redis
 import requests
+import time
 
-
-DEQUEUE_PENDING_BATCH_SCRIPT = "dequeue_pending_batch"
-DEQUEUE_PENDING_BATCH_LUA = """
-local ret = {}
-if redis.call('EXISTS', KEYS[2]) == 1 then
-    ret = redis.call('LRANGE', KEYS[2], 0, -1)
-elseif redis.call('EXISTS', KEYS[1]) == 1 then
-    for i = 1, ARGV[1] do
-        local val = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
-        if not val then
-            break
-        end
-        table.insert(ret, val)
-    end
-end
-return ret
-"""
-
-PENDING_QUEUE = "pend"
-WORK_QUEUE    = "work"
-RETRY_QUEUE   = "retr_{0:%Y%m%d%H%M%S%f}"
-FAIL_QUEUE    = "fail_{0:%Y%m%d%H%M%S%f}"
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
 
 
-# Redis connection pool
-_conn_pool = None
+class CloudCache(object):
 
-# Redis LUA scripts loaded
-_scripts = None
+    DEQUEUE_PENDING_BATCH_SCRIPT = "dequeue_pending_batch"
+    DEQUEUE_PENDING_BATCH_LUA = """
+    local ret = {}
+    if redis.call('EXISTS', KEYS[2]) == 1 then
+        ret = redis.call('LRANGE', KEYS[2], 0, -1)
+    elseif redis.call('EXISTS', KEYS[1]) == 1 then
+        for i = 1, ARGV[1] do
+            local val = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
+            if not val then
+                break
+            end
+            table.insert(ret, val)
+        end
+    end
+    return ret
+    """
 
+    PENDING_QUEUE = "pend"
+    WORK_QUEUE    = "work"
+    RETRY_QUEUE   = "retr_{:s}_#{:d}"
+    FAIL_QUEUE    = "fail_{:s}_#{:d}"
 
-def _dequeue_pending_batch(client, source, destination, count):
-    script = _scripts.get(DEQUEUE_PENDING_BATCH_SCRIPT)
-    return script(keys=[source, destination], args=[count], client=client)
+    TIMESTAMP_FORMAT = "{:%Y%m%d%H%M%S%f}"
 
+    ERROR_QUEUE_REGEX = re.compile("^(?P<type>.+)_(?P<timestamp>/d+)_#(?P<attempt>/d+)$")
 
-def load_options(__salt__):
-    options = {
-        "redis": {
-            "host": "localhost",
-            "port": 6379,
-            "db": 0,
-        },
-        "batch_size": 1,
-        "retry_count": 3,
-        "fail_ttl": 3600,  # One hour
-    }
+    def __init__(self, **options):
+        self.options = options
 
-    # Overwrite defaults with options specified in config file
-    options.update(__salt__["config.get"]("cloud_cache"))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Creating Redis connection pool")
+        self.conn_pool = redis.ConnectionPool(**options.get("redis", {}))
 
-    log.debug("Loaded options from config file")
-    return options
+        self.client = redis.StrictRedis(connection_pool=self.conn_pool)
 
-
-def conn_pool_for(options):
-    global _conn_pool
-    if _conn_pool is None:
-        log.debug("Creating Redis connection pool")
-        _conn_pool = redis.ConnectionPool(**options.get("redis"))
-
-    return _conn_pool
-
-
-def client_for(options):
-    client = redis.StrictRedis(connection_pool=conn_pool_for(options))
-
-    global _scripts
-    if _scripts is None:
-        log.debug("Loading Redis LUA scripts")
-
-        _scripts = {
-            DEQUEUE_PENDING_BATCH_SCRIPT: client.register_script(DEQUEUE_PENDING_BATCH_LUA)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Loading Redis LUA scripts")
+        self.scripts = {
+            self.DEQUEUE_PENDING_BATCH_SCRIPT: self.client.register_script(self.DEQUEUE_PENDING_BATCH_LUA)
         }
 
-    return client
+        self.upload_timer = None
 
+    def _dequeue_pending_batch(self, source, destination, count):
+        script = self.scripts.get(self.DEQUEUE_PENDING_BATCH_SCRIPT)
+        return script(keys=[source, destination], args=[count], client=client)
 
-def enqueue(options, data):
-    # TODO: Use a Set to determine duplicate/unchanged values in order to skip them 
-    client_for(options).lpush(PENDING_QUEUE, json.dumps(data, separators=(",", ":")))
-
-
-def upload_pending_batch(options, url, auth_token, name=None):
-    client = client_for(options)
-
-    # Pop next batch into work queue, if not work queue already has data
-    if name is None:
-        batch = _dequeue_pending_batch(client, PENDING_QUEUE, WORK_QUEUE, options.get("batch_size"))
-    else:
-        batch = _dequeue_pending_batch(client, name, WORK_QUEUE, options.get("batch_size"))
-        log.info("Uploading batch name %s", name)
-
-    if not batch:
-        log.debug("No pending batch found to upload")
-
-        return batch
-
-    # Upload batch of data to cloud
-    try:
-        log.info("Uploading batch of size %d", len(batch))
-
+    def _upload(self, url, auth_token, payload):
         payload = "[{:s}]".format(", ".join(batch))
         headers = {
-            "authorization": "token {:}".format(auth_token),
+            "authorization": "token {:}".format(self.options.get("auth_token")),
             "content-type": "application/json",
         }
 
-        res = requests.post(url, data=payload, headers=headers)
-        res = res.raise_for_status()
+        delay = random.randint(0, self.options.get("upload_splay", 10))
+        if self.upload_timer != None and timer() - self.upload_timer < delay
 
-        # Batch uploaded equals work completed
-        client.delete(WORK_QUEUE)
-        if name != None:
-            client.delete(name)
+            # Take a little break before next upload
+            time.sleep(delay)
+
+        try:
+            res = requests.post(self.options.get("url"), data=payload, headers=headers)
+        except:
+            log.exception("Unable to upload")
+
+            return False
+        finally:
+            self.upload_timer = timer()
+
+        # All non 2xx status codes will fail
+        res.raise_for_status()
+
+        return True
+
+    def enqueue(self, data):
+        self.client.lpush(self.PENDING_QUEUE, json.dumps(data, separators=(",", ":")))
+
+    def list_queues(self, pattern="*"):
+        return sorted(self.client.scan(match=pattern), reverse=True)
+
+    def peek_queue(self, name, start=0, stop=-1):
+        res = self.client.lrange(name, start, stop)
+
+        return [json.loads(s) for s in res]
+
+    def clear_queue(self, name):
+        return bool(self.client.delete(name))
+
+    def upload_queue(self, name):
+        if name == self.PENDING_QUEUE:
+            raise Exception("Not allowed to upload pending queue directly - use 'upload_pending_batch' method instead")
+
+        ret = {
+            "success": False,
+            "count": 0
+        }
+
+        entries = self.client.lrange(name, 0, -1)
+        ret["count"] = len(entries)
+
+        if self._upload(entries)
+
+            # Delete queue when sucessfully uploaded 
+            self.client.delete(name)
+
+            ret["success"] = True
+            
+        return ret
+        
+    def upload_pending_batch(self):
+        ret = {
+            "success": True,
+            "count": 0
+        }
+
+        # Pop next batch into work queue, if not work queue already has data
+        batch = self._dequeue_pending_batch(self.PENDING_QUEUE, self.WORK_QUEUE, self.options.get("batch_size"))
+        if not batch:
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("No pending batch found to upload")
+
+            return ret
+        
+        ret["count"] = len(batch)
+
+        # Upload batch
+        log.info("Uploading pending batch of size %d", len(batch))
+        if self._upload(batch):
+
+            # Batch uploaded equals work completed
+            self.client.delete(self.WORK_QUEUE)
         else:
-            retry_failed_batches(options, url, auth_token, count=5)
+            log.warning("Temporarily unable to upload pending batch")
 
-    except Exception:
-        log.exception("Failed to upload batch")
+            ret["success"] = False
 
-        # Move batch data into dedicated error queue
-        if client.renamenx(WORK_QUEUE, FAIL_QUEUE.format(datetime.datetime.utcnow())):
-            # TODO: Set EXPIRE seconds to 7 days using pipeline
+        return ret
 
-            pass # TODO: Handle fail
+    def upload_retry_queues(self):
+        ret = {}
 
-        raise
+        for queue in self.list_queues(pattern="retr_*"):
 
-    return batch
+            match = self.ERROR_QUEUE_REGEX.match(queue)
+            if not match:
+                log.error("Failed to match retry queue name '{:}'".format(queue))
 
-def retry_failed_batches(options, url, auth_token, count=0):
-    client = client_for(options)
+                continue
 
-    # find failed queues
-    failkeys = sorted(client.keys("fail*"), reverse=True)
+            attempt = int(match.group("attempt")) + 1
+            timestamp = match.group("timestamp")
 
-    if len(failkeys) < count:
-        count = len(failkeys)
+            # Retry upload
+            try:
+                res = upload_queue(self, queue):
+                if res["success"]:
+                    log.info("Sucessfully uploaded retry queue '{:}'".format(queue))
+                    ret[queue] = res["count"]
+                else:
+                    log.warning("Temporarily unable to upload retry queue(s)")
 
-    for i in range(0,count):
-        upload_pending_batch(options, url, auth_token, name=failkeys[i])
+                    # No reason to continue trying
+                    break
 
+            except:
+                max_retry = self.options.get("max_retry", 10)
+                log.exception("Failed retry attempt {:}/{:} for uploading queue '{:}'".format(attempt, max_retry, queue))
+
+                # Check if max retry is reached
+                if attempt >= max_retry:
+                    fail_queue = self.FAIL_QUEUE.format(timestamp, 0)
+
+                    log.warning("Max retry attempt reached for queue '{:}' - transferring to fail queue '{:}'".format(queue, fail_queue))
+
+                    self.client.renamenx(queue, fail_queue)
+                else:
+
+                    # Update attempt count in queue name
+                    self.client.renamenx(queue, self.RETRY_QUEUE.format(timestamp, attempt))
+
+        return ret
+
+    def upload_fail_queues(self):
+        ret = {}
+
+        for queue in self.list_queues(pattern="fail_*"):
+
+            match = self.ERROR_QUEUE_REGEX.match(queue)
+            if not match:
+                log.error("Failed to match fail queue name '{:}'".format(queue))
+
+                continue
+
+            attempt = int(match.group("attempt")) + 1
+            timestamp = match.group("timestamp")
+
+            try:   
+                res = upload_queue(self, queue)         
+                if res["success"]:
+                    log.info("Sucessfully uploaded fail queue '{:}'".format(queue))
+                    ret[queue] = res["count"]
+                else:
+                    log.warning("Temporarily unable to upload fail queue(s)")
+
+                    # No reason to continue trying
+                    break
+
+            except:
+                log.info("Still unable to upload fail queue '{:}'".format(queue))
+
+                 # Update attempt count in queue name
+                self.client.renamenx(queue, self.FAIL_QUEUE.format(timestamp, attempt))
+
+        return ret
+
+    def upload_everything(self, include_failed=False):
+        ret = {}
+
+        try:
+            if include_failed:
+                res = self.upload_fail_queues()
+                if res:
+                    ret["failed"] = sum(res.values())
+
+            res = self.upload_retry_queues(self)
+            if res:
+                ret["retried"] = sum(res.values())
+        finally:
+            try:
+                res = self.upload_pending_batch()
+                ret["pending"] = res["count"] if res["success"] else 0
+
+                # Continue to upload if batch limit is reached
+                while res["success"] and res["count"] == self.options.get("batch_size"):
+                    res = self.upload_pending_batch()
+                    ret["pending"] += res["count"] if res["success"] else 0
+
+            except:
+                retry_queue = self.RETRY_QUEUE.format(self.TIMESTAMP_FORMAT.format(datetime.datetime.utcnow()), 0)
+                log.exception("Failed to upload pending batch - transferring to retry queue '{:}'".format(retry_queue))
+                self.client.renamenx(self.WORK_QUEUE, retry_queue):
+
+                raise
+
+        return ret
