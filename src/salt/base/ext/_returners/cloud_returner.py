@@ -1,4 +1,3 @@
-import cloud_cache
 import datetime
 import logging
 try:
@@ -7,6 +6,7 @@ try:
 except ImportError:
     HAS_REDIS = False
 
+from cloud_cache import CloudCache
 from salt.utils import jid
 
 
@@ -85,16 +85,17 @@ def returner_job(result):
 
     res = _prepare_recursively(result["return"], kind, timestamp=None)
 
-    options = cloud_cache.load_options(__salt__)
+    # TODO: Find a better way of doing this regarding retrieval of options
+    cloud_cache = CloudCache(**__salt__["cloud.cache_options"]())
     for r in res:
-        cloud_cache.enqueue(options, r)
+        cloud_cache.enqueue(r)
 
 
 def returner_event(result):
     """
     Return an event.
     """
-    
+
     tag_parts = result["tag"].lstrip("/").split("/")
     kind = "event.{:s}".format(".".join(tag_parts[:1]))
 
@@ -115,7 +116,8 @@ def returner_raw(result, kind):
 
     res = _prepare_recursively(result, kind)
 
-    options = cloud_cache.load_options(__salt__)
+    # TODO: Find a better way of doing this regarding retrieval of options
+    cloud_cache = CloudCache(**__salt__["cloud.cache_options"]())
     for r in res:
-        cloud_cache.enqueue(options, r)
+        cloud_cache.enqueue(r)
 

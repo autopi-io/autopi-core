@@ -39,7 +39,7 @@ class CloudCache(object):
 
     TIMESTAMP_FORMAT = "{:%Y%m%d%H%M%S%f}"
 
-    ERROR_QUEUE_REGEX = re.compile("^(?P<type>.+)_(?P<timestamp>/d+)_#(?P<attempt>/d+)$")
+    ERROR_QUEUE_REGEX = re.compile("^(?P<type>.+)_(?P<timestamp>\d+)_#(?P<attempt>\d+)$")
 
     def __init__(self, **options):
         self.options = options
@@ -60,25 +60,28 @@ class CloudCache(object):
 
     def _dequeue_pending_batch(self, source, destination, count):
         script = self.scripts.get(self.DEQUEUE_PENDING_BATCH_SCRIPT)
-        return script(keys=[source, destination], args=[count], client=client)
+        return script(keys=[source, destination], args=[count], client=self.client)
 
-    def _upload(self, url, auth_token, payload):
-        payload = "[{:s}]".format(", ".join(batch))
+    def _upload(self, entries):
+
+        delay = random.randint(0, self.options.get("upload_splay", 10))
+        if self.upload_timer != None and timer() - self.upload_timer < delay:
+
+            # Take a little break before next upload
+            time.sleep(delay)
+
+        payload = "[{:s}]".format(", ".join(entries))
         headers = {
             "authorization": "token {:}".format(self.options.get("auth_token")),
             "content-type": "application/json",
         }
 
-        delay = random.randint(0, self.options.get("upload_splay", 10))
-        if self.upload_timer != None and timer() - self.upload_timer < delay
-
-            # Take a little break before next upload
-            time.sleep(delay)
-
         try:
             res = requests.post(self.options.get("url"), data=payload, headers=headers)
         except:
-            log.exception("Unable to upload")
+
+            # TODO: Suppress this log
+            log.exception("Unable to upload data to cloud")
 
             return False
         finally:
@@ -93,7 +96,8 @@ class CloudCache(object):
         self.client.lpush(self.PENDING_QUEUE, json.dumps(data, separators=(",", ":")))
 
     def list_queues(self, pattern="*"):
-        return sorted(self.client.scan(match=pattern), reverse=True)
+        cur, res = self.client.scan(match=pattern)
+        return sorted(res, reverse=True)
 
     def peek_queue(self, name, start=0, stop=-1):
         res = self.client.lrange(name, start, stop)
@@ -115,15 +119,15 @@ class CloudCache(object):
         entries = self.client.lrange(name, 0, -1)
         ret["count"] = len(entries)
 
-        if self._upload(entries)
+        if self._upload(entries):
 
-            # Delete queue when sucessfully uploaded 
+            # Delete queue when sucessfully uploaded
             self.client.delete(name)
 
             ret["success"] = True
-            
+
         return ret
-        
+
     def upload_pending_batch(self):
         ret = {
             "success": True,
@@ -137,12 +141,12 @@ class CloudCache(object):
                 log.debug("No pending batch found to upload")
 
             return ret
-        
+
         ret["count"] = len(batch)
 
         # Upload batch
-        log.info("Uploading pending batch of size %d", len(batch))
         if self._upload(batch):
+            log.info("Uploaded pending batch of size %d", len(batch))
 
             # Batch uploaded equals work completed
             self.client.delete(self.WORK_QUEUE)
@@ -169,7 +173,7 @@ class CloudCache(object):
 
             # Retry upload
             try:
-                res = upload_queue(self, queue):
+                res = self.upload_queue(queue)
                 if res["success"]:
                     log.info("Sucessfully uploaded retry queue '{:}'".format(queue))
                     ret[queue] = res["count"]
@@ -211,8 +215,8 @@ class CloudCache(object):
             attempt = int(match.group("attempt")) + 1
             timestamp = match.group("timestamp")
 
-            try:   
-                res = upload_queue(self, queue)         
+            try:
+                res = self.upload_queue(queue)
                 if res["success"]:
                     log.info("Sucessfully uploaded fail queue '{:}'".format(queue))
                     ret[queue] = res["count"]
@@ -239,7 +243,7 @@ class CloudCache(object):
                 if res:
                     ret["failed"] = sum(res.values())
 
-            res = self.upload_retry_queues(self)
+            res = self.upload_retry_queues()
             if res:
                 ret["retried"] = sum(res.values())
         finally:
@@ -255,7 +259,7 @@ class CloudCache(object):
             except:
                 retry_queue = self.RETRY_QUEUE.format(self.TIMESTAMP_FORMAT.format(datetime.datetime.utcnow()), 0)
                 log.exception("Failed to upload pending batch - transferring to retry queue '{:}'".format(retry_queue))
-                self.client.renamenx(self.WORK_QUEUE, retry_queue):
+                self.client.renamenx(self.WORK_QUEUE, retry_queue)
 
                 raise
 
