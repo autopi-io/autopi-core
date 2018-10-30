@@ -1,5 +1,6 @@
 import logging
 
+from cloud_cache import CloudCache
 from messaging import EventDrivenMessageProcessor
 
 
@@ -11,7 +12,10 @@ edmp = EventDrivenMessageProcessor("cloud")
 cache = CloudCache()
 
 context = {
-	"upload": {}
+    "upload": {
+        "sum": {},
+        "first": True,
+    }
 }
 
 
@@ -33,7 +37,7 @@ def cache_handler(cmd, *args, **kwargs):
 
     res = func(*args, **kwargs)
     if res != None:
-        if isinstance(res, [list, set, tuple]):
+        if isinstance(res, (list, set, tuple)):
             ret["values"] = res
         else:
             ret["value"] = res
@@ -47,16 +51,28 @@ def upload_handler():
 	Upload data to cloud.
 	"""
 
-	ctx = context["upload"]
+        ret = {}
 
-	# Only try upload failed on first run - then only pending and retry
-	res = cache.upload_everything(include_failed=bool(ctx))
+        ctx = context["upload"]
 
-	# Update context with summed values
-	for key, val in res.iteritems():
-		ctx[key] = ctx.get(key, 0) + val
+        try:
 
-	return res
+            # Only try upload failed on first run - then only pending and retry
+	    res = cache.upload_everything(include_failed=ctx["first"])
+
+	    # Update context with summed values
+	    for key, val in res.iteritems():
+                ctx["sum"][key] = ctx["sum"].get(key, 0) + val
+
+            ret["value"] = res
+
+        except Exception as ex:
+            ret["error"] = str(ex)
+        finally:
+            if ctx["first"]:
+                ctx["first"] = False
+
+	return ret
 
 
 @edmp.register_hook(synchronize=False)
@@ -68,7 +84,7 @@ def status_handler():
     return context
 
 
- def start(endpoint, workers, **kwargs):
+def start(endpoint, workers, **kwargs):
     try:
         log.debug("Starting cloud manager")
 

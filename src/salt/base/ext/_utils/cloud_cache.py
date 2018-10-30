@@ -68,7 +68,7 @@ class CloudCache(object):
     def _upload(self, entries, endpoint=None):
 
         endpoint = endpoint or self.options.get("endpoint", {})
-        if not endpoint
+        if not endpoint:
             log.warning("Cannot upload data to cloud because no endpoint is configured")
             return False
 
