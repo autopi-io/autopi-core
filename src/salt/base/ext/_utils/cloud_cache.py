@@ -41,7 +41,10 @@ class CloudCache(object):
 
     ERROR_QUEUE_REGEX = re.compile("^(?P<type>.+)_(?P<timestamp>\d+)_#(?P<attempt>\d+)$")
 
-    def __init__(self, **options):
+    def __init__(self):
+        self.upload_timer = None
+
+    def setup(self, **options):
         self.options = options
 
         if log.isEnabledFor(logging.DEBUG):
@@ -56,13 +59,18 @@ class CloudCache(object):
             self.DEQUEUE_PENDING_BATCH_SCRIPT: self.client.register_script(self.DEQUEUE_PENDING_BATCH_LUA)
         }
 
-        self.upload_timer = None
+        return self
 
     def _dequeue_pending_batch(self, source, destination, count):
         script = self.scripts.get(self.DEQUEUE_PENDING_BATCH_SCRIPT)
         return script(keys=[source, destination], args=[count], client=self.client)
 
-    def _upload(self, entries):
+    def _upload(self, entries, endpoint=None):
+
+        endpoint = endpoint or self.options.get("endpoint", {})
+        if not endpoint
+            log.warning("Cannot upload data to cloud because no endpoint is configured")
+            return False
 
         delay = random.randint(0, self.options.get("upload_splay", 10))
         if self.upload_timer != None and timer() - self.upload_timer < delay:
@@ -72,12 +80,12 @@ class CloudCache(object):
 
         payload = "[{:s}]".format(", ".join(entries))
         headers = {
-            "authorization": "token {:}".format(self.options.get("auth_token")),
+            "authorization": "token {:}".format(endpoint.get("auth_token")),
             "content-type": "application/json",
         }
 
         try:
-            res = requests.post(self.options.get("url"), data=payload, headers=headers)
+            res = requests.post(endpoint.get("url"), data=payload, headers=headers)
         except:
 
             # TODO: Suppress this log
@@ -135,7 +143,7 @@ class CloudCache(object):
         }
 
         # Pop next batch into work queue, if not work queue already has data
-        batch = self._dequeue_pending_batch(self.PENDING_QUEUE, self.WORK_QUEUE, self.options.get("batch_size"))
+        batch = self._dequeue_pending_batch(self.PENDING_QUEUE, self.WORK_QUEUE, self.options.get("batch_size", 100))
         if not batch:
             if log.isEnabledFor(logging.DEBUG):
                 log.debug("No pending batch found to upload")
@@ -252,7 +260,7 @@ class CloudCache(object):
                 ret["pending"] = res["count"] if res["success"] else 0
 
                 # Continue to upload if batch limit is reached
-                while res["success"] and res["count"] == self.options.get("batch_size"):
+                while res["success"] and res["count"] == self.options.get("batch_size", 100):
                     res = self.upload_pending_batch()
                     ret["pending"] += res["count"] if res["success"] else 0
 

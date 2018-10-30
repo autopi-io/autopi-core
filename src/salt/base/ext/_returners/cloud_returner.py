@@ -85,8 +85,7 @@ def returner_job(result):
 
     res = _prepare_recursively(result["return"], kind, timestamp=None)
 
-    # TODO: Find a better way of doing this regarding retrieval of options
-    cloud_cache = CloudCache(**__salt__["cloud.cache_options"]())
+    cloud_cache = CloudCache().setup(**__salt__["config.get"]("cloud_cache"))
     for r in res:
         cloud_cache.enqueue(r)
 
@@ -116,8 +115,6 @@ def returner_raw(result, kind):
 
     res = _prepare_recursively(result, kind)
 
-    # TODO: Find a better way of doing this regarding retrieval of options
-    cloud_cache = CloudCache(**__salt__["cloud.cache_options"]())
+    cloud_cache = CloudCache().setup(**__salt__["config.get"]("cloud_cache"))
     for r in res:
         cloud_cache.enqueue(r)
-

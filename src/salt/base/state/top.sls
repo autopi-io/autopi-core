@@ -4,7 +4,6 @@ base:
     - requirements
     - raspi.config
     - minion.config
-    - cloud.config
     - network.wwan.qmi
     - network.wlan
     - audio.config
