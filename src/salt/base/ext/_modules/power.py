@@ -65,7 +65,7 @@ def status():
     return ret
 
 
-def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, reason="unknown"):
+def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, reason="unknown", allow_update=True):
     """
     Power down system and put device into sleep state.
 
@@ -98,8 +98,8 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         log.exception("Failed to set sleep interval")
         interval = 0  # Assume interval is unset
 
-    # Auto update release if enabled
-    if __salt__["pillar.get"]("release:auto_update", default=False):
+    # Auto update release if enabled and allowed
+    if allow_update and __salt__["pillar.get"]("release:auto_update", default=False):
         try:
             __salt__["minionutil.run_job"]("minionutil.update_release", _timeout=600)
         except:
@@ -158,7 +158,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     return ret
 
 
-def hibernate(delay=10, confirm=False, reason="unknown"):
+def hibernate(delay=10, confirm=False, reason="unknown", allow_update=True):
     """
     Power down system and put device into hibernate state.
 
@@ -168,7 +168,7 @@ def hibernate(delay=10, confirm=False, reason="unknown"):
         reason (str): Reason code that tells why we decided to hibernate.
     """
 
-    return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason)
+    return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_update=allow_update)
 
 
 def sleep_timer(enable=None, period=1800, **kwargs):
