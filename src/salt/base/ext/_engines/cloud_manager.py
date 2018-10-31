@@ -51,26 +51,27 @@ def upload_handler():
 	Upload data to cloud.
 	"""
 
-        ret = {}
+    ret = {}
 
-        ctx = context["upload"]
+    ctx = context["upload"]
+    try:
 
-        try:
-
-            # Only try upload failed on first run - then only pending and retry
+        # Only try upload failed on first run - then only pending and retry
 	    res = cache.upload_everything(include_failed=ctx["first"])
+
+        ret["value"] = res
 
 	    # Update context with summed values
 	    for key, val in res.iteritems():
-                ctx["sum"][key] = ctx["sum"].get(key, 0) + val
+            ctx["total"][key] = ctx["sum"].get(key, 0) + val["total"]
+            if "error" in val:
+                ctx["error"][key] = val["error"]
 
-            ret["value"] = res
-
-        except Exception as ex:
-            ret["error"] = str(ex)
-        finally:
-            if ctx["first"]:
-                ctx["first"] = False
+    except Exception as ex:
+        ret["error"] = str(ex)
+    finally:
+        if ctx["first"]:
+            ctx["first"] = False
 
 	return ret
 
