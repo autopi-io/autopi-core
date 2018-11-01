@@ -13,8 +13,8 @@ cache = CloudCache()
 
 context = {
     "upload": {
-        "sum": {},
-        "first": True,
+        "count": 0,
+        "complete": {},
     }
 }
 
@@ -47,33 +47,56 @@ def cache_handler(cmd, *args, **kwargs):
 
 @edmp.register_hook()
 def upload_handler():
-	"""
-	Upload data to cloud.
-	"""
+    """
+    Upload data to cloud.
+    """
 
     ret = {}
 
     ctx = context["upload"]
     try:
 
-        # Only try upload failed on first run - then only pending and retry
-	    res = cache.upload_everything(include_failed=ctx["first"])
+        # Only try upload failed on first run - then only retry and pending
+        if ctx["count"] == 0:
+            try:
+                res = cache.upload_failing()
+                if res["total"] > 0:
+                    log.info("Successfully uploaded {:} failed entries".format(res["total"]))
 
-        ret["value"] = res
+                ret["failed"] = res
+            except Exception as ex:
+                log.exception("Failed to upload failing entries due to an unhandled exception - this must never happen")
 
-	    # Update context with summed values
-	    for key, val in res.iteritems():
-            ctx["total"][key] = ctx["sum"].get(key, 0) + val["total"]
-            if "error" in val:
-                ctx["error"][key] = val["error"]
+        # Always upload retrying if any
+        try:
+            res = cache.upload_retrying()
+            if res["total"] > 0:
+                log.info("Successfully uploaded {:} retried entries".format(res["total"]))
 
-    except Exception as ex:
-        ret["error"] = str(ex)
+            ret["retried"] = res
+
+            # Check if we have reached retry queue limit
+            if res["is_overrun"]:
+                log.warning("Skipping upload of pending entries because retry queue limit is reached")
+
+                ret["pending"] = {"errors": ["Postponed because retry queue limit is reached"]}
+
+                return ret
+        except:
+            log.exception("Failed to upload retrying entries due to an unhandled exception - this must never happen")
+
+        # Upload pending if any
+        ret["pending"] = cache.upload_pending()
+
     finally:
-        if ctx["first"]:
-            ctx["first"] = False
 
-	return ret
+        # Update context
+        ctx["count"] += 1
+        for key, val in ret.iteritems():
+            ctx["complete"][key] = ctx["complete"].get(key, 0) + val.get("total", 0)
+            ctx.setdefault("errors", {})[key] = val.get("errors", [])
+
+    return ret
 
 
 @edmp.register_hook(synchronize=False)
