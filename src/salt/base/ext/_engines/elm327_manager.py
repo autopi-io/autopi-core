@@ -562,7 +562,8 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
-        log.info("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Configure connection
         conn.setup(serial_conn)
