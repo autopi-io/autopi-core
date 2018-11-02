@@ -29,11 +29,14 @@ def cache_handler(cmd, *args, **kwargs):
         "_type": cmd,
     }
 
+    # Private calls not allowed
+    if cmd.startswith("_"):
+        raise Exception("Unsupported command: {:s}".format(cmd))
+
     try:
         func = getattr(cache, cmd)
     except AttributeError:
-        ret["error"] = "Unsupported command: {:s}".format(cmd)
-        return ret
+        raise Exception("Unsupported command: {:s}".format(cmd))
 
     res = func(*args, **kwargs)
     if res != None:
