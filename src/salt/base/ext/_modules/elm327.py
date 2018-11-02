@@ -98,6 +98,14 @@ def dump(**kwargs):
     return client.send_sync(msg_pack(_handler="dump", **kwargs))
 
 
+def recordings(**kwargs):
+    """
+    Lists all dumped recordings available on disk.
+    """
+
+    return client.send_sync(msg_pack(_handler="recordings", **kwargs))
+
+
 def play(file, **kwargs):
     """
     Plays all messages from file on the OBD bus.

@@ -1,5 +1,7 @@
 import battery_util
+import ConfigParser
 import cProfile as profile
+import datetime
 import logging
 import math
 import obd
@@ -216,7 +218,7 @@ def status_handler(reset=None):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None, description=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -244,13 +246,52 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
     if file != None:
         path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
         __salt__["file.mkdir"](os.path.dirname(path))
+
+        # Use config parser to write file
+        config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+
+        # Add header section
+        config_parser.add_section("header")
+        config_parser.set("header", "timestamp", datetime.datetime.utcnow().isoformat())
+        config_parser.set("header", "duration", duration)
+        config_parser.set("header", "count", len(res))
+        if description:
+            config_parser.set("header", "description", description)
+
+        # Add message lines in data section
+        config_parser.add_section("data")
+        for line in res:
+            config_parser.set("data", line)
+
         with open(path, "w") as f:
-            for line in res:
-                f.write(line + os.linesep)
+            config_parser.write(f)
 
             ret["file"] = f.name
     else:
         ret["data"] = res
+
+    return ret
+
+
+@edmp.register_hook(synchronize=False)
+def recordings_handler(path=None):
+    """
+    Lists all dumped recordings available on disk.
+    """
+
+    ret = []
+
+    config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+    for file in os.listdir(path or "/opt/autopi/obd"):
+        try:
+            # TODO: Improve performance by not reading 'data' section and only 'header' section
+            config_parser.read(file)
+
+            ret.append({file: config_parser.items("header")})
+        except Exception as ex:
+            log.exception("Failed to parse recording in file: {:}".format(file))
+
+            ret.append({file: {"error": str(ex)}})
 
     return ret
 
@@ -265,9 +306,10 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", baudrate
         "count": {}
     }
 
-    lines = []
-    with open(file, "r") as f:
-        lines = f.read().splitlines()
+    config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+    config_parser.read(file)
+
+    lines = config_parser.options("data")
 
     ret["count"]["total"] = len(lines)
 
