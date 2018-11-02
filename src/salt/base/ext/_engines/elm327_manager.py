@@ -247,6 +247,8 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
         path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
         __salt__["file.mkdir"](os.path.dirname(path))
 
+        protocol = conn.protocol_info()
+
         # Use config parser to write file
         config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
 
@@ -254,6 +256,8 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
         config_parser.add_section("header")
         config_parser.set("header", "timestamp", datetime.datetime.utcnow().isoformat())
         config_parser.set("header", "duration", duration)
+        config_parser.set("header", "protocol", protocol["id"])
+        config_parser.set("header", "baudrate", protocol["baudrate"])
         config_parser.set("header", "count", len(res))
         if description:
             config_parser.set("header", "description", description)
@@ -279,19 +283,26 @@ def recordings_handler(path=None):
     Lists all dumped recordings available on disk.
     """
 
-    ret = []
+    ret = {
+        "values": []
+    }
 
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
-    for file in os.listdir(path or "/opt/autopi/obd"):
+
+    path = path or "/opt/autopi/obd"
+    for file in os.listdir(path):
+        file_path = os.path.join(path, file)
+
         try:
             # TODO: Improve performance by not reading 'data' section and only 'header' section
-            config_parser.read(file)
+            config_parser.read(file_path)
+            header = {k: v for k, v in config_parser.items("header")}
 
-            ret.append({file: config_parser.items("header")})
-        except Exception as ex:
-            log.exception("Failed to parse recording in file: {:}".format(file))
+            ret["values"].append({file_path: header})
+        except ConfigParser.Error as cpe:
+            log.exception("Failed to parse recording in file: {:}".format(file_path))
 
-            ret.append({file: {"error": str(ex)}})
+            ret["values"].append({file_path: {"error": str(cpe)}})
 
     return ret
 
