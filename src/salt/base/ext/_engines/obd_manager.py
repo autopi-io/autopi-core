@@ -17,7 +17,7 @@ from timeit import default_timer as timer
 log = logging.getLogger(__name__)
 
 # Message processor
-edmp = EventDrivenMessageProcessor("elm327", default_hooks={"workflow": "extended", "handler": "query"})
+edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended", "handler": "query"})
 
 # OBD connection
 conn = OBDConn()
@@ -565,7 +565,7 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
     try:
 
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Starting ELM327 manager")
+            log.debug("Starting OBD manager")
 
         # Prepare returner function
         global returner_func
@@ -585,7 +585,7 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
         edmp.run()
 
     except Exception:
-        log.exception("Failed to start ELM327 manager")
+        log.exception("Failed to start OBD manager")
         raise
     finally:
-        log.info("Stopping ELM327 manager")
+        log.info("Stopping OBD manager")

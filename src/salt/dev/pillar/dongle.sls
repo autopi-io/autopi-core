@@ -134,7 +134,7 @@ minion:
             suppress_exceptions: True  # Exceptions will not kill worker thread
             messages:
                 - handler: heartbeat
-    - elm327_manager:
+    - obd_manager:
         serial_conn:
           device: /dev/serial0
           baudrate: 9600

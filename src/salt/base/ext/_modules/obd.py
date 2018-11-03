@@ -7,7 +7,7 @@ __virtualname__ = "obd"
 
 log = logging.getLogger(__name__)
 
-client = EventDrivenMessageClient("elm327")
+client = EventDrivenMessageClient("obd")
 
 
 def __virtual__():

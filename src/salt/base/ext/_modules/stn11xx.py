@@ -16,7 +16,7 @@ VOLT_CHANGE_RULE_PATTERN = "^(?P<volts_diff>[+-]?[0-9]{1}\.[0-9]{1,2})V IN (?P<m
 
 log = logging.getLogger(__name__)
 
-client = EventDrivenMessageClient("elm327")
+client = EventDrivenMessageClient("obd")
 
 
 def __virtual__():
