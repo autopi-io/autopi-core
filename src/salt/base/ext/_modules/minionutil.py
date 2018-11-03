@@ -71,8 +71,6 @@ def request_restart(pending=True, immediately=False, delay=10, reason="unknown")
     """
 
     if pending or __context__.get("minionutil.request_restart", False):
-        log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
-
         if immediately:
             log.warn("Performing minion restart in {:} second(s) because of reason '{:}'".format(delay, reason))
 
@@ -88,6 +86,8 @@ def request_restart(pending=True, immediately=False, delay=10, reason="unknown")
 
             # Perform restart of service
             return __salt__["service.restart"]("salt-minion")
+        else:
+            log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
     else:
         log.debug("No pending minion restart request")
 

@@ -223,12 +223,12 @@ def sleep_timer(enable=None, period=1800, **kwargs):
     return timers()
 
 
-def reboot():
+def reboot(reason="unknown"):
     """
     Reboot system immediately.
     """
 
-    return request_reboot(immediately=True)
+    return request_reboot(immediately=True, reason=reason)
 
 
 def request_reboot(pending=True, immediately=False, reason="unknown"):
@@ -237,10 +237,8 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
     """
 
     if pending or __context__.get("power.request_reboot", False):
-        log.info("Request for system reboot is pending")
-
         if immediately:
-            log.warn("Performing system reboot immediately")
+            log.warn("Performing system reboot immediately because of reason '{:}'".format(reason))
 
             # Fire a reboot event
             __salt__["event.fire"]({
@@ -256,6 +254,8 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
 
             # Perform reboot
             return __salt__["system.reboot"]()
+        else:
+            log.info("Request for system reboot is pending because of reason '{:}'".format(reason))
     else:
         log.debug("No pending system reboot request")
 
