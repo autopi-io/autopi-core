@@ -2,6 +2,7 @@ import logging
 import salt.exceptions
 import salt.utils.event
 import salt.utils.jid
+import time
 
 
 log = logging.getLogger(__name__)
@@ -56,24 +57,34 @@ def run_job(name, *args, **kwargs):
     return ret
 
 
-def restart():
+def restart(reason="unknown"):
     """
     Restart the minion service immediately.
     """
 
-    return request_restart(immediately=True)
+    return request_restart(immediately=True, reason=reason)
 
 
-def request_restart(pending=True, immediately=False):
+def request_restart(pending=True, immediately=False, delay=10, reason="unknown"):
     """
     Request for a future restart of the minion service.
     """
 
     if pending or __context__.get("minionutil.request_restart", False):
-        log.info("Request for minion restart is pending")
+        log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
 
         if immediately:
-            log.warn("Performing minion restart immediately")
+            log.warn("Performing minion restart in {:} second(s) because of reason '{:}'".format(delay, reason))
+
+            # Fire a restart event
+            __salt__["event.fire"]({
+                    "reason": reason
+                },
+                "minion/restart"
+            )
+
+            # Give some time for event to get cached
+            time.sleep(delay)
 
             # Perform restart of service
             return __salt__["service.restart"]("salt-minion")

@@ -14,4 +14,12 @@ auto-update-release-retried:
   module.run:
     - name: minionutil.update_release
     - only_retry: true
+
+# Restart minion if restart is pending after update
+restart-minion-if-pending:
+  module.run:
+    - name: minionutil.request_restart
+    - pending: false
+    - immediately: true
+    - reason: auto_update_release_retried 
 {%- endif %}
