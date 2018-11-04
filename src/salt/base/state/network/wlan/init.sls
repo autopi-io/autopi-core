@@ -1,4 +1,4 @@
 
 include:
-  - .hotspot
-  - .client
+  - .hotspot.config
+  - .client.config
