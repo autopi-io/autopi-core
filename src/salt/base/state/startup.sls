@@ -2,7 +2,7 @@
 # IMPORTANT: These stats will only run when minion comes online and is connected to master 
 
 include:
-  {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "ec2x" %}
+  {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
   - ec2x.startup
   - ec2x.gnss.update
   {%- endif %}

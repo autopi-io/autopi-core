@@ -10,8 +10,8 @@ error-format-configured:
         value: {{ salt['pillar.get']('ec2x:error_format') }}
 
 # TODO: This fails when no SIM card is present
-sms-format-configured:
-  module_extra.configured:
-    - name: ec2x.sms_format_config
-    - kwargs:
-        value: 1  # Text mode
+#sms-format-configured:
+#  module_extra.configured:
+#    - name: ec2x.sms_format_config
+#    - kwargs:
+#        value: 1  # Text mode
