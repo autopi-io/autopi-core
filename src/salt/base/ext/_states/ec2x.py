@@ -174,7 +174,7 @@ def gnss_assist_enabled(name):
     return ret
 
 
-def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, keep_cache=False):
+def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, keep_cache=False, storage="ram"):
     """
     Update GNSS assist data if no longer valid according to specified thresholds.
     """
@@ -226,11 +226,10 @@ def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, ke
         return ret
 
     filename = None
-    storage = None
 
     try:
         # Upload cached assist data file to device
-        res = salt_more.call_error_safe(__salt__["ec2x.upload_file"], cached_file)
+        res = salt_more.call_error_safe(__salt__["ec2x.upload_file"], cached_file, storage=storage)
         if "error" in res:
             ret["result"] = False
             ret["comment"] = "Failed to upload GNSS assist data file to EC2X module: {:}".format(res["error"])

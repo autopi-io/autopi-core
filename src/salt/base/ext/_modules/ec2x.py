@@ -740,12 +740,8 @@ def gnss_assist_data(filename=None, storage="ram"):
     """
 
     if filename:
-        if storage.lower() != "ufs":
-            filename = "{:s}:{:s}".format(storage.upper(), filename)
-
-        res = query('AT+QGPSXTRADATA="{:s}"'.format(filename), cooldown_delay=1)  # The module needs some time to be ready after
-                                                                                  # this command before a new status query can be made.
-
+        res = query('AT+QGPSXTRADATA="{:s}"'.format(_qf_name(filename, storage)), cooldown_delay=1)  # The module needs some time to be ready after
+                                                                                                     # this command before a new status query can be made.
         return res
 
     res = query("AT+QGPSXTRADATA?")
