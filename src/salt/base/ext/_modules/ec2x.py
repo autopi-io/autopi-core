@@ -734,7 +734,7 @@ def gnss_assist_time(timestamp=datetime.datetime.utcnow(), operation=0, utc=True
         operation, timestamp, utc, force, uncertainty_ms))
 
 
-def gnss_assist_data(filename=None, storage="ram"):
+def gnss_assist_data(filename=None, storage="ufs"):
     """
     Query the status or specify gpsOneXTRA data file.
     """
@@ -788,7 +788,7 @@ def _qf_name(name, storage):
     return "{:s}:{:s}".format(storage.upper(), name)
 
 
-def list_files(pattern="*", storage="ram"):
+def list_files(pattern="*", storage="ufs"):
     """
     lists the information of a single file or all files in the required storage medium.
     """
@@ -813,7 +813,7 @@ def list_files(pattern="*", storage="ram"):
     return res
 
 
-def upload_file(path, storage="ram", timeout=5):
+def upload_file(path, storage="ufs", timeout=5):
     """
     TODO
     """
@@ -834,7 +834,7 @@ def upload_file(path, storage="ram", timeout=5):
     return res
 
 
-def download_file(name, dest, storage="ram"):
+def download_file(name, dest, storage="ufs"):
     """
     TODO
     """
@@ -859,7 +859,7 @@ def download_file(name, dest, storage="ram"):
     return res
 
 
-def delete_file(name, storage="ram"):
+def delete_file(name, storage="ufs"):
     """
     Deletes a single file or all the files in the specified storage.
     """
