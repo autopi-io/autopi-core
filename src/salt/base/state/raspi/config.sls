@@ -1,9 +1,4 @@
 
-include:
-  - .optimize
-  - .boot
-  - .udev
-
 pi-user-configured:
   user.present:
     - name: pi

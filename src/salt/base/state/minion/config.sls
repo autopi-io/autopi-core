@@ -1,19 +1,4 @@
 
-include:
-  - .patch
-
-minion-id-cron-configured:
-  cron.present:
-    - identifier: minion-id-setup
-    - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' > /etc/salt/minion_id"
-    - special: "@reboot"
-
-minion-start-before-network:
-  file.replace:
-    - name: /lib/systemd/system/salt-minion.service
-    - pattern: "^After=.*$"
-    - repl: "Before=network-pre.target"
-
 # Ensure valid pillar data is present to prevent writing an empty minion config file 
 minion-pillar-data-present:
   module.run:
@@ -36,14 +21,6 @@ minion-config-backed-up:
     - force: true
     - onchanges:
       - file: /etc/salt/minion
-
-minion-api-call-script-installed:
-  file.managed:
-    - name: /usr/bin/autopi
-    - source: salt://minion/api-call.py
-    - mode: 755
-    - user: root
-    - group: root
 
 minion-restart-after-config-changes-required:
   module.wait:
