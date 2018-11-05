@@ -15,5 +15,5 @@ base:
 {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
     - ec2x.config
 {%- endif %}
-    - ui
+    - ui.install
     - power.spm.install  # Highest risk last
