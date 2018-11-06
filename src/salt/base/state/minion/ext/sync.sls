@@ -12,7 +12,7 @@ minion-refresh-modules-after-synced:
 minion-custom-{{ module['type'] }}-{{ module['name'] }}-synced:
   file.managed:
     - name: /opt/autopi/salt/{{ module['type'] }}s/{{ module['name'] }}.py
-    - source: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_api:token'))) }}/dongle/modules/{{ module['id'] }}?format=file
+    - source: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_api:auth_token'))) }}/dongle/modules/{{ module['id'] }}?format=file
     - source_hash: {{ module['hash'] }}
     - makedirs: true
     - watch_in:
