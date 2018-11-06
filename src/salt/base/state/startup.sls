@@ -1,12 +1,12 @@
 
-# IMPORTANT: These stats will only run when minion comes online and is connected to master 
+# IMPORTANT: These states will only run when minion comes online and is connected to master 
 
 include:
   {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
   - ec2x.startup
   - ec2x.gnss.update
   {%- endif %}
-  - config  # Will include pending SLS from pillar
+  - pending  # Will include pending SLS specified in pillar
 
 {%- if salt["pillar.get"]("release:auto_update", default=False) %}
 auto-update-release-retried:
