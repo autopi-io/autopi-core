@@ -8,6 +8,9 @@ include:
   {%- endif %}
 #  - acc.config # TODO: Test this
   - power.stn.config
+  {%- for sls in salt["pillar.get"]("minion_ext:startup_sls", default=[]) %}
+  - {{ sls }}
+  {%- endif %}
 
 {%- if salt["pillar.get"]("release:auto_update", default=False) %}
 auto-update-release-retried:
