@@ -145,14 +145,15 @@ def execute_handler(cmd, reset=None, keep_conn=True):
 
 
 @edmp.register_hook(synchronize=False)
-def dtc_handler(clear=False, **kwargs):
+def dtc_converter(res):
     """
-    Reads and clears Diagnostics Trouble Codes (DTCs).
+    Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
     """
 
-    cmd = "GET_DTC" if not clear else "CLEAR_DTC"
+    if res.get("_type", None) != "get_dtc" or not "value" in res:
+        raise Exception("Unable to convert as DTC result: {:}".format(res))
 
-    res = query_handler(cmd, **kwargs)
+
     if "value" in res:
         res["_type"] = "dtc"
         res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
