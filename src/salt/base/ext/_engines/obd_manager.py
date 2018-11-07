@@ -150,9 +150,8 @@ def dtc_converter(res):
     Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
     """
 
-    if res.get("_type", None) != "get_dtc" or not "value" in res:
+    if res.get("_type", None) != "get_dtc":
         raise Exception("Unable to convert as DTC result: {:}".format(res))
-
 
     if "value" in res:
         res["_type"] = "dtc"
