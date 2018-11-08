@@ -42,7 +42,7 @@ context = {
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, force=False):
     """
     Queries an OBD command.
     """
@@ -52,15 +52,16 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder="raw_string", forc
 
     if obd.commands.has_name(name.upper()):
         cmd = obd.commands[name.upper()]
-    elif mode != None and pid != None:
+    elif pid != None:
+        mode = "{:02X}".format(int(str(mode), 16)) if mode != None else "01"
+        pid = "{:02X}".format(int(str(pid), 16))
+
         if obd.commands.has_pid(mode, pid):
             cmd = obd.commands[mode][pid]
         else:
-            decoder = obd.decoders.raw_string  # TODO: Get this from kwarg
-            cmd = obd.OBDCommand(name, None, "{:02d}{:02X}".format(mode, pid), bytes, decoder)
+            cmd = obd.OBDCommand(name, None, "{:}{:}".format(mode, pid), bytes, getattr(obd.decoders, decoder or "raw_string"))
     else:
-        decoder = obd.decoders.raw_string  # TODO: Get this from kwarg
-        cmd = obd.OBDCommand(name, None, name, bytes, decoder)
+        cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
