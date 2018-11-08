@@ -58,11 +58,7 @@ TRIGGERS = {
 class SPMConn(GPIOSPIConn):
 
     def __init__(self):
-        clk_pin = gpio_pin.SPI_CLK
-        mosi_pin = gpio_pin.SPI_MOSI
-        miso_pin = gpio_pin.SPI_MISO
-
-        super(SPMConn, self).__init__(clk_pin, mosi_pin, miso_pin, gpio_mode=gpio_pin.MODE)
+        super(SPMConn, self).__init__(gpio_pin.SPI_CLK, gpio_pin.SPI_MOSI, gpio_pin.SPI_MISO, gpio_mode=gpio_pin.MODE)
 
     def _begin_message(self, length=1):
 

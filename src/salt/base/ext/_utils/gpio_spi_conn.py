@@ -28,6 +28,15 @@ class GPIOSPIConn(object):
         gpio.setup(self._mosi_pin, gpio.OUT)
         gpio.setup(self._miso_pin, gpio.IN)
 
+        # Ensure we have a cleared buffer before first real communication
+        for attempt in range(0, 3):
+            self.send(0)
+            res = self.recv()
+            if res == 0:
+                return
+            else:
+                log.warning("Unable to clear buffer - got unexpected value: {:}".format(res))
+
     def send(self, data):
         """
         Sends 1 byte of data or less.
