@@ -18,11 +18,16 @@ class CloudCache(object):
 
     DEQUEUE_BATCH_SCRIPT = "dequeue_batch"
     DEQUEUE_BATCH_LUA = """
+
     local ret = {}
-    local cnt = ARGV[1]
+
+    local cnt = tonumber(ARGV[1])
+
     if redis.call('EXISTS', KEYS[2]) == 1 then
         cnt = cnt - redis.call('LLEN', KEYS[2])
         ret = redis.call('LRANGE', KEYS[2], 0, -1)
+    end
+
     if cnt > 0 and redis.call('EXISTS', KEYS[1]) == 1 then
         for i = 1, cnt do
             local val = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
@@ -31,17 +36,24 @@ class CloudCache(object):
             end
             table.insert(ret, val)
         end
+
+        -- Also transfer TTL
+        local ttl = redis.call('TTL', KEYS[1])
+        if ttl > 0 then
+            redis.call('EXPIRE', KEYS[2], ttl)
+        end
     end
+
     return ret
     """
 
-    PENDING_QUEUE       = "pend"
-    PENDING_WORK_QUEUE  = "pend.work"
-    RETRY_QUEUE         = "retr_{:%Y%m%d%H%M%S%f}_#{:d}"
-    FAIL_QUEUE          = "fail_{:%Y%m%d}"
-    FAIL_WORK_QUEUE     = "fail.work"
+    PENDING_QUEUE     = "pend"
+    RETRY_QUEUE       = "retr_{:%Y%m%d%H%M%S%f}_#{:d}"
+    FAIL_QUEUE        = "fail_{:%Y%m%d}"
+    WORK_QUEUE        = "{:}.work"
 
-    RETRY_QUEUE_REGEX = re.compile("^(?P<type>.+)_(?P<timestamp>\d+)_#(?P<attempt>\d+)$")
+    RETRY_QUEUE_REGEX  = re.compile("^(?P<type>.+)_(?P<timestamp>\d+)_#(?P<attempt>\d+)$")
+    WORK_QUEUE_REGEX   = re.compile("\.work$")
 
     def __init__(self):
         self.upload_timer = None
@@ -99,7 +111,9 @@ class CloudCache(object):
         delay = random.randint(0, self.options.get("upload_splay", 10)) * splay_factor
         if self.upload_timer != None and timer() - self.upload_timer < delay:
             if splay_factor > 1:
-                log.warning("Increased upload delay of {:} seconds...".format(delay))
+                log.warning("Enforcing increased (by factor {:}) repeated upload delay of {:} seconds...".format(splay_factor, delay))
+            else:
+                log.info("Enforcing repeated upload delay of {:} seconds...".format(delay))
 
             # Take a little break before next upload
             time.sleep(delay)
@@ -122,41 +136,44 @@ class CloudCache(object):
 
         return True, None
 
-    def _upload_batch(self, source_queue, work_queue):
+    def _upload_batch(self, queue):
         ret = {
             "count": 0
         }
 
-        # Pop next batch into work queue, if not work queue already has data
+        source_queue = re.sub(self.WORK_QUEUE_REGEX, "", queue)  # Remove suffix if already a work queue
+        work_queue = self.WORK_QUEUE.format(source_queue)
+
+        # Pop next batch into work queue
         batch = self._dequeue_batch(source_queue, work_queue, self.options.get("batch_size", 100))
         if not batch:
             if log.isEnabledFor(logging.DEBUG):
-                log.debug("No batch found to upload from source queue '{:}'".format(source_queue))
+                log.debug("No batch found to upload from queue '{:}'".format(queue))
 
             return ret
 
         # Upload batch
         ok, msg = self._upload(batch)  # Remember this call will raise exception upon server error
         if ok:
-            log.info("Uploaded batch with {:} entries from source queue '{:}'".format(len(batch), source_queue))
+            log.info("Uploaded batch with {:} entries from queue '{:}'".format(len(batch), queue))
 
             ret["count"] = len(batch)
 
             # Batch uploaded equals work completed
             self.client.delete(work_queue)
         else:
-            log.warning("Temporarily unable to upload batch with {:} entries from source queue '{:}'".format(len(batch), source_queue))
+            log.warning("Temporarily unable to upload batch with {:} entries from queue '{:}': {:}".format(len(batch), queue, msg))
 
             ret["error"] = msg
 
         return ret
 
-    def _upload_batch_continuing(self, source_queue, work_queue):
+    def _upload_batch_continuing(self, queue):
         ret = {
             "count": 0
         }
 
-        res = self._upload_batch(source_queue, work_queue)  # Remember this call will raise exception upon server error
+        res = self._upload_batch(queue)  # Remember this call will raise exception upon server error
 
         ret["count"] = res["count"]
         if "error" in res:
@@ -164,7 +181,7 @@ class CloudCache(object):
 
         # Continue to upload if more pending batches present
         while not "error" in res and res["count"] == self.options.get("batch_size", 100):
-            res = self._upload_batch(source_queue, work_queue)  # Remember this call will raise exception upon server error
+            res = self._upload_batch(queue)  # Remember this call will raise exception upon server error
 
             ret["count"] += res["count"]
             if "error" in res:
@@ -177,13 +194,13 @@ class CloudCache(object):
             "total": 0,
         }
 
-        queues = self.list_queues(pattern="fail_*")
+        queues = self.list_queues(pattern="fail_*")  # This will also include work queues if present
         if queues:
             log.warning("Found {:} fail queue(s)".format(len(queues)))
 
         try:
             for queue in queues:
-                res = self._upload_batch_continuing(queue, self.FAIL_WORK_QUEUE)  # Remember this call will raise exception upon server error
+                res = self._upload_batch_continuing(queue)  # Remember this call will raise exception upon server error
                 ret["total"] += res["count"]
 
                 # Stop upon first error
@@ -195,7 +212,7 @@ class CloudCache(object):
         except RequestException as rex:
             ret.setdefault("errors", []).append(str(rex))
 
-            log.warning("Still unable to upload failed batch(es)")
+            log.warning("Still unable to upload failed batch(es): {:}".format(rex))
 
         return ret
 
@@ -205,7 +222,7 @@ class CloudCache(object):
         }
 
         try:
-            res = self._upload_batch_continuing(self.PENDING_QUEUE, self.PENDING_WORK_QUEUE)  # Remember this call will raise exception upon server error
+            res = self._upload_batch_continuing(self.PENDING_QUEUE)  # Remember this call will raise exception upon server error
             ret["total"] += res["count"]
 
             if "error" in res:
@@ -217,9 +234,9 @@ class CloudCache(object):
 
             # Create retry queue for batch
             retry_queue = self.RETRY_QUEUE.format(datetime.datetime.utcnow(), 0)
-            log.warning("Failed to upload pending batch - transferring to dedicated retry queue '{:}'".format(retry_queue))
+            log.warning("Failed to upload pending batch - transferring to new dedicated retry queue '{:}': {:}".format(retry_queue, rex))
 
-            self.client.renamenx(self.PENDING_WORK_QUEUE, retry_queue)
+            self.client.renamenx(self.WORK_QUEUE.format(self.PENDING_QUEUE), retry_queue)
 
         return ret
 
@@ -233,9 +250,6 @@ class CloudCache(object):
         queues = self.list_queues(pattern="retr_*")
         if queues:
             log.warning("Found {:}/{:} retry queue(s)".format(len(queues), queue_limit))
-
-        # Signal if we have reached queue limit
-        ret["is_overrun"] = len(queues) >= queue_limit
 
         remaining_count = len(queues)
         for queue in queues:
@@ -253,7 +267,7 @@ class CloudCache(object):
             try:
                 ok, msg = self._upload(entries, splay_factor=remaining_count)  # Remember this call will raise exception upon server error
                 if ok:
-                    log.info("Sucessfully uploaded retry queue '{:}'".format(queue))
+                    log.info("Sucessfully uploaded retry queue '{:}' with {:} entries".format(queue, len(entries)))
 
                     self.client.delete(queue)
 
@@ -261,7 +275,7 @@ class CloudCache(object):
 
                     remaining_count -= 1
                 else:
-                    log.warning("Temporarily unable to upload retry queue(s) - skipping remaining if present")
+                    log.warning("Temporarily unable to upload retry queue(s) - skipping remaining if present: {:}".format(msg))
 
                     ret.setdefault("errors", []).append(msg)
 
@@ -273,7 +287,7 @@ class CloudCache(object):
                 ret.setdefault("errors", []).append(str(rex))
 
                 max_retry = self.options.get("max_retry", 10)
-                log.warning("Failed retry attempt {:}/{:} for uploading queue '{:}'".format(attempt, max_retry, queue))
+                log.warning("Failed retry attempt {:}/{:} for uploading queue '{:}': {:}".format(attempt, max_retry, queue, rex))
 
                 # Transfer to fail queue if max retry is reached
                 if attempt >= max_retry:
@@ -290,5 +304,8 @@ class CloudCache(object):
 
                     # Update attempt count in queue name
                     self.client.renamenx(queue, re.sub("_#\d+$", "_#{:}".format(attempt), queue))
+
+        # Signal if we have reached queue limit
+        ret["is_overrun"] = remaining_count >= queue_limit
 
         return ret
