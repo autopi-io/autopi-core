@@ -101,7 +101,7 @@ class GPIOSPIConn(object):
             log.debug("RX: {:}".format(ret))
 
             if delay > 0:
-                log.debug("Delay of {:} second was added between last send and current receive".format(delay))
+                log.debug("Added delay of {:} second between last send and current receive".format(delay))
 
         # TODO: We always need to receive an ack first to see if we got what we expected?
         if ack != None and ack != ret:
