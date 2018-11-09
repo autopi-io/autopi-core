@@ -13,12 +13,12 @@ auto-update-release-retried:
   module.run:
     - name: minionutil.update_release
     - only_retry: true
+{%- endif %}
 
-# Restart minion if restart is pending after update
+# Restart minion if restart is pending (after running pending SLS or update release)
 restart-minion-if-pending:
   module.run:
     - name: minionutil.request_restart
     - pending: false
     - immediately: true
-    - reason: auto_update_release_retried 
-{%- endif %}
+    - reason: update_during_startup
