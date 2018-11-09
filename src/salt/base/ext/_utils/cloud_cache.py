@@ -19,10 +19,12 @@ class CloudCache(object):
     DEQUEUE_BATCH_SCRIPT = "dequeue_batch"
     DEQUEUE_BATCH_LUA = """
     local ret = {}
+    local cnt = ARGV[1]
     if redis.call('EXISTS', KEYS[2]) == 1 then
+        cnt = cnt - redis.call('LLEN', KEYS[2])
         ret = redis.call('LRANGE', KEYS[2], 0, -1)
-    elseif redis.call('EXISTS', KEYS[1]) == 1 then
-        for i = 1, ARGV[1] do
+    if cnt > 0 and redis.call('EXISTS', KEYS[1]) == 1 then
+        for i = 1, cnt do
             local val = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
             if not val then
                 break
