@@ -145,7 +145,7 @@ class CloudCache(object):
         work_queue = self.WORK_QUEUE.format(source_queue)
 
         # Pop next batch into work queue
-        batch = self._dequeue_batch(source_queue, work_queue, self.options.get("batch_size", 100))
+        batch = self._dequeue_batch(source_queue, work_queue, self.options.get("max_batch_size", 100))
         if not batch:
             if log.isEnabledFor(logging.DEBUG):
                 log.debug("No batch found to upload from queue '{:}'".format(queue))
@@ -180,7 +180,7 @@ class CloudCache(object):
             ret["error"] = res["error"]
 
         # Continue to upload if more pending batches present
-        while not "error" in res and res["count"] == self.options.get("batch_size", 100):
+        while not "error" in res and res["count"] == self.options.get("max_batch_size", 100):
             res = self._upload_batch(queue)  # Remember this call will raise exception upon server error
 
             ret["count"] += res["count"]

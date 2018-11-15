@@ -52,7 +52,7 @@ minion:
       host: localhost
       port: 6379
       db: 1
-    batch_size: 500
+    max_batch_size: 500
     retry_count: 3
     fail_ttl: 604800  # One week
 
