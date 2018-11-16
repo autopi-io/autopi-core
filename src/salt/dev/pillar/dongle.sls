@@ -131,7 +131,6 @@ minion:
           - name: heartbeat
             delay: 10  # Give SPM some time to reset communication after GPIO pins have been setup
             interval: 60  # Run every minute
-            suppress_exceptions: True  # Exceptions will not kill worker thread
             messages:
                 - handler: heartbeat
     - obd_manager:

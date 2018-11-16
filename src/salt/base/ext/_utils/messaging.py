@@ -10,6 +10,7 @@ import urlparse
 import uuid
 
 from salt_more import SuperiorCommandExecutionError
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
@@ -149,8 +150,8 @@ class MessageProcessor(object):
                 "enqueued": [t.name for t in threads]
             }
 
-        # Exceptions will kill worker thread as default behavior
-        suppress_exceptions = settings.pop("suppress_exceptions", False)
+        # Exceptions will NOT kill worker thread as default behavior
+        suppress_exceptions = settings.pop("suppress_exceptions", True)
 
         # Terminates worker thread after a successful run without warnings nor exceptions
         kill_upon_success = settings.pop("kill_upon_success", False)
@@ -166,16 +167,45 @@ class MessageProcessor(object):
                     # Run workflow
                     self._call_hook_for(message, "workflow", message)
 
-                except Warning as w:
-                    log.info("Warning in worker thread '{:}': {:}".format(thread.name, w))
+                except Warning as wa:
                     success = False
 
-                except Exception:
-                    log.exception("Exception in worker thread '{:}' while running workflow for message: {:}".format(thread.name, message))
+                    # Register time of last warning in context
+                    context["last_warning"] = datetime.datetime.utcnow().isoformat()
+
+                    # Also register all distinct warning messages in context
+                    msg = str(wa)
+                    context.setdefault("distinct_warnings", {}).setdefault(msg, 0)
+                    context["distinct_warnings"][msg] += 1
+
+                    log.info("Warning in worker thread '{:}': {:}".format(thread.name, wa))
+
+                except Exception as ex:
                     success = False
 
+                    # Register time of last error in context
+                    context["last_error"] = datetime.datetime.utcnow().isoformat()
+
+                    # Also register all distinct error messages in context
+                    msg = str(ex)
+                    context.setdefault("distinct_errors", {}).setdefault(msg, 0)
+                    context["distinct_errors"][msg] += 1
+
+                    # Only allow recurring exceptions to be logged every minute
+                    if suppress_exceptions and context["distinct_errors"][msg] > 3 \
+                        and timer() - getattr(thread, "exception_log_timer", 0) < 60:
+                        return
+                    setattr(thread, "exception_log_timer", timer())
+
+                    # Go ahead and log the exception
+                    if context["distinct_errors"][msg] > 1:
+                        log.exception("Recurring exception ({:} times) in worker thread '{:}' while running workflow for message: {:}".format(context["distinct_errors"][msg], thread.name, message))
+                    else:
+                        log.exception("Exception in worker thread '{:}' while running workflow for message: {:}".format(thread.name, message))
+
+                    # Finally suppress or propagate the exception
                     if suppress_exceptions:
-                        log.warn("Suppressing above exception and continues as nothing happened")
+                        log.info("Suppressing prior exception in worker thread '{:}' and continues as normal".format(thread.name))
                     else:
                         raise
 

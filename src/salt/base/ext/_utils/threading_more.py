@@ -70,7 +70,7 @@ class WorkerThread(threading.Thread):
             self.context["state"] = "completed"
 
         except Exception:
-            log.exception("Exception in worker thread '%s'", self.name)
+            log.exception("Fatal exception in worker thread '%s'", self.name)
 
             self.context["state"] = "failed"
 

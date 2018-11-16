@@ -206,7 +206,6 @@ def start(serial_conn, **kwargs):
         workers = [{
             "name": "sync_time",
             "interval": 5,  # Run every 5 seconds
-            "suppress_exceptions": True,  # Exceptions will not kill worker thread
             "kill_upon_success": True,  # Kill after first successful run
             "messages": [
                 {
