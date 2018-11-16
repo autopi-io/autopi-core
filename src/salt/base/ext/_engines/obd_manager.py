@@ -42,7 +42,7 @@ context = {
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, force=False):
     """
     Queries an OBD command.
     """
@@ -63,9 +63,12 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, force=False)
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
+    # Ensure protocol
+    conn.ensure_protocol(protocol, baudrate=baudrate)
+
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
-        raise Exception("Command may not be supported - set 'force=True' to run it anyway")
+        raise Exception("Command may not be supported - add 'force=True' to run it anyway")
 
     res = conn.query(cmd, force=force)
 
@@ -97,6 +100,10 @@ def send_handler(msg, **kwargs):
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Sending: %s", msg)
+
+    # Ensure protocol
+    protocol = kwargs.pop("protocol", None)  # Default is no protocol change
+    conn.ensure_protocol(protocol, baudrate=kwargs.pop("baudrate", None))
 
     res = conn.send(msg, **kwargs)
 
@@ -171,7 +178,7 @@ def commands_handler(mode=None):
 
 
 @edmp.register_hook()
-def protocol_handler(set=None, baudrate=None, confirm=None):
+def protocol_handler(set=None, baudrate=None):
     """
     Configures protocol or lists all supported.
     """
@@ -179,24 +186,12 @@ def protocol_handler(set=None, baudrate=None, confirm=None):
     ret = {}
 
     if set == None and baudrate == None:
-        ret["supported"] = {"AUTO": "Automatic"}
-        ret["supported"].update(conn.supported_protocols())
+        ret["supported"] = conn.supported_protocols()
 
     if set != None:
-        id = str(set).upper()
-        if id == "AUTO":
-            conn.change_protocol(None)
-        elif id in conn.supported_protocols():
-            if not confirm == True:
-                raise Exception(
-                    "Please be advised that current active workers can send unwanted data with " + \
-                    "the manually selected protocol - add parameter 'confirm=true' to continue anyway")
+        conn.change_protocol(set, baudrate=baudrate)
 
-            conn.change_protocol(id, baudrate=baudrate)
-        else:
-            raise Exception("Unsupported protocol specified")
-
-    ret["current"] = conn.protocol_info()
+    ret["current"] = conn.protocol()
 
     return ret
 
@@ -211,7 +206,7 @@ def status_handler(reset=None):
         conn.reset(mode=reset)
 
     ret = {
-        "connection": conn.info(),
+        "connection": conn.status(),
         "context": context
     }
 
@@ -219,19 +214,15 @@ def status_handler(reset=None):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000, file=None, description=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, file=None, description=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
 
     ret = {}
 
-    # Check if baudrate is sufficient compared to protocol baudrate
-    protocol_baudrate = conn.protocol_info().get("baudrate", 0)
-    if protocol_baudrate > baudrate:
-        raise Exception("Connection baudrate '{:}' is lower than protocol baudrate '{:}'".format(baudrate, protocol_baudrate))
-
-    conn.change_baudrate(baudrate)
+    # Ensure protocol
+    conn.ensure_protocol(protocol, baudrate=baudrate)
 
     # Play sound to indicate recording has begun
     __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
@@ -248,7 +239,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, baudrate=576000,
         path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
         __salt__["file.mkdir"](os.path.dirname(path))
 
-        protocol = conn.protocol_info()
+        protocol = conn.protocol()
 
         # Use config parser to write file
         config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -309,7 +300,7 @@ def recordings_handler(path=None):
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, filter=None, group="id", baudrate=None, test=False, experimental=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, test=False, experimental=False):
     """
     Plays messages from file on the OBD bus.
     """
@@ -321,6 +312,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", baudrate
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
     config_parser.read(file)
 
+    header = {k: v for k, v in config_parser.items("header")}
     lines = config_parser.options("data")
 
     ret["count"]["total"] = len(lines)
@@ -433,9 +425,9 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", baudrate
     # Send lines
     if not test:
 
-        # Change to baudrate if given
-        if baudrate != None:
-            conn.change_baudrate(baudrate)
+        # Ensure protocol
+        conn.ensure_protocol(protocol or header.get("protocol", None),
+            baudrate=baudrate or header.get("baudrate", None))
 
         start = timer()
 
