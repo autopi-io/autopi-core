@@ -1,3 +1,4 @@
+import datetime
 import logging
 import salt.exceptions
 import salt.utils.event
@@ -65,7 +66,7 @@ def restart(reason="unknown"):
     return request_restart(immediately=True, reason=reason)
 
 
-def request_restart(pending=True, immediately=False, delay=10, reason="unknown"):
+def request_restart(pending=True, immediately=False, delay=10, expiration=1200, reason="unknown"):
     """
     Request for a future restart of the minion service.
     """
@@ -87,7 +88,21 @@ def request_restart(pending=True, immediately=False, delay=10, reason="unknown")
             # Perform restart of service
             return __salt__["service.restart"]("salt-minion")
         else:
-            log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
+            if expiration > 0:
+                __salt__["schedule.add"]("_restart_timer/{:}".format(reason),
+                    function="minionutil.restart",
+                    job_kwargs={"reason": reason},
+                    seconds=expiration,
+                    return_job=False,  # Do not return info to master upon job completion
+                    persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
+                    metadata={
+                        "created": datetime.datetime.utcnow().isoformat(),
+                        "transient": True  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
+                    })
+
+                log.info("Pending request for minion restart because of reason '{:}' is scheduled to be performed automatically in {:} second(s)".format(reason, expiration))
+            else:
+                log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
     else:
         log.debug("No pending minion restart request")
 
