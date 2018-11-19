@@ -203,6 +203,7 @@ def sleep_timer(enable=None, period=1800, **kwargs):
             function="power.sleep",
             job_kwargs=kwargs,
             seconds=period,
+            maxrunning=1,
             return_job=False,  # Do not return info to master upon job completion
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={
