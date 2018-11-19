@@ -1,3 +1,4 @@
+import collections
 import gpio_pin
 import logging
 import obd
@@ -62,7 +63,7 @@ class OBDConn(object):
 
         if self.is_permanently_closed and not force:
             raise Warning("OBD connection is no longer available as it has been permanently closed")
-        
+
         # Reset flag
         self.is_permanently_closed = False
 
@@ -138,8 +139,8 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def supported_protocols(self):
-        ret = {"AUTO": "Autodetect"}
-        ret.update({k: v.NAME for k, v in self._obd.supported_protocols().iteritems()})
+        ret = collections.OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
+        ret.update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in self._obd.supported_protocols().iteritems()})
 
         return ret
 
@@ -147,7 +148,7 @@ class OBDConn(object):
     def change_protocol(self, ident, **kwargs):
         if ident == None:
             raise ValueError("Protocol must be specified")
-        
+
         ident = str(ident).upper()
         if not ident in self.supported_protocols.undecorated(self):  # No need to call the 'ensure_open' decorator again
             raise ValueError("Unsupported protocol specified")
