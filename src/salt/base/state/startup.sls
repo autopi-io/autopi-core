@@ -21,4 +21,4 @@ restart-minion-if-pending:
     - name: minionutil.request_restart
     - pending: false
     - immediately: true
-    - reason: update_during_startup
+    - reason: changes_made_during_startup
