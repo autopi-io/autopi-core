@@ -30,3 +30,10 @@ pip-requirements-installation-completed:
     - source: /etc/pip-requirements.txt
     - watch:
       - pip: pip-requirements-installed
+
+minion-restart-after-pip-requirements-installed:
+  module.wait:
+    - name: minionutil.request_restart
+    - reason: pip_requirements_installed
+    - watch:
+      - pip: pip-requirements-installed
