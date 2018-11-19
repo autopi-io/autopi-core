@@ -29,6 +29,14 @@ def cache(cmd, *args, **kwargs):
     return client.send_sync(msg_pack(cmd, *args, **kwargs))
 
 
+def upload(**kwargs):
+    """
+    Upload cached data to cloud.
+    """
+
+    return client.send_sync(msg_pack(_handler="upload", **kwargs))
+
+
 def upload_batch():
     """
     DEPRECATED: This will no longer upload anything.

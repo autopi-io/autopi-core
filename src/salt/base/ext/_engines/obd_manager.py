@@ -152,22 +152,6 @@ def execute_handler(cmd, reset=None, keep_conn=True):
     return ret
 
 
-@edmp.register_hook(synchronize=False)
-def dtc_converter(res):
-    """
-    Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
-    """
-
-    if res.get("_type", None) != "get_dtc":
-        raise Exception("Unable to convert as DTC result: {:}".format(res))
-
-    if "value" in res:
-        res["_type"] = "dtc"
-        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
-
-    return res
-
-
 @edmp.register_hook()
 def commands_handler(mode=None):
     """
@@ -471,6 +455,22 @@ def battery_converter(result):
     }
 
     return ret
+
+
+@edmp.register_hook(synchronize=False)
+def dtc_converter(res):
+    """
+    Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
+    """
+
+    if res.get("_type", None) != "get_dtc":
+        raise Exception("Unable to convert as DTC result: {:}".format(res))
+
+    if "value" in res:
+        res["_type"] = "dtc"
+        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
+
+    return res
 
 
 @edmp.register_hook()
