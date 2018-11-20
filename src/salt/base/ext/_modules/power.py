@@ -98,14 +98,11 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         log.exception("Failed to set sleep interval")
         interval = 0  # Assume interval is unset
 
-    # Auto update release if enabled and allowed
-    if allow_auto_update and __salt__["pillar.get"]("release:auto_update", default=False):
-        try:
-            __salt__["minionutil.run_job"]("minionutil.update_release", _timeout=600)
-        except:
-            log.exception("Failed to update release")
-    else:
-        log.warn("Release auto update is disabled")
+    # Run shutdown SLS
+    try:
+        __salt__["minionutil.run_job"]("state.sls", "shutdown", pillar={"allow_auto_update": allow_auto_update}, _timeout=600)
+    except:
+        log.exception("Failed to run shutdown SLS")
 
     # Kill heartbeat worker thread to enforce RPi power off if something goes south/hangs
     try:
@@ -206,6 +203,7 @@ def sleep_timer(enable=None, period=1800, **kwargs):
             function="power.sleep",
             job_kwargs=kwargs,
             seconds=period,
+            maxrunning=1,
             return_job=False,  # Do not return info to master upon job completion
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={

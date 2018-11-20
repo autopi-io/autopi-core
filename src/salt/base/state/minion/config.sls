@@ -25,5 +25,6 @@ minion-config-backed-up:
 minion-restart-after-config-changes-required:
   module.wait:
     - name: minionutil.request_restart
+    - reason: minion_config_changed
     - watch:
       - file: /etc/salt/minion

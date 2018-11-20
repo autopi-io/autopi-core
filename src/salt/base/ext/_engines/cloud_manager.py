@@ -19,7 +19,7 @@ context = {
 }
 
 
-@edmp.register_hook()
+@edmp.register_hook(synchronize=False)
 def cache_handler(cmd, *args, **kwargs):
     """
     Query/call a cache function.

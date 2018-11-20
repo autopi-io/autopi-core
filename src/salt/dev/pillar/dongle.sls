@@ -52,7 +52,7 @@ minion:
       host: localhost
       port: 6379
       db: 1
-    batch_size: 500
+    max_batch_size: 500
     retry_count: 3
     fail_ttl: 604800  # One week
 
@@ -131,7 +131,6 @@ minion:
           - name: heartbeat
             delay: 10  # Give SPM some time to reset communication after GPIO pins have been setup
             interval: 60  # Run every minute
-            suppress_exceptions: True  # Exceptions will not kill worker thread
             messages:
                 - handler: heartbeat
     - obd_manager:

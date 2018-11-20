@@ -1,3 +1,4 @@
+import collections
 import gpio_pin
 import logging
 import obd
@@ -23,6 +24,9 @@ class OBDConn(object):
                 self.ensure_open()
 
                 return func(self, *args, **kwargs)
+
+            # Add reference to the original undecorated function
+            decorator.undecorated = func
 
             return decorator
 
@@ -59,7 +63,7 @@ class OBDConn(object):
 
         if self.is_permanently_closed and not force:
             raise Warning("OBD connection is no longer available as it has been permanently closed")
-        
+
         # Reset flag
         self.is_permanently_closed = False
 
@@ -109,24 +113,73 @@ class OBDConn(object):
                 log.exception("Error in 'on_closed' event handler")
 
     @Decorators.ensure_open
-    def info(self):
+    def status(self):
+        serial = self._obd.connection()
+
         return {
             "status": self._obd.status(),
-            "serial": self._obd.connection_info(),
-            "protocol": self._obd.protocol_info()
+            "serial": {
+                "port": serial.portstr,
+                "baudrate": serial.baudrate,
+            },
+            "protocol": self.protocol.undecorated(self)  # No need to call the 'ensure_open' decorator again
         }
 
     @Decorators.ensure_open
-    def protocol_info(self):
-        return self._obd.protocol_info()
+    def protocol(self):
+        protocol = self._obd.protocol()
+
+        return {
+            "id": protocol.ID,
+            "name": protocol.NAME,
+            "autodetected": protocol.autodetected,
+            "ecus": protocol.ecu_map.values(),
+            "baudrate": getattr(protocol, "baudrate", None),  # Only available for 'STN11XX' interface
+        }
 
     @Decorators.ensure_open
     def supported_protocols(self):
-        return {k: v.NAME for k, v in self._obd.supported_protocols().iteritems()}
+        ret = collections.OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
+        ret.update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in self._obd.supported_protocols().iteritems()})
+
+        return ret
 
     @Decorators.ensure_open
-    def change_protocol(self, id, **kwargs):        
-        return self._obd.change_protocol(id, **kwargs)
+    def change_protocol(self, ident, **kwargs):
+        if ident == None:
+            raise ValueError("Protocol must be specified")
+
+        ident = str(ident).upper()
+        if not ident in self.supported_protocols.undecorated(self):  # No need to call the 'ensure_open' decorator again
+            raise ValueError("Unsupported protocol specified")
+
+        self._obd.change_protocol(None if ident == "AUTO" else ident, **kwargs)
+
+    @Decorators.ensure_open
+    def ensure_protocol(self, ident, **kwargs):
+        baudrate = kwargs.get("baudrate", None)
+
+        # Validate input
+        if ident == None:
+            if baudrate != None:
+                raise ValueError("Protocol must also be specified when baudrate is specified")
+
+            # No changes requested
+            return
+
+        ident = str(ident).upper()
+
+        # Check if already autodetected
+        protocol = self._obd.protocol()
+        if ident == "AUTO" and protocol.autodetected \
+            or ident == protocol.ID:  # Or if already set
+
+            # Finally check if baudrate matches
+            if baudrate == None or baudrate == protocol.baudrate:
+                return  # No changes
+
+        # We need to change protocol and/or baudrate
+        self.change_protocol.undecorated(self, ident, **kwargs)  # No need to call the 'ensure_open' decorator again
 
     @Decorators.ensure_open
     def query(self, cmd, **kwargs):
@@ -147,10 +200,10 @@ class OBDConn(object):
 
         return self._obd.send(msg, **kwargs)
 
-    # Ensure open decorator not needed here
+    @Decorators.ensure_open
     def send_all(self, msgs, delay=None):
         for msg in msgs:
-            self.send(msg, auto_format=False)
+            self.send.undecorated(self, msg, auto_format=False)  # No need to call the 'ensure_open' decorator each time
 
             if delay:
                 time.sleep(delay / 1000.0)

@@ -4,6 +4,7 @@
 minion-restart-requested-after-patching:
   module.wait:
     - name: minionutil.request_restart
+    - reason: minion_patched
 
 minion-script-001-backed-up:
   file.copy:

@@ -87,7 +87,10 @@ def dtc(clear=False, **kwargs):
     Reads and clears Diagnostics Trouble Codes (DTCs).
     """
 
-    return client.send_sync(msg_pack(clear=clear, _handler="dtc", **kwargs))
+    if clear:
+        return query("clear_dtc", **kwargs)
+
+    return query("get_dtc", _converter="dtc", **kwargs)
 
 
 def dump(**kwargs):

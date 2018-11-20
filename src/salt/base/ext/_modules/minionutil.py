@@ -1,3 +1,4 @@
+import datetime
 import logging
 import salt.exceptions
 import salt.utils.event
@@ -65,7 +66,7 @@ def restart(reason="unknown"):
     return request_restart(immediately=True, reason=reason)
 
 
-def request_restart(pending=True, immediately=False, delay=10, reason="unknown"):
+def request_restart(pending=True, immediately=False, delay=10, expiration=1200, reason="unknown"):
     """
     Request for a future restart of the minion service.
     """
@@ -87,7 +88,22 @@ def request_restart(pending=True, immediately=False, delay=10, reason="unknown")
             # Perform restart of service
             return __salt__["service.restart"]("salt-minion")
         else:
-            log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
+            if expiration > 0:
+                __salt__["schedule.add"]("_restart_timer/{:}".format(reason),
+                    function="minionutil.restart",
+                    job_kwargs={"reason": reason},
+                    seconds=expiration,
+                    maxrunning=1,
+                    return_job=False,  # Do not return info to master upon job completion
+                    persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
+                    metadata={
+                        "created": datetime.datetime.utcnow().isoformat(),
+                        "transient": True  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
+                    })
+
+                log.info("Pending request for minion restart because of reason '{:}' is scheduled to be performed automatically in {:} second(s)".format(reason, expiration))
+            else:
+                log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
     else:
         log.debug("No pending minion restart request")
 
@@ -150,60 +166,75 @@ def update_release(force=False, dry_run=False, only_retry=False):
         if __salt__["saltutil.is_running"]("state.*"):
             raise salt.exceptions.CommandExecutionError("Another state run is currently active - please wait and try again later")
 
-        if new["state"] == "pending":
-            log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
-        else:
-            log.warn("{:} update of release '{:}' => '{:}'".format(new["state"].title(), old["id"], new["id"]))
+        try:
 
-        # Register 'pending' or 'retrying' release in grains
-        res = __salt__["grains.setval"]("release", new, destructive=True)
-        if not res:
-            log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
+            # Disable all scheduled jobs to prevent restart, shutdown etc. during update
+            res = __salt__["schedule.disable"]()
+            if not res.get("result", False):
+                log.error("Unable to disable schedule: {:}".format(res))
 
-        # Fire a release event with initial state
-        __salt__["event.fire"]({
-                "id": new["id"]
-            },
-            "release/{:}".format(new["state"])
-        )
+            # Log what is going to happen
+            if new["state"] == "pending":
+                log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
+            else:
+                log.warn("{:} update of release '{:}' => '{:}'".format(new["state"].title(), old["id"], new["id"]))
 
-        # Ensure dynamic modules are updated (refresh of modules is done in highstate)
-        res = __salt__["saltutil.sync_all"](refresh=False)
-        ret["dynamic"] = res
+            # Register 'pending' or 'retrying' release in grains
+            res = __salt__["grains.setval"]("release", new, destructive=True)
+            if not res:
+                log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
-        # Run highstate
-        res = __salt__["state.highstate"]()
-        if not isinstance(res, dict):
-            raise salt.exceptions.CommandExecutionError("Failed to run highstate: {:}".format(res))
+            # Fire a release event with initial state
+            __salt__["event.fire"]({
+                    "id": new["id"]
+                },
+                "release/{:}".format(new["state"])
+            )
 
-        ret["highstate"] = res
+            # Ensure dynamic modules are updated (refresh of modules is done in highstate)
+            res = __salt__["saltutil.sync_all"](refresh=False)
+            ret["dynamic"] = res
 
-        # Pillar data has been refreshed during highstate so latest release ID might have changed
-        new["id"] = __salt__["pillar.get"]("latest_release_id")
+            # Run highstate
+            res = __salt__["state.highstate"]()
+            if not isinstance(res, dict):
+                raise salt.exceptions.CommandExecutionError("Failed to run highstate: {:}".format(res))
 
-        # TODO: If above highstate chooses to restart below code will not run
-        # (another update/highstate will run afterwards that will set release id)
-        if all(v.get("result", False) for k, v in res.iteritems()):
-            log.info("Completed highstate for release '{:}'".format(new["id"]))
+            ret["highstate"] = res
 
-            new["state"] = "updated"
+            # Pillar data has been refreshed during highstate so latest release ID might have changed
+            new["id"] = __salt__["pillar.get"]("latest_release_id")
 
-        else:
-            log.warn("Unable to complete highstate for release '{:}'".format(new["id"]))
+            # TODO: If above highstate chooses to restart below code will not run
+            # (another update/highstate will run afterwards that will set release id)
+            if all(v.get("result", False) for k, v in ret["highstate"].iteritems()):
+                log.info("Completed highstate for release '{:}'".format(new["id"]))
 
-            new["state"] = "failed"
+                new["state"] = "updated"
 
-        # Register 'updated' or 'failed' release in grains
-        res = __salt__["grains.setval"]("release", new, destructive=True)
-        if not res:
-            log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
+            else:
+                log.warn("Unable to complete highstate for release '{:}'".format(new["id"]))
 
-        # Fire a release event with final state
-        __salt__["event.fire"]({
-                "id": new["id"]
-            },
-            "release/{:}".format(new["state"])
-        )
+                new["state"] = "failed"
+
+            # Register 'updated' or 'failed' release in grains
+            res = __salt__["grains.setval"]("release", new, destructive=True)
+            if not res:
+                log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
+
+            # Fire a release event with final state
+            __salt__["event.fire"]({
+                    "id": new["id"]
+                },
+                "release/{:}".format(new["state"])
+            )
+
+        finally:
+
+            # Always ensure scheduled jobs are re-enabled
+            res = __salt__["schedule.enable"]()
+            if not res.get("result", False):
+                log.error("Unable to re-enable schedule: {:}".format(res))
 
     return ret
 
