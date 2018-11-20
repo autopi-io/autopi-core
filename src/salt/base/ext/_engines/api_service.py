@@ -83,7 +83,8 @@ def auth_login():
             "username": "local user",
             "has_devices": True,
             "is_local": True,
-            "devices": devices
+            "devices": devices,
+            "timezone": 'UTC'
         }
     }
     return auth_response
