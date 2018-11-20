@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 import json
-import re
 import sys
 import time
 import urllib2  # 'requests' is slow to load so we use 'urllib2'
@@ -68,6 +67,15 @@ def state_output(res):
     succeded = len(res.keys()) - len(errors)
     print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(res.keys()), succeded, len(errors)))
 
+def try_eval(val):
+    if val.lower() in ["true", "false", "yes", "no"]:
+        return val.lower() in ["true", "yes"]
+
+    try:
+       return eval(val)
+    except:
+        return val
+
 def main():
 
     if len(sys.argv) < 2:
@@ -88,17 +96,9 @@ def main():
     for arg in args:
         if "=" in arg:
             key, val = arg.split("=", 1)
-
-            if val.isdigit():
-                val = int(val)
-            elif re.match("^\d+?\.\d+?$", val):
-                val = float(val)
-            elif val.lower() in ["true", "false", "yes", "no"]:
-                val = val.lower() in ["true", "yes"]
-
-            cmd_kwargs[key] = val
+            cmd_kwargs[key] = try_eval(val)
         else:
-            cmd_args.append(arg)
+            cmd_args.append(try_eval(arg))
 
     try:
         res = execute(cmd, *cmd_args, **cmd_kwargs)
