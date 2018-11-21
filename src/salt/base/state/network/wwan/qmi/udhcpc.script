@@ -33,7 +33,7 @@ case $1 in
 	    # special case for /32 subnets: use onlink keyword
 	    [ ".$subnet" = .255.255.255.255 ] \
 		    && onlink=onlink || onlink=
-	    busybox ip -4 route add default via $router metric 303 dev $interface $onlink
+	    busybox ip -4 route add default via $router metric 300 dev $interface $onlink
 	fi
 
 	# Update resolver configuration file
