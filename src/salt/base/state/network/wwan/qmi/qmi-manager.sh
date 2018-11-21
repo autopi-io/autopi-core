@@ -18,7 +18,7 @@ readonly ERROR_FATAL=10
 
 VERBOSE=false
 RUN_INTERVAL_ONLINE=300 # 5 mins
-RUN_INTERVAL_OFFLINE=60 # 1 min
+RUN_INTERVAL_OFFLINE=30 # 30 secs
 MAX_RETRY=3
 AUTO_REBOOT=false
 MODE=qmi
@@ -252,6 +252,7 @@ run ()
             offline_callback "$OUT"
 
             [ $AUTO_REBOOT == true ] && echo "[WARN] Rebooting..." && reboot
+
             exit $ERROR_FATAL
         else
             echo "[WARN] Connection is offline"
