@@ -18,7 +18,7 @@ readonly ERROR_FATAL=10
 
 VERBOSE=false
 RUN_INTERVAL_ONLINE=300 # 5 mins
-RUN_INTERVAL_OFFLINE=30 # 30 secs
+RUN_INTERVAL_OFFLINE=60 # 1 min
 MAX_RETRY=3
 AUTO_REBOOT=false
 MODE=qmi
@@ -58,9 +58,9 @@ print_version ()
 
 retry ()
 {
-    max=$1
-    delay=$2
-    cmd=$3
+    local max=$1
+    local delay=$2
+    local cmd=$3
 
     for i in $(seq 0 $max); do
         if [ $i -gt 0 ]; then
@@ -69,13 +69,27 @@ retry ()
         fi
 
         eval $cmd
-        ret=$?
+        local ret=$?
 
         [ $ret -eq 0 ] && break
         echo "[WARN] Command failed with exit code $ret: $cmd"
     done
 
     return $ret
+}
+
+online_callback ()
+{
+    # Call online callback command if defined
+    [ $VERBOSE == true ] && [ ! -z ${ONLINE_CALLBACK+x} ] && echo "[INFO] Executing online callback command: $ONLINE_CALLBACK"
+    [ ! -z ${ONLINE_CALLBACK+x} ] && eval $ONLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echo "[ERROR] Failed to execute online callback command"
+}
+
+offline_callback ()
+{
+    # Call offline callback command if defined
+    [ $VERBOSE == true ] && [ ! -z ${OFFLINE_CALLBACK+x} ] && echo "[INFO] Executing offline callback command: $OFFLINE_CALLBACK"
+    [ ! -z ${OFFLINE_CALLBACK+x} ] && REASON=$(echo "$1" | tail -1 | grep -oP "^(?:\[.*\] \K)?.*") && eval $OFFLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echo "[ERROR] Failed to execute offline callback command"
 }
 
 status ()
@@ -91,7 +105,7 @@ status ()
     [ $VERBOSE == true ] && echo "[INFO] QMI network connected"
 
     # Check for assigned IP address
-    ip=$(ip addr show $INTERFACE | grep -oP "inet \K\S[0-9.]+")
+    local ip=$(ip addr show $INTERFACE | grep -oP "inet \K\S[0-9.]+")
     [ $? -gt 0 ] && echo "[ERROR] Interface '$INTERFACE' has no IP" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Interface '$INTERFACE' has IP '$ip'"
 
@@ -108,7 +122,7 @@ status ()
     return $OK
 }
 
-up () 
+up ()
 {
     # Check if SIM card is present
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
@@ -138,7 +152,7 @@ up ()
     # Start QMI network connection
     qmi-network $DEVICE start
     [ $? -gt 0 ] && echo "[ERROR] Failed to start QMI network connection" && return $ERROR
-    [ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"            
+    [ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"
 
     # Ensure uDHCP client not already running
     [ -f /var/run/udhcpc.$INTERFACE.pid ] && pkill -0 -F /var/run/udhcpc.$INTERFACE.pid
@@ -154,7 +168,7 @@ up ()
 
 down ()
 {
-    ret=$OK
+    local ret=$OK
 
     # Stop QMI network connection
     qmi-network $DEVICE stop
@@ -206,8 +220,8 @@ unlock_sim ()
 
 run ()
 {
-    interval=0
-    retry=0
+    local interval=0
+    local retry=0
 
     while true; do
 
@@ -221,13 +235,21 @@ run ()
 
         # Check current connection status
         status
-        if [ $? -eq $OK ]; then
-            [ $VERBOSE == true ] && echo "[INFO] Connection is online"
+        OUT=$(status)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
+        local status=$?
+        echo "$OUT"  # Remember to print output
+
+        if [ $status -eq $OK ]; then
+            [ $VERBOSE == true ] && echo "[INFO] Connection is already online"
+
+            online_callback
 
             retry=0
             interval=$RUN_INTERVAL_ONLINE
-        elif [ $? -eq $ERROR_FATAL ]; then
+        elif [ $status -eq $ERROR_FATAL ]; then
             echo "[WARN] Fatal error occurred"
+
+            offline_callback "$OUT"
 
             [ $AUTO_REBOOT == true ] && echo "[WARN] Rebooting..." && reboot
             exit $ERROR_FATAL
@@ -237,8 +259,31 @@ run ()
             retry=$((retry + 1))
             interval=$RUN_INTERVAL_OFFLINE
 
+            # Ensure connection is down
             down
-            up
+
+            # Try to bring up connection
+            OUT=$(up)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
+            local up=$?
+            echo "$OUT"  # Remember to print output
+
+            if [ $up -eq $OK ]; then
+
+                # Check status to confirm connection is actually up
+                OUT=$(status)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
+                local status=$?
+                echo "$OUT"  # Remember to print output
+
+                if [ $status -eq $OK ]; then
+                    [ $VERBOSE == true ] && echo "[INFO] Connection is now online"
+
+                    online_callback
+                else
+                    offline_callback "$OUT"
+                fi
+            else
+                offline_callback "$OUT"
+            fi
         fi
 
         [ $VERBOSE == true ] && echo "[INFO] Sleeping $interval secs..."
