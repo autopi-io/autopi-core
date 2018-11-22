@@ -72,13 +72,12 @@ def context_handler(key=None, **kwargs):
         ctx = context.setdefault(key, {})
 
         # Set new values if given
-        if kwargs:
-            for k, v in kwargs.iteritems():
-                context[key][k.replace("__", ".")] = v
+        for k, v in kwargs.iteritems():
+            ctx[k.replace("__", ".")] = v
 
         ret = ctx
 
-    return ret
+    return ret.copy()  # Prevents '_stamp' field to be added to context
 
 
 @edmp.register_hook()
