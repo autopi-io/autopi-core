@@ -43,18 +43,18 @@ def returner_handler(name, event, mutate_group=None):
 
     if mutate_group != None:
 
-        # Find last event for mutate group
-        last_event = ctx.get(mutate_group, None)
+        # Find last cached event by mutate group
+        last_event = ctx.setdefault("mutate_cache", {}).get(mutate_group, None)
 
         # Compare current event with last to determine if it has mutated
         if last_event == None or last_event["tag"] != event["tag"] or \
-            {k: v for k, v in event["data"] if not k.startswith("_")} != \
-                {k: v for k, v in last_event["data"] if not k.startswith("_")}:
+            {k: v for k, v in event["data"].iteritems() if not k.startswith("_")} != \
+                {k: v for k, v in last_event["data"].iteritems() if not k.startswith("_")}:
 
             returners[name](event)
 
-        # Always store latest event in context
-        ctx[mutate_group] = event
+        # Always store latest event in context cache
+        ctx["mutate_cache"][mutate_group] = event
 
     else:
 
@@ -66,14 +66,19 @@ def context_handler(key=None, **kwargs):
     """
     """
 
+    ret = context
+
     if key != None:
-        if not key in context:
-            context[key] = {}
+        ctx = context.setdefault(key, {})
 
-        for k, v in kwargs.iteritems():
-            context[key][k.replace("__", ".")] = v
+        # Set new values if given
+        if kwargs:
+            for k, v in kwargs.iteritems():
+                context[key][k.replace("__", ".")] = v
 
-    return context
+        ret = ctx
+
+    return ret
 
 
 @edmp.register_hook()
