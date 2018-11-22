@@ -34,12 +34,31 @@ def module_direct_handler(name, *args, **kwargs):
 
 
 @edmp.register_hook()
-def returner_handler(name, result):
+def returner_handler(name, event, mutate_group=None):
     """
     Call a Salt returner module.
     """
 
-    return returners[name](result)
+    ctx = context.setdefault("returner", {}).setdefault(name, {})
+
+    if mutate_group != None:
+
+        # Find last event for mutate group
+        last_event = ctx.get(mutate_group, None)
+
+        # Compare current event with last to determine if it has mutated
+        if last_event == None or last_event["tag"] != event["tag"] or \
+            {k: v for k, v in event["data"] if not k.startswith("_")} != \
+                {k: v for k, v in last_event["data"] if not k.startswith("_")}:
+
+            returners[name](event)
+
+        # Always store latest event in context
+        ctx[mutate_group] = event
+
+    else:
+
+        returners[name](event)
 
 
 @edmp.register_hook()
@@ -51,18 +70,19 @@ def context_handler(key=None, **kwargs):
         if not key in context:
             context[key] = {}
 
-        context[key].update(kwargs)
+        for k, v in kwargs.iteritems():
+            context[key][k.replace("__", ".")] = v
 
     return context
 
 
 @edmp.register_hook()
-def echo_handler(result):
+def echo_handler(event):
     """
     For testing.
     """
 
-    log.info("Echo: {:}".format(result))
+    log.info("Echo: {:}".format(event))
 
 
 def start(mappings, **kwargs):
