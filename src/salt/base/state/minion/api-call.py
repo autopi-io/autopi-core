@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import json
 import sys
 import time
@@ -111,7 +113,7 @@ def main():
         except Exception:
             pass
 
-        print(Colors.FAIL + code + response_text + Colors.ENDC)
+        print(Colors.FAIL + code + response_text + Colors.ENDC, file=sys.stderr)
         return
 
     if cmd.startswith("state.") and isinstance(res,dict):
