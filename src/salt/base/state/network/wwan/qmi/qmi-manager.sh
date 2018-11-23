@@ -56,6 +56,11 @@ print_version ()
     echo
 }
 
+echoerr ()
+{
+    echo "$@" 1>&2
+}
+
 retry ()
 {
     local max=$1
@@ -69,54 +74,56 @@ retry ()
         fi
 
         eval $cmd
-        local ret=$?
+        local retcode=$?
 
-        [ $ret -eq 0 ] && break
-        echo "[WARN] Command failed with exit code $ret: $cmd"
+        [ $retcode -eq 0 ] && break
+        echoerr "[WARN] Command failed with exit code $retcode: $cmd"
     done
 
-    return $ret
+    return $retcode
 }
 
 online_callback ()
 {
     # Call online callback command if defined
     [ $VERBOSE == true ] && [ ! -z ${ONLINE_CALLBACK+x} ] && echo "[INFO] Executing online callback command: $ONLINE_CALLBACK"
-    [ ! -z ${ONLINE_CALLBACK+x} ] && eval $ONLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echo "[ERROR] Failed to execute online callback command"
+    [ ! -z ${ONLINE_CALLBACK+x} ] && eval $ONLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echoerr "[ERROR] Failed to execute online callback command"
 }
 
 offline_callback ()
 {
     # Call offline callback command if defined
     [ $VERBOSE == true ] && [ ! -z ${OFFLINE_CALLBACK+x} ] && echo "[INFO] Executing offline callback command: $OFFLINE_CALLBACK"
-    [ ! -z ${OFFLINE_CALLBACK+x} ] && REASON=$(echo "$1" | tail -1 | grep -oP "^(?:\[.*\] \K)?.*") && eval $OFFLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echo "[ERROR] Failed to execute offline callback command"
+    [ ! -z ${OFFLINE_CALLBACK+x} ] && REASON=$(printf "$1" | tail -1 | sed -e "s/^\[ERROR\] //") && eval $OFFLINE_CALLBACK 1>/dev/null && [ $? -gt 0 ] && echoerr "[ERROR] Failed to execute offline callback command"
 }
 
 status ()
 {
-    # Check/wait for QMI device to be present
+    [ $VERBOSE == true ] && echo "[INFO] Checking status of QMI device '$DEVICE'..."
+
+    # Check/wait for the device to be present
     retry 5 1 "test -c $DEVICE"
-    [ $? -gt 0 ] && echo "[ERROR] QMI device not found '$DEVICE'" && return $ERROR_FATAL
+    [ $? -gt 0 ] && echoerr "[ERROR] QMI device not found '$DEVICE'" && return $ERROR_FATAL
     [ $VERBOSE == true ] && echo "[INFO] QMI device present '$DEVICE'"
 
     # Check QMI network connection status
     qmicli --device-open-$MODE --device $DEVICE --wds-get-packet-service-status | grep -q "Connection status: 'connected'"
-    [ $? -gt 0 ] && echo "[ERROR] QMI network not connected" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] QMI network not connected" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] QMI network connected"
 
     # Check for assigned IP address
     local ip=$(ip addr show $INTERFACE | grep -oP "inet \K\S[0-9.]+")
-    [ $? -gt 0 ] && echo "[ERROR] Interface '$INTERFACE' has no IP" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] Interface '$INTERFACE' has no IP" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Interface '$INTERFACE' has IP '$ip'"
 
     # Perform ping test
     ping -q -I $INTERFACE -c3 $PING_HOST &>/dev/null
-    [ $? -gt 0 ] && echo "[ERROR] Unable to ping '$PING_HOST' using interface '$INTERFACE'" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] Unable to ping '$PING_HOST' using interface '$INTERFACE'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Able to ping '$PING_HOST' with interface '$INTERFACE'"
 
     # Check if uDHCP client is running
     pkill -0 -F /var/run/udhcpc.$INTERFACE.pid
-    [ $? -gt 0 ] && echo "[ERROR] No uDHCP client process running for interface '$INTERFACE'" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] No uDHCP client process running for interface '$INTERFACE'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] uDHCP client running for interface '$INTERFACE'"
 
     return $OK
@@ -124,9 +131,21 @@ status ()
 
 up ()
 {
+    [ $VERBOSE == true ] && echo "[INFO] Bringing up connection for QMI device '$DEVICE'..."
+
+    # Check/wait for the device to be present
+    retry 5 1 "test -c $DEVICE"
+    [ $? -gt 0 ] && echoerr "[ERROR] QMI device not found '$DEVICE'" && return $ERROR_FATAL
+    [ $VERBOSE == true ] && echo "[INFO] QMI device present '$DEVICE'"
+
+    # Check if we can communicate with the device by querying model information
+    STDERR=$(qmicli --device-open-$MODE --device $DEVICE --dms-get-model 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to communicate with QMI device -" $(printf "$STDERR" | grep "^error:") && return $ERROR
+    [ $VERBOSE == true ] && echo "[INFO] Successfully communicated with QMI device"
+
     # Check if SIM card is present
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
-    [ $? -gt 0 ] && echo "[ERROR] No SIM card present" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] SIM card is present"
 
     # Look for SIM config file
@@ -141,26 +160,26 @@ up ()
         [ $? -gt 0 ] && return $ERROR
 
     else
-        echo "[WARN] No SIM config file found at '$SIM_CONF'"
+        echoerr "[WARN] No SIM config file found at '$SIM_CONF'"
     fi
 
     # Check for network
     retry 2 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
-    [ $? -gt 0 ] && echo "[ERROR] No mobile network found" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Mobile network present"
 
     # Start QMI network connection
-    qmi-network $DEVICE start
-    [ $? -gt 0 ] && echo "[ERROR] Failed to start QMI network connection" && return $ERROR
+    STDERR=$(qmi-network $DEVICE start 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason") && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"
 
     # Ensure uDHCP client not already running
     [ -f /var/run/udhcpc.$INTERFACE.pid ] && pkill -0 -F /var/run/udhcpc.$INTERFACE.pid
-    [ $? -eq 0 ] && echo "[ERROR] uDHCP client process already running for interface '$INTERFACE'" && return $ERROR
+    [ $? -eq 0 ] && echoerr "[ERROR] uDHCP client process already running for interface '$INTERFACE'" && return $ERROR
 
     # Start uDHCP client
-    udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script
-    [ $? -gt 0 ] && echo "[ERROR] Failed to start uDHCP client for interface '$INTERFACE'" && return $ERROR
+    udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script 3>&1  # Fixes problem where this methods hangs when called from 'run' function
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to start uDHCP client for interface '$INTERFACE'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started uDHCP client for interface '$INTERFACE'"
 
     return $OK
@@ -168,13 +187,15 @@ up ()
 
 down ()
 {
-    local ret=$OK
+    local retcode=$OK
+
+    [ $VERBOSE == true ] && echo "[INFO] Taking down connection for QMI device '$DEVICE'..."
 
     # Stop QMI network connection
     qmi-network $DEVICE stop
     if [ $? -gt 0 ]; then
-        echo "[ERROR] Failed to stop QMI network"
-        ret=$ERROR
+        echoerr "[ERROR] Failed to stop QMI network"
+        retcode=$ERROR
     elif [ $VERBOSE == true ]; then
         echo "[INFO] Stopped QMI network"
     fi
@@ -185,7 +206,7 @@ down ()
         echo "[INFO] Stopped uDHCP client for interface '$INTERFACE'"
     fi
 
-    return $ret
+    return $retcode
 }
 
 unlock_sim ()
@@ -205,11 +226,11 @@ unlock_sim ()
     fi
 
     # Check if a PIN code is defined
-    [ -z $PIN ] && echo "[ERROR] No valid PIN found in '$SIM_CONF'" && return $ERROR
+    [ -z $PIN ] && echoerr "[ERROR] No valid PIN found in '$SIM_CONF'" && return $ERROR
 
     # Unlock SIM card using PIN from config file
     qmicli --device-open-$MODE --device $DEVICE --uim-verify-pin=PIN1,$PIN
-    [ $? -gt 0 ] && echo "[ERROR] Failed to unlock SIM card using PIN defined in '$SIM_CONF'" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to unlock SIM card using PIN defined in '$SIM_CONF'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Unlocked SIM card using PIN defined in '$SIM_CONF'"
 
     # Give modem a little time to get ready after unlock
@@ -223,39 +244,38 @@ run ()
     local interval=0
     local retry=0
 
+    [ $VERBOSE == true ] && echo "[INFO] Running QMI manager..."
+
     while true; do
 
         # Check if max retry attempts have been exceeded
         if [ $retry -ge $MAX_RETRY ]; then
-            echo "[WARN] Reached max retry attempt ($retry/$MAX_RETRY) to get connection online"
+            echoerr "[WARN] Reached max retry attempt ($retry/$MAX_RETRY) to get connection online"
 
-            [ $AUTO_REBOOT == true ] && echo "[WARN] Rebooting..." && reboot
+            [ $AUTO_REBOOT == true ] && echoerr "[WARN] Rebooting..." && reboot
             exit $ERROR
         fi
 
         # Check current connection status
-        status
-        OUT=$(status)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
-        local status=$?
-        echo "$OUT"  # Remember to print output
-
-        if [ $status -eq $OK ]; then
+        STDERR=$(status 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+        local retcode=$?
+        if [ $retcode -eq $OK ]; then
             [ $VERBOSE == true ] && echo "[INFO] Connection is already online"
 
             online_callback
 
             retry=0
             interval=$RUN_INTERVAL_ONLINE
-        elif [ $status -eq $ERROR_FATAL ]; then
-            echo "[WARN] Fatal error occurred"
+        elif [ $retcode -eq $ERROR_FATAL ]; then
+            echoerr "[WARN] Fatal error occurred"
 
-            offline_callback "$OUT"
+            offline_callback "$STDERR"
 
-            [ $AUTO_REBOOT == true ] && echo "[WARN] Rebooting..." && reboot
+            [ $AUTO_REBOOT == true ] && echoerr "[WARN] Rebooting..." && reboot
 
             exit $ERROR_FATAL
         else
-            echo "[WARN] Connection is offline"
+            echoerr "[WARN] Connection is offline"
 
             retry=$((retry + 1))
             interval=$RUN_INTERVAL_OFFLINE
@@ -264,26 +284,20 @@ run ()
             down
 
             # Try to bring up connection
-            OUT=$(up)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
-            local up=$?
-            echo "$OUT"  # Remember to print output
-
-            if [ $up -eq $OK ]; then
+            STDERR=$(up 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+            if [ $? -eq $OK ]; then
 
                 # Check status to confirm connection is actually up
-                OUT=$(status)  # Output must be stored in global variable otherwise we cannot get correct exit code afterwards
-                local status=$?
-                echo "$OUT"  # Remember to print output
-
-                if [ $status -eq $OK ]; then
+                STDERR=$(status 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+                if [ $? -eq $OK ]; then
                     [ $VERBOSE == true ] && echo "[INFO] Connection is now online"
 
                     online_callback
                 else
-                    offline_callback "$OUT"
+                    offline_callback "$STDERR"
                 fi
             else
-                offline_callback "$OUT"
+                offline_callback "$STDERR"
             fi
         fi
 
@@ -298,20 +312,20 @@ run ()
 
 # Validate arguments
 if [ $# -lt 1 ]; then
-    echo "[ERROR] Invalid argument(s)" 1>&2
+    echoerr "[ERROR] Invalid argument(s)"
     print_usage
     exit 255
 fi
 
 # Load config file if exists
-[ ! -e $CONF ] && echo "[ERROR] No config file found at '$CONF'" && exit $ERROR
+[ ! -e $CONF ] && echoerr "[ERROR] No config file found at '$CONF'" && exit $ERROR
 source $CONF
 [ $VERBOSE == true ] && echo "[INFO] Loaded config file at '$CONF'"
 
 # Validate config params
-[ -z $DEVICE ] && echo "[ERROR] No 'DEVICE' found in '$CONF'" && exit $ERROR
-[ -z $INTERFACE ] && echo "[ERROR] No 'INTERFACE' found in '$CONF'" && exit $ERROR
-[ -z $PING_HOST ] && echo "[ERROR] No 'PING_HOST' found in '$CONF'" && exit $ERROR
+[ -z $DEVICE ] && echoerr "[ERROR] No 'DEVICE' found in '$CONF'" && exit $ERROR
+[ -z $INTERFACE ] && echoerr "[ERROR] No 'INTERFACE' found in '$CONF'" && exit $ERROR
+[ -z $PING_HOST ] && echoerr "[ERROR] No 'PING_HOST' found in '$CONF'" && exit $ERROR
 
 # Process commands
 case $1 in
@@ -337,7 +351,7 @@ case $1 in
         [ $? -eq $OK ] && echo "Connection down"
         ;;
     *)
-        echo "[ERROR] Unsupported command '$1'" 1>&2
+        echoerr "[ERROR] Unsupported command '$1'"
         print_help
         exit 255
         ;;
