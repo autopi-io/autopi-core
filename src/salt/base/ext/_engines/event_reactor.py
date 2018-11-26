@@ -2,6 +2,7 @@ import copy
 import logging
 import salt.loader
 
+from common_util import dict_find, dict_filter
 from messaging import EventDrivenMessageProcessor, keyword_resolve
 
 
@@ -12,7 +13,10 @@ edmp = EventDrivenMessageProcessor("reactor")
 
 returners = None
 
-context = {}
+context = {
+    "lookup": lambda *args, default=None: dict_find(context, *args, default=default),
+    "cache": lambda *args, default=None: dict_find(context, "cache", *args, default=default)
+}
 
 
 @edmp.register_hook()
@@ -34,36 +38,18 @@ def module_direct_handler(name, *args, **kwargs):
 
 
 @edmp.register_hook()
-def returner_handler(name, event, mutate_group=None):
+def returner_handler(name, event):
     """
     Call a Salt returner module.
     """
 
-    ctx = context.setdefault("returner", {}).setdefault(name, {})
-
-    if mutate_group != None:
-
-        # Find last cached event by mutate group
-        last_event = ctx.setdefault("mutate_cache", {}).get(mutate_group, None)
-
-        # Compare current event with last to determine if it has mutated
-        if last_event == None or last_event["tag"] != event["tag"] or \
-            {k: v for k, v in event["data"].iteritems() if not k.startswith("_")} != \
-                {k: v for k, v in last_event["data"].iteritems() if not k.startswith("_")}:
-
-            returners[name](event)
-
-        # Always store latest event in context cache
-        ctx["mutate_cache"][mutate_group] = event
-
-    else:
-
-        returners[name](event)
+    returners[name](event)
 
 
 @edmp.register_hook()
 def context_handler(key=None, **kwargs):
     """
+    Query or manipulate context instance of this engine.
     """
 
     ret = context
@@ -83,10 +69,47 @@ def context_handler(key=None, **kwargs):
 @edmp.register_hook()
 def echo_handler(event):
     """
-    For testing.
+    Mainly for testing.
     """
 
     log.info("Echo: {:}".format(event))
+
+
+@edmp.register_hook()
+def cache_handler(ident=None, **kwargs):
+    """
+    Caches data.
+    """
+
+    ctx = context.setdefault("cache", {})
+
+    # List all cached items if not identifier is specified
+    if ident == None:
+        return ctx
+
+    # Return cached entry for identifier if not data is specified
+    if not kwargs:
+        return ctx.get(ident, {})
+
+    # Go ahead and update cache
+    if not ident in ctx or \
+        dict_filter(ctx[ident], lambda k: not k.startswith("_")) != dict_filter(kwargs, lambda k: not k.startswith("_")):
+        kwargs["_count"] = 1
+        ctx[ident] = kwargs
+        
+        # TODO HN: Change into debug statement
+        log.info("Inserted '{:}' into cache: {:}".format(ident, kwargs))
+
+        return kwargs  # Implies that cache is updated
+
+    else:
+        kwargs["_count"] = ctx[ident]["_count"] + 1
+        ctx[ident] = kwargs
+        
+        # TODO HN: Change into debug statement
+        log.info("Updated '{:}' in cache with: {:}".format(ident, kwargs))
+
+        return {}  # Implies that identical data is already cached
 
 
 def start(mappings, **kwargs):
@@ -106,25 +129,39 @@ def start(mappings, **kwargs):
             # Define function to handle events when matched
             def on_event(event, match=None, mapping=mapping):
 
-                # Check condition if defined
-                condition = mapping.get("condition", None)
-                if condition:
+                # Check if conditions is defined
+                conditions = mapping.get("conditions", [])
+                if "condition" in mapping:
+                    conditions.append(mapping["condition"])
+                for index, condition in enumerate(conditions):
                     if keyword_resolve(condition, keywords={"event": event, "match": match, "context": context}):
-                        log.info("Event meets condition '{:}': {:}".format(condition, event))
+                        log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
                     else:
                         return
 
                 # Process all action messages
-                for message in mapping["actions"]:
+                actions = mapping.get("actions", [])
+                if "action" in mapping:
+                    actions.append(mapping["action"])
+                for message in actions:
 
                     # Check if keyword resolving is enabled
                     if mapping.get("keyword_resolve", False):
                         resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": context})
                         log.debug("Keyword resolved message: {:}".format(resolved_message))
 
-                        edmp.process(resolved_message)
+                    # TODO: Figure out if we can improve performance by processing each message in a dedicated worker thread or process?
+
+                        res = edmp.process(resolved_message)
                     else:
-                        edmp.process(message)
+                        res = edmp.process(message)
+
+                    if len(actions) > 1 and mapping.get("chain_conditionally", False) and not res:
+                        # TODO HN: Convert to debug statement
+                        log.info("Breaking action chain because of result: {:}".format(res))
+
+                        break
+
 
             match_type = None
             if "regex" in mapping:

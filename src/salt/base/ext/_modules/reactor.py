@@ -28,7 +28,15 @@ def help():
 
 def context(**kwargs):
     """
-    Queries context of event reactor.
+    Queries or manipulates context of event reactor.
     """
 
     return client.send_sync(msg_pack(_handler="context", **kwargs))
+
+
+def cache(**kwargs):
+    """
+    Queries or manipulates cache of event reactor.
+    """
+
+    return client.send_sync(msg_pack(_handler="cache", **kwargs))
