@@ -96,7 +96,7 @@ def returner_event(result):
     """
 
     tag_parts = result["tag"].lstrip("/").split("/")
-    kind = "event.{:s}".format(".".join(tag_parts[:1]))
+    kind = "event.{:s}".format(".".join(tag_parts[:-1]))
 
     data = result["data"].copy()
     data["@tag"] = result["tag"]
