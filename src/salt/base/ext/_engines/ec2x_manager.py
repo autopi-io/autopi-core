@@ -71,6 +71,9 @@ def power_handler(cmd):
     #nmea_conn.close()
     #nmea_conn = None
 
+    # Trigger power off event
+    edmp.trigger_event({}, "system/device/ec2x/power_off")
+
     return _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
 
 
@@ -130,7 +133,7 @@ def sync_time_handler(force=False):
         # Trigger time synced event
         edmp.trigger_event(
             {"source": "ntp"},
-            "time/{:}".format(ctx["state"])
+            "system/time/{:}".format(ctx["state"])
         )
 
     else:
@@ -175,7 +178,7 @@ def sync_time_handler(force=False):
                     "old": ret["old"],
                     "new": ret["new"],
                 },
-                "time/{:}".format(ctx["state"])
+                "system/time/{:}".format(ctx["state"])
             )
 
         except:
@@ -183,7 +186,7 @@ def sync_time_handler(force=False):
                 ctx["state"] = "uncertain"
 
                 # Trigger time uncertain event
-                edmp.trigger_event({}, "time/{:}".format(ctx["state"]))
+                edmp.trigger_event({}, "system/time/{:}".format(ctx["state"]))
 
             raise
 
