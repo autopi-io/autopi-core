@@ -136,9 +136,9 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     __salt__["stn.sleep"](delay)
 
     if interval > 0:
-        log.warn("Intentionally going to sleep for %d second(s)", interval)
+        log.warn("Intentionally going to sleep for {:} second(s) because of reason '{:}'".format(interval, reason))
     else:
-        log.warn("Intentionally going to hibernate until next engine start")
+        log.warn("Intentionally going to hibernate until next engine start because of reason '{:}'".format(reason))
 
     # Fire a sleep or hibernate event
     __salt__["event.fire"]({
