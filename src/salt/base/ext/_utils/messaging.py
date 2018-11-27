@@ -309,13 +309,13 @@ class MessageProcessor(object):
                 return self._get_func(args[1])(*args[2:], **kwargs)
             else:
                 return {
-                    "result": [h for h in self._hook_funcs]
+                    "values": [h for h in self._hook_funcs]
                 }
 
         elif len(args) > 1 and args[0] == "worker":
             if args[1] == "list":
                 return {
-                    "result": [
+                    "values": [
                         t.name for t in self._worker_threads.find_all_by(args[2] \
                             if len(args) > 2 else "*")
                     ]
@@ -324,7 +324,7 @@ class MessageProcessor(object):
             elif args[1] == "show":
                 threads = self._worker_threads.find_all_by(args[2] if len(args) > 2 else "*")
                 return {
-                    "result": {t.name: t.context for t in threads}
+                    "value": {t.name: t.context for t in threads}
                 }
 
             elif args[1] == "create":
@@ -333,13 +333,13 @@ class MessageProcessor(object):
             elif args[1] == "start":
                 threads = self._worker_threads.start_all_for(args[2])
                 return {
-                    "started": [t.name for t in threads]
+                    "values": [t.name for t in threads]
                 }
 
             elif args[1] == "kill":
                 threads = self._worker_threads.kill_all_for(args[2])
                 return {
-                    "killed": [t.name for t in threads]
+                    "values": [t.name for t in threads]
                 }
 
         raise Exception("Invalid or unknown command")
