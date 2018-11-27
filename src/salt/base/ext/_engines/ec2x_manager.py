@@ -71,10 +71,14 @@ def power_handler(cmd):
     #nmea_conn.close()
     #nmea_conn = None
 
+    # TODO: Sometimes raises SerialException: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+
+    res = _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
+
     # Trigger power off event
     edmp.trigger_event({}, "system/device/ec2x/power_off")
 
-    return _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
+    return res
 
 
 @edmp.register_hook()
