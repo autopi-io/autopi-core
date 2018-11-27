@@ -71,8 +71,9 @@ def power_handler(cmd, reason="unknown"):
     #nmea_conn.close()
     #nmea_conn = None
 
-    # TODO: Sometimes raises SerialException: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+    log.warn("Powering down EC2X module - will restart momentartily")
 
+    # TODO: Sometimes raises SerialException: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
     res = _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
 
     # Trigger power off event
