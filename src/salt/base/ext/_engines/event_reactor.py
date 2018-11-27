@@ -11,18 +11,16 @@ log = logging.getLogger(__name__)
 # Message processor
 edmp = EventDrivenMessageProcessor("reactor")
 
-returners = None
+returner_func = None
 
 context = {
-    "lookup": lambda *args, default=None: dict_find(context, *args, default=default),
-    "cache": lambda *args, default=None: dict_find(context, "cache", *args, default=default)
+    "cache.get": lambda *args, **kwargs: dict_find(context, "cache", *args, **kwargs),
 }
-
 
 @edmp.register_hook()
 def module_handler(name, *args, **kwargs):
     """
-    Call a Salt execution module from within minion process.
+    Calls a Salt execution module from within minion process.
     """
 
     return __salt__["minionutil.run_job"](name, *args, **kwargs)
@@ -31,28 +29,25 @@ def module_handler(name, *args, **kwargs):
 @edmp.register_hook()
 def module_direct_handler(name, *args, **kwargs):
     """
-    Call a Salt execution module directy from this engine process.
+    Calls a Salt execution module directy from this engine process.
     """
 
     return __salt__[name](*args, **kwargs)
 
 
 @edmp.register_hook()
-def returner_handler(name, event):
-    """
-    Call a Salt returner module.
-    """
-
-    returners[name](event)
-
-
-@edmp.register_hook()
 def context_handler(key=None, **kwargs):
     """
-    Query or manipulate context instance of this engine.
+    Queries or manipulatea context instance of this engine.
     """
 
-    ret = context
+    # Validate input
+    if key != None and not kwargs:
+        raise ValueError("No context data specified to set")
+    elif key == None and kwargs:
+        raise ValueError("A key must be specified to identify context data")
+
+    ret = {}
 
     if key != None:
         ctx = context.setdefault(key, {})
@@ -61,9 +56,11 @@ def context_handler(key=None, **kwargs):
         for k, v in kwargs.iteritems():
             ctx[k.replace("__", ".")] = v
 
-        ret = ctx
+        ret["value"] = ctx
+    else:
+        ret["values"] = {k: v for k, v in context.iteritems() if not "." in k}
 
-    return ret.copy()  # Prevents '_stamp' field to be added to context
+    return ret
 
 
 @edmp.register_hook()
@@ -76,49 +73,73 @@ def echo_handler(event):
 
 
 @edmp.register_hook()
-def cache_handler(ident=None, **kwargs):
+def cache_handler(key=None, **kwargs):
     """
-    Caches data.
+    Manages cached data.
     """
+
+    # Validate input
+    if key == None and kwargs:
+        raise ValueError("A key must be given to identify cache data")
+
+    ret = {}
 
     ctx = context.setdefault("cache", {})
 
-    # List all cached items if not identifier is specified
-    if ident == None:
-        return ctx
+    # List all cached items if not key is specified
+    if key == None:
+        ret["values"] = ctx
 
-    # Return cached entry for identifier if not data is specified
+        return ret
+
+    # Return cached entry for key if not data is specified
     if not kwargs:
-        return ctx.get(ident, {})
+        ret["value"] = ctx.get(key, {})
+
+        return ret
 
     # Go ahead and update cache
-    if not ident in ctx or \
-        dict_filter(ctx[ident], lambda k: not k.startswith("_")) != dict_filter(kwargs, lambda k: not k.startswith("_")):
+    if not key in ctx or \
+        dict_filter(ctx[key], lambda k: not k.startswith("_")) != dict_filter(kwargs, lambda k: not k.startswith("_")):
         kwargs["_count"] = 1
-        ctx[ident] = kwargs
-        
-        # TODO HN: Change into debug statement
-        log.info("Inserted '{:}' into cache: {:}".format(ident, kwargs))
+        ctx[key] = kwargs
 
-        return kwargs  # Implies that cache is updated
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Inserted into cache '{:}: {:}".format(key, kwargs))
+
+        ret["value"] = kwargs
 
     else:
-        kwargs["_count"] = ctx[ident]["_count"] + 1
-        ctx[ident] = kwargs
-        
-        # TODO HN: Change into debug statement
-        log.info("Updated '{:}' in cache with: {:}".format(ident, kwargs))
+        kwargs["_count"] = ctx[key]["_count"] + 1
+        ctx[key] = kwargs
 
-        return {}  # Implies that identical data is already cached
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Updated cache '{:}': {:}".format(key, kwargs))
+
+        ret["value"] = kwargs
+
+    return ret
 
 
-def start(mappings, **kwargs):
+@edmp.register_hook()
+def alternating_cache_event_returner(message, result):
+    """
+    Returns alternating/changed events from cache to configured Salt returner module.
+    """
+
+    if result["value"]["_count"] != 1:
+        return
+
+    returner_func(result["value"]["event"])
+
+
+def start(returner, mappings, **kwargs):
     try:
         log.debug("Starting event reactor")
 
-        # Prepare returners
-        global returners
-        returners = salt.loader.returners(__opts__, __salt__)
+        # Prepare returner function
+        global returner_func
+        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_event".format(returner)]
 
         # Initialize message processor
         edmp.init(__opts__)
@@ -133,7 +154,7 @@ def start(mappings, **kwargs):
                 conditions = mapping.get("conditions", [])
                 if "condition" in mapping:
                     conditions.append(mapping["condition"])
-                for index, condition in enumerate(conditions):
+                for index, condition in enumerate(conditions, 1):
                     if keyword_resolve(condition, keywords={"event": event, "match": match, "context": context}):
                         log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
                     else:
@@ -143,7 +164,7 @@ def start(mappings, **kwargs):
                 actions = mapping.get("actions", [])
                 if "action" in mapping:
                     actions.append(mapping["action"])
-                for message in actions:
+                for index, message in enumerate(actions, 1):
 
                     # Check if keyword resolving is enabled
                     if mapping.get("keyword_resolve", False):
@@ -156,11 +177,12 @@ def start(mappings, **kwargs):
                     else:
                         res = edmp.process(message)
 
-                    if len(actions) > 1 and mapping.get("chain_conditionally", False) and not res:
-                        # TODO HN: Convert to debug statement
-                        log.info("Breaking action chain because of result: {:}".format(res))
+                    if index < len(actions) and mapping.get("chain_conditionally", False):
+                        if not res or isinstance(res, dict) and not res.get("result", True):
+                            if log.isEnabledFor(logging.DEBUG):
+                                log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
 
-                        break
+                            break
 
 
             match_type = None
