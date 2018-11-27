@@ -109,20 +109,20 @@ def _read_write(register, mask, value, **kwargs):
     return client.send_sync(msg_pack(register, mask, value, _handler="read_write", **kwargs))
 
 
-def active(enabled=None):
+def active(enable=None):
     """
     Get or set active mode, this enables/disables periodic measurements.
     """
 
     res = None
-    if enabled == None:
+    if enable == None:
         res = _read(mma8x5x.CTRL_REG1)
     else:
-        val = mma8x5x.CTRL_REG1_ACTIVE if bool(enabled) else 0
+        val = mma8x5x.CTRL_REG1_ACTIVE if bool(enable) else 0
         res = _read_write(mma8x5x.CTRL_REG1, mma8x5x.CTRL_REG1_ACTIVE, val)
 
     res["_raw"] = res["_raw"] & mma8x5x.CTRL_REG1_ACTIVE
-    res["enabled"] = res["_raw"] == mma8x5x.CTRL_REG1_ACTIVE
+    res["value"] = res["_raw"] == mma8x5x.CTRL_REG1_ACTIVE
 
     return res
 
@@ -138,22 +138,22 @@ def mode():
     return res
 
 
-def auto_sleep(enabled=None):
+def auto_sleep(enable=None):
     """
     If the auto-sleep is disabled, then the device can only toggle between standby and wake mode.
     If auto-sleep interrupt is enabled, transitioning from active mode to auto-sleep mode and vice versa generates an interrupt.
     """
 
     res = None
-    if enabled == None:
+    if enable == None:
         res = _read(mma8x5x.CTRL_REG2)
     else:
-        val = mma8x5x.CTRL_REG2_SLPE if bool(enabled) else 0
+        val = mma8x5x.CTRL_REG2_SLPE if bool(enable) else 0
         res = _read_write(mma8x5x.CTRL_REG2, mma8x5x.CTRL_REG2_SLPE, val,
             _validator="in_standby_mode")
 
     res["_raw"] = res["_raw"] & mma8x5x.CTRL_REG2_SLPE
-    res["enabled"] = res["_raw"] == mma8x5x.CTRL_REG2_SLPE
+    res["value"] = res["_raw"] == mma8x5x.CTRL_REG2_SLPE
 
     return res
 
@@ -199,18 +199,18 @@ def xyz():
     return res
 
 
-def xyz_logger(enabled=None):
+def xyz_logger(enable=None):
     """
     Enable/disable accelerometer data logger.
     """
 
     WORKER_NAME = "xyz_logger"
 
-    if enabled == None:
-        res = client.send_sync(msg_pack("worker", "query", WORKER_NAME, _workflow="admin"))
+    if enable == None:
+        res = client.send_sync(msg_pack("worker", "query", WORKER_NAME, _workflow="manage"))
 
         res["status"] = "running" if len(res.pop("result")) else "stopped"
-    elif enabled:
+    elif enable:
         res = client.send_sync(msg_pack(mma8x5x.OUT_X_MSB, 6,
             _workflow="simple",
             _worker="infinite?name={:s}".format(WORKER_NAME),
@@ -220,7 +220,7 @@ def xyz_logger(enabled=None):
 
         res["status"] = res.pop("notif", {}).get("status", "unknown")
     else:
-        res = client.send_sync(msg_pack("worker", "kill", WORKER_NAME, _workflow="admin"))
+        res = client.send_sync(msg_pack("worker", "kill", WORKER_NAME, _workflow="manage"))
 
         res["status"] = "stopped" if res.pop("result") else "unknown"
 
@@ -245,20 +245,20 @@ def range(value=None):
     return res
 
 
-def fast_read(enabled=None):
+def fast_read(enable=None):
     """
     """
 
     res = None
-    if enabled == None:
+    if enable == None:
         res = _read(mma8x5x.CTRL_REG1)
     else:
-        val = mma8x5x.CTRL_REG1_F_READ if bool(enabled) else 0
+        val = mma8x5x.CTRL_REG1_F_READ if bool(enable) else 0
         res = _read_write(mma8x5x.CTRL_REG1, mma8x5x.CTRL_REG1_F_READ, val,
             _validator="in_standby_mode")
 
     res["_raw"] = res["_raw"] & mma8x5x.CTRL_REG1_F_READ
-    res["enabled"] = res["_raw"] == mma8x5x.CTRL_REG1_F_READ
+    res["value"] = res["_raw"] == mma8x5x.CTRL_REG1_F_READ
 
     return res
 
@@ -322,7 +322,7 @@ def intr_status():
     return res
 
 
-def intr(source, enabled=None):
+def intr(source, enable=None):
     """
     Enable/disable interrupts.
     """
@@ -330,15 +330,15 @@ def intr(source, enabled=None):
     mask = _key_by_val(INTERRUPT_SOURCES, source)
 
     res = None
-    if enabled == None:
+    if enable == None:
         res = _read(mma8x5x.CTRL_REG4)
     else:
-        val = mask if bool(enabled) else 0
+        val = mask if bool(enable) else 0
         res = _read_write(mma8x5x.CTRL_REG4, mask, val,
             _validator="in_standby_mode")
 
     res["_raw"] = res["_raw"] & mask
-    res["enabled"] = bool(res["_raw"])
+    res["value"] = bool(res["_raw"])
 
     return res
 
@@ -383,7 +383,7 @@ def intr_pin_pol(inverted=None):
     return res
 
 
-def wake(source, enabled=None):
+def wake(source, enable=None):
     """
     Enable/disable wake up sources.
     """
@@ -391,15 +391,15 @@ def wake(source, enabled=None):
     mask = _key_by_val(WAKE_SOURCES, source)
 
     res = None
-    if enabled == None:
+    if enable == None:
         res = _read(mma8x5x.CTRL_REG3)
     else:
-        val = mask if bool(enabled) else 0
+        val = mask if bool(enable) else 0
         res = _read_write(mma8x5x.CTRL_REG3, mask, val,
             _validator="in_standby_mode")
 
     res["_raw"] = res["_raw"] & mask
-    res["enabled"] = bool(res["_raw"])
+    res["value"] = bool(res["_raw"])
 
     return res
 

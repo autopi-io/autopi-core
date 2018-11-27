@@ -3,7 +3,7 @@ standby-mode-before-changes:
   module_extra.configured:
     - name: acc.active
     - kwargs:
-        enabled: false
+        enable: false
     - prereq:
       - module_extra: wake-interrrupt-pin-configured
       - module_extra: wake-interrrupt-enabled
@@ -23,7 +23,7 @@ wake-interrrupt-enabled:
     - args:
         - wake
     - kwargs:
-        enabled: true
+        enable: true
 
 wake-on-motion-enabled:
   module_extra.configured:
@@ -31,10 +31,10 @@ wake-on-motion-enabled:
     - args:
         - motion
     - kwargs:
-        enabled: true
+        enable: true
 
 activated:
   module_extra.configured:
     - name: acc.active
     - kwargs:
-        enabled: true
+        enable: true

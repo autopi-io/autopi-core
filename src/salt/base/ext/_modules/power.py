@@ -121,7 +121,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     # Set accelerometer in standby mode
     if acc_off:
         try:
-            __salt__["acc.active"](enabled=False)
+            __salt__["acc.active"](enable=False)
         except:
             log.exception("Failed to put accelerometer into standby mode")
 
