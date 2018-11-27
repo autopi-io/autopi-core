@@ -169,12 +169,12 @@ def urc_port_config(value=None):
     return res
 
 
-def power_off(normal=True):
+def power_off(normal=True, **kwargs):
     """
     Used to shut down the entire EC2x module.
     """
 
-    res = power("AT+QPOWD={:d}".format(normal))
+    res = power("AT+QPOWD={:d}".format(normal), **kwargs)
 
     return res
 

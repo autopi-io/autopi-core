@@ -61,7 +61,7 @@ def exec_handler(cmd, **kwargs):
 
 
 @edmp.register_hook()
-def power_handler(cmd):
+def power_handler(cmd, reason="unknown"):
     # We need to give the module a cooldown period of 30 secs to power off completely and prevent
     # new requests when not ready. If an open serial connection exists during power off it will block
     # everything when using an USB hub connected to the RPi's built-in USB - yup, go figure!
@@ -76,7 +76,9 @@ def power_handler(cmd):
     res = _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
 
     # Trigger power off event
-    edmp.trigger_event({}, "system/device/ec2x/power_off")
+    edmp.trigger_event({
+        "reason": reason,
+    }, "system/device/ec2x/power_off")
 
     return res
 
