@@ -204,27 +204,31 @@ def xyz_logger(enable=None):
     Enable/disable accelerometer data logger.
     """
 
+    ret = {}
+
     WORKER_NAME = "xyz_logger"
 
     if enable == None:
-        res = client.send_sync(msg_pack("worker", "query", WORKER_NAME, _workflow="manage"))
+        res = client.send_sync(msg_pack("worker", "show", WORKER_NAME, _workflow="manage"))
 
-        res["status"] = "running" if len(res.pop("result")) else "stopped"
+        ret["status"] = "running" if WORKER_NAME in res["value"] else "stopped"
     elif enable:
         res = client.send_sync(msg_pack(mma8x5x.OUT_X_MSB, 6,
             _workflow="simple",
-            _worker="infinite?name={:s}".format(WORKER_NAME),
+            _worker="dedicated?name={:s}".format(WORKER_NAME),
             _handler="interrupt_read",
             _converter="g_block",
             _returner="redis"))
 
-        res["status"] = res.pop("notif", {}).get("status", "unknown")
+        log.info("CREATE WORKER RESULT: {:}".format(res))
+
+        ret["status"] = res.pop("notif", {}).get("status", "unknown")
     else:
         res = client.send_sync(msg_pack("worker", "kill", WORKER_NAME, _workflow="manage"))
 
-        res["status"] = "stopped" if res.pop("result") else "unknown"
+        ret["status"] = "stopped" if WORKER_NAME in res["values"] else "unknown"
 
-    return res
+    return ret
 
 
 def range(value=None):
@@ -469,3 +473,9 @@ def motion_debounce(value=None):
 
     return res
 
+def manage(*args, **kwargs):
+    """
+    Example: acc.manage worker list *
+    """
+
+    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
