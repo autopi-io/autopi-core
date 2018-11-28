@@ -307,17 +307,17 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def active(self, enable=None):
+    def active(self, value=None):
         """
         Get or set active mode, this enables/disables periodic measurements.
         """
 
         ret = False
 
-        if enable == None:
+        if value == None:
             res = self.read(CTRL_REG1) & CTRL_REG1_ACTIVE 
         else:
-            val = CTRL_REG1_ACTIVE if bool(enable) else 0
+            val = CTRL_REG1_ACTIVE if bool(value) else 0
             res = self.read_write(CTRL_REG1, CTRL_REG1_ACTIVE, val) & CTRL_REG1_ACTIVE 
 
         ret = res == CTRL_REG1_ACTIVE
@@ -340,16 +340,16 @@ class MMA8X5XConn(I2CConn):
 
         return RANGES.get(res)
 
-    def fast_read(self, enable=None):
+    def fast_read(self, value=None):
         """
         """
 
-        if enable == None:
+        if value == None:
             res = self.read(CTRL_REG1) & CTRL_REG1_F_READ
         else:
             self._require_standby_mode()
 
-            val = CTRL_REG1_F_READ if bool(enable) else 0
+            val = CTRL_REG1_F_READ if bool(value) else 0
             res = self.read_write(CTRL_REG1, CTRL_REG1_F_READ, val) & CTRL_REG1_F_READ
 
         ret = res == CTRL_REG1_F_READ
@@ -372,18 +372,18 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def auto_sleep(self, enable=None):
+    def auto_sleep(self, value=None):
         """
         If the auto-sleep is disabled, then the device can only toggle between standby and wake mode.
         If auto-sleep interrupt is enabled, transitioning from active mode to auto-sleep mode and vice versa generates an interrupt.
         """
 
-        if enable == None:
+        if value == None:
             res = self.read(CTRL_REG2) & CTRL_REG2_SLPE
         else:
             self._require_standby_mode()
 
-            val = CTRL_REG2_SLPE if bool(enable) else 0
+            val = CTRL_REG2_SLPE if bool(value) else 0
             res = self.read_write(CTRL_REG2, CTRL_REG2_SLPE, val) & CTRL_REG2_SLPE
 
         ret = res == CTRL_REG2_SLPE
@@ -428,19 +428,19 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def intr(self, source, enable=None):
+    def intr(self, source, value=None):
         """
         Enable/disable interrupts.
         """
 
         mask = dict_key_by_value(INTERRUPT_SOURCES, source)
 
-        if enable == None:
+        if value == None:
             res = self.read(CTRL_REG4) & mask
         else:
             self._require_standby_mode()
 
-            val = mask if bool(enable) else 0
+            val = mask if bool(value) else 0
             res = self.read_write(CTRL_REG4, mask, val) & mask
 
         ret = bool(res)
@@ -483,19 +483,19 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def wake(self, source, enable=None):
+    def wake(self, source, value=None):
         """
         Enable/disable wake up sources.
         """
 
         mask = dict_key_by_value(WAKE_SOURCES, source)
 
-        if enable == None:
+        if value == None:
             res = self.read(CTRL_REG3) & mask
         else:
             self._require_standby_mode()
 
-            val = mask if bool(enable) else 0
+            val = mask if bool(value) else 0
             res = self.read_write(CTRL_REG3, mask, val) & mask
 
         ret = bool(res)
