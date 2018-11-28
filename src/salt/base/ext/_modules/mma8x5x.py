@@ -5,7 +5,7 @@ from messaging import EventDrivenMessageClient, msg_pack
 
 
 # Define the module's virtual name
-__virtualname__ = "acc"
+__virtualname__ = "mma8x5x"
 
 MODES = {
     mma8x5x.MODE_STANDBY: "standby",

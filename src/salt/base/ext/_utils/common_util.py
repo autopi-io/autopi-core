@@ -27,3 +27,8 @@ def dict_filter(items, key_func=None):
                 ret[key] = val
 
     return ret
+
+
+def dict_key_by_value(dic, val):
+    kv = { k:v for k, v in dic.items() if v.lower() == val.lower() }
+    return next(iter(kv))

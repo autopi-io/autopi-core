@@ -7,7 +7,7 @@ from serial import *
 log = logging.getLogger(__name__)
 
 
-class SerialConn:
+class SerialConn(object):
 
     def __init__(self):
         pass

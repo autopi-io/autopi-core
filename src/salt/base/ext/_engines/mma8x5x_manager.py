@@ -128,7 +128,7 @@ def start(i2c_conn, **kwargs):
         gpio.add_event_detect(interrupt_gpio_pin, gpio.FALLING, callback=lambda ch: interrupt_event.set())
 
         # Initialize I2C connection
-        conn.init(i2c_conn)
+        conn.setup(i2c_conn)
         conn.on_written = _on_written
 
         # Initialize and run message processor
