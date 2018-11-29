@@ -90,11 +90,15 @@ class I2CConn(object):
 
     @Decorators.ensure_open
     def read_block(self, register, length):
-        log.debug("Reading block with a length of {:d} starting from register {:d}".format(length, register))
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Reading block with a length of {:d} starting from register {:d}".format(length, register))
 
         block = self._bus.read_i2c_block_data(self._address, register, length)
-        for idx, byt in enumerate(block):
-            log.debug("Read byte #{:d}: {:08b}".format(idx, byt))
+
+        if log.isEnabledFor(logging.DEBUG):
+            for idx, byt in enumerate(block):
+                log.debug("Read byte {:d}/{:d} in block: {:08b}".format(idx, len(block), byt))
 
         return block
 
@@ -106,8 +110,6 @@ class I2CConn(object):
             ret = self.read_block.undecorated(self, register, length)
         else:
             ret = self.read_byte.undecorated(self, register)
-
-        log.info("Read result: {:}".format(ret))
 
         return ret
 

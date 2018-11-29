@@ -34,6 +34,14 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(msg_pack(cmd, *args, **kwargs))
 
 
+def context(**kwargs):
+    """
+    Gets current context.
+    """
+
+    return client.send_sync(msg_pack(_handler="context", **kwargs))
+
+
 def manage(*args, **kwargs):
     """
     Example: acc.manage worker list *

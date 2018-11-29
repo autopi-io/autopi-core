@@ -167,9 +167,9 @@ RANGE_8G = 2
 RANGE_DEFAULT = RANGE_2G
 
 RANGES = {
-    RANGE_2G: "2G",
-    RANGE_4G: "4G",
-    RANGE_8G: "8G",
+    RANGE_2G: "2g",
+    RANGE_4G: "4g",
+    RANGE_8G: "8g",
 }
 
 # Available system modes
@@ -190,11 +190,11 @@ MODS_HR     = 2
 MODS_LP     = 3
 
 # Available data sampling rates
-DATA_RATE_800HZ = (0 << 3)  # 800  Hz Ouput Data Rate in WAKE mode
-DATA_RATE_400HZ = (1 << 3)  # 400  Hz Ouput Data Rate in WAKE mode
-DATA_RATE_200HZ = (2 << 3)  # 200  Hz Ouput Data Rate in WAKE mode
-DATA_RATE_100HZ = (3 << 3)  # 100  Hz Ouput Data Rate in WAKE mode
-DATA_RATE_50HZ  = (4 << 3)  # 50   Hz Ouput Data Rate in WAKE mode
+DATA_RATE_800HZ = (0 << 3)  #  800 Hz Ouput Data Rate in WAKE mode
+DATA_RATE_400HZ = (1 << 3)  #  400 Hz Ouput Data Rate in WAKE mode
+DATA_RATE_200HZ = (2 << 3)  #  200 Hz Ouput Data Rate in WAKE mode
+DATA_RATE_100HZ = (3 << 3)  #  100 Hz Ouput Data Rate in WAKE mode
+DATA_RATE_50HZ  = (4 << 3)  #   50 Hz Ouput Data Rate in WAKE mode
 DATA_RATE_1HZ25 = (5 << 3)  # 12.5 Hz Ouput Data Rate in WAKE mode
 DATA_RATE_6HZ25 = (6 << 3)  # 6.25 Hz Ouput Data Rate in WAKE mode
 DATA_RATE_1HZ56 = (7 << 3)  # 1.56 Hz Ouput Data Rate in WAKE mode
@@ -249,8 +249,23 @@ class MMA8X5XConn(I2CConn):
 
         # Override defaults
         self.data_bits = settings.get("data_bits", self.data_bits)
-        self.range(value=settings.get("range", "{:d}G".format(self.g_range)))
-        
+        self.range(value=settings.get("range", "{:d}g".format(self.g_range)))
+
+        try:
+            self.active(value=False)
+
+            # Setup data rate if defined
+            if "data_rate" in settings:
+                self.data_rate(value=settings["data_rate"])
+
+            # Setup interrupts if defined
+            for name, pin in settings.get("interrupts", {}).iteritems():
+                self.intr_pin(name, value=pin)
+                self.intr(name, value=True)
+
+        finally:
+            self.active(value=True)
+    
     def mode(self):
         """
         Indicates the current device operating mode.
@@ -289,7 +304,7 @@ class MMA8X5XConn(I2CConn):
         """
 
         ret = {
-            "range": "{:d}G".format(self.g_range)
+            "range": "{:d}g".format(self.g_range)
         }
 
         bytes = self.read(OUT_X_MSB, length=6)
