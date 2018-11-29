@@ -167,9 +167,9 @@ RANGE_8G = 2
 RANGE_DEFAULT = RANGE_2G
 
 RANGES = {
-    RANGE_2G: "2g",
-    RANGE_4G: "4g",
-    RANGE_8G: "8g",
+    RANGE_2G: 2,
+    RANGE_4G: 4,
+    RANGE_8G: 8,
 }
 
 # Available system modes
@@ -199,17 +199,17 @@ DATA_RATE_1HZ25 = (5 << 3)  # 12.5 Hz Ouput Data Rate in WAKE mode
 DATA_RATE_6HZ25 = (6 << 3)  # 6.25 Hz Ouput Data Rate in WAKE mode
 DATA_RATE_1HZ56 = (7 << 3)  # 1.56 Hz Ouput Data Rate in WAKE mode
 
-DATE_RATE_DEFAULT = DATA_RATE_200HZ
+DATA_RATE_DEFAULT = DATA_RATE_50HZ
 
 DATA_RATES = {
-    DATA_RATE_800HZ: "800Hz",
-    DATA_RATE_400HZ: "400Hz",
-    DATA_RATE_200HZ: "200Hz",
-    DATA_RATE_100HZ: "100Hz",
-    DATA_RATE_50HZ:  "50Hz",
-    DATA_RATE_1HZ25: "12.5Hz",
-    DATA_RATE_6HZ25: "6.25Hz",
-    DATA_RATE_1HZ56: "1.56Hz",
+    DATA_RATE_800HZ: 800,
+    DATA_RATE_400HZ: 400,
+    DATA_RATE_200HZ: 200,
+    DATA_RATE_100HZ: 100,
+    DATA_RATE_50HZ:  50,
+    DATA_RATE_1HZ25: 12.5,
+    DATA_RATE_6HZ25: 6.25,
+    DATA_RATE_1HZ56: 1.56,
 }
 
 # Available auto sleep rates
@@ -219,10 +219,10 @@ ASLP_RATE_6HZ25 = (2 << 6)
 ASLP_RATE_1HZ56 = (3 << 6)
 
 ASLP_RATES = {
-    ASLP_RATE_50HZ:  "50Hz",
-    ASLP_RATE_12HZ5: "12.5Hz",
-    ASLP_RATE_6HZ25: "6.25Hz",
-    ASLP_RATE_1HZ56: "1.56Hz",
+    ASLP_RATE_50HZ:  50,
+    ASLP_RATE_12HZ5: 12.5,
+    ASLP_RATE_6HZ25: 6.25,
+    ASLP_RATE_1HZ56: 1.56,
 }
 
 # Available interrupt pins
@@ -241,22 +241,23 @@ class MMA8X5XConn(I2CConn):
         super(MMA8X5XConn, self).__init__()
 
         # Default values
-        self.data_bits = 10
-        self.g_range = self._range_as_g(RANGE_DEFAULT)
+        self._data_bits = 10
+        self._range = RANGES[RANGE_DEFAULT]
+        self._data_rate = DATA_RATES[DATA_RATE_DEFAULT]
 
     def setup(self, settings):
         super(MMA8X5XConn, self).setup(settings)
 
-        # Override defaults
-        self.data_bits = settings.get("data_bits", self.data_bits)
-        self.range(value=settings.get("range", "{:d}g".format(self.g_range)))
-
+        self._data_bits = settings.get("data_bits", self._data_bits)
+        
         try:
             self.active(value=False)
 
-            # Setup data rate if defined
-            if "data_rate" in settings:
-                self.data_rate(value=settings["data_rate"])
+            # Setup specified range or use default
+            self.range(value=settings.get("range", self._range))
+
+            # Setup specified data rate or use default
+            self.data_rate(value=settings.get("data_rate", self._data_rate))
 
             # Setup interrupts if defined
             for name, pin in settings.get("interrupts", {}).iteritems():
@@ -298,23 +299,23 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def xyz(self):
+    def xyz(self, decimals=4):
         """
         Read and calculate accelerometer data.
         """
 
         ret = {
-            "range": "{:d}g".format(self.g_range)
+            "range": self._range
         }
 
         bytes = self.read(OUT_X_MSB, length=6)
-        words = self._concat_bytes(bytes, bits=self.data_bits)
+        words = self._concat_bytes(bytes, bits=self._data_bits)
 
         if log.isEnabledFor(logging.DEBUG):
             for word in words:
                 log.debug("Calculating G for block: {:016b}".format(word))
 
-        res = [self._calc_g(word) for word in words]
+        res = [self._calc_g(word, decimals=decimals) for word in words]
 
         ret["x"] = res[0]
         ret["y"] = res[1]
@@ -347,13 +348,15 @@ class MMA8X5XConn(I2CConn):
         if value == None:
             res = self.read(XYZ_DATA_CFG) & XYZ_DATA_CFG_FS_MASK
         else:
+            self._require_standby_mode()
+
             val = dict_key_by_value(RANGES, value)
             res = self.read_write(XYZ_DATA_CFG, XYZ_DATA_CFG_FS_MASK, val) & XYZ_DATA_CFG_FS_MASK
  
         # Always update range instance variable
-        self.g_range = self._range_as_g(res)
+        self._range = RANGES.get(res)
 
-        return RANGES.get(res)
+        return self._range
 
     def fast_read(self, value=None):
         """
@@ -383,9 +386,10 @@ class MMA8X5XConn(I2CConn):
             val = dict_key_by_value(DATA_RATES, value)
             res = self.read_write(CTRL_REG1, CTRL_REG1_DR_MASK, val) & CTRL_REG1_DR_MASK
 
-        ret = DATA_RATES.get(res)
+        # Always update data rate instance variable
+        self._data_rate = DATA_RATES.get(res)
 
-        return ret
+        return self._data_rate
 
     def auto_sleep(self, value=None):
         """
@@ -591,6 +595,6 @@ class MMA8X5XConn(I2CConn):
         return 1 << (value + 1)
 
     def _calc_g(self, word, decimals=4):
-        s_int = self._signed_int(word, bits=self.data_bits)
-        div = pow(2, self.data_bits - 1) / self.g_range
+        s_int = self._signed_int(word, bits=self._data_bits)
+        div = pow(2, self._data_bits - 1) / self._range
         return round(s_int / div, decimals)

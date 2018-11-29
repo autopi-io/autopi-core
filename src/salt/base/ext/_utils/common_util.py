@@ -30,5 +30,5 @@ def dict_filter(items, key_func=None):
 
 
 def dict_key_by_value(dic, val):
-    kv = { k:v for k, v in dic.items() if v.lower() == val.lower() }
+    kv = { k: v for k, v in dic.items() if v == val }
     return next(iter(kv))

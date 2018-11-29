@@ -2,6 +2,7 @@ import gpio_pin
 import inspect
 import logging
 import RPi.GPIO as gpio
+import salt.loader
 import threading
 
 from messaging import EventDrivenMessageProcessor
@@ -17,14 +18,26 @@ edmp = EventDrivenMessageProcessor("acc",
 # MMA8X5X I2C connection
 conn = MMA8X5XConn()
 
+returner_func = None
+
 interrupt_event = threading.Event()
 
 context = {
     "interrupt": {
         "total": 0,
         "timeout": 0,
-    }
+    },
+    "readout": {},
 }
+
+
+@edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
 
 
 @edmp.register_hook()
@@ -57,37 +70,60 @@ def query_handler(cmd, *args, **kwargs):
     return ret
 
 
-@edmp.register_hook(synchronize=False)
-def context_handler():
-    """
-    Gets current context.
-    """
-
-    return context
-
-
 @edmp.register_hook(synchronize=False)  # Prevents lockup while waiting on data ready interrupt
-def interrupt_read_handler(cmd, *args):
+def interrupt_query_handler(cmd, *args, **kwargs):
 
     # Wait for data ready interrupt if not already set
-    if not interrupt_event.wait(timeout=.2):
+    if not interrupt_event.wait(timeout=2/conn._data_rate):
         context["interrupt"]["timeout"] += 1
 
     interrupt_event.clear()
     context["interrupt"]["total"] += 1
 
     # Perform a normal data read
-    res = query_handler(cmd, *args)
-
-    context[res["_type"]] = res
-
-    return res
+    return query_handler(cmd, *args, **kwargs)
 
 
-def start(mma8x5x_conn, workers, **kwargs):
+@edmp.register_hook(synchronize=False)
+def alternating_readout_returner(message, result):
+    """
+    Returns alternating/changed values to configured Salt returner module.
+    """
+
+    # TODO: Move this function to 'messaging.py' and make it reusable?
+
+    if "error" in result:
+        return
+
+    if not "_type" in result:
+        log.warn("Skipping result without any type: {:}".format(result))
+
+        return
+
+    ctx = context["readout"]
+
+    old_read = ctx.get(result["_type"], None)
+    new_read = result
+
+    # Update context with new read result
+    ctx[result["_type"]] = result
+
+    # Check if value is unchanged
+    if old_read != None and old_read == new_read:
+        return
+
+    # Call Salt returner module
+    returner_func(new_read, "acc")
+
+
+def start(mma8x5x_conn, returner, workers, **kwargs):
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting accelerometer manager")
+
+        # Prepare returner function
+        global returner_func
+        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Setup interrupt GPIO pin
         gpio.setmode(gpio.BOARD)
