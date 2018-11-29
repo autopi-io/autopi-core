@@ -74,7 +74,7 @@ def try_eval(val):
         return val.lower() in ["true", "yes"]
 
     try:
-       return eval(val)
+       return eval(val, {"__builtins__": None}, {})
     except:
         return val
 
