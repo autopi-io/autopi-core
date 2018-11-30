@@ -428,12 +428,38 @@ class MMA8X5XConn(I2CConn):
 
     def offset(self, x=None, y=None, z=None):
         """
-        Set user offset correction.
+        Set user offset correction in mg.
         Offset correction register will be erased after accelerometer reset.
         """
 
-        # TODO
-        pass
+        if x != None and not -.256 <= x <= .254:
+            raise ValueError("X axis offset must be between -0.256g and 0.254g")
+        if y != None and not -.256 <= y <= .254:
+            raise ValueError("Y axis offset must be between -0.256g and 0.254g")
+        if z != None and not -.256 <= z <= .254:
+            raise ValueError("Z axis offset must be between -0.256g and 0.254g")
+
+        if x != None or y != None or z != None:
+            self._require_standby_mode()
+
+        ret = {}
+
+        if x != None:
+            self.write(OFF_X, int(x * 1000 / 2))
+
+        if y != None:
+            self.write(OFF_Y, int(y * 1000 / 2))
+
+        if z != None:
+            self.write(OFF_Z, int(z * 1000 / 2))
+
+        res = self.read(OFF_X, length=3)
+
+        ret["x"] = self._signed_int(res[0]) * 2 / 1000
+        ret["y"] = self._signed_int(res[1]) * 2 / 1000
+        ret["z"] = self._signed_int(res[2]) * 2 / 1000
+
+        return ret
 
     def intr_status(self):
         """

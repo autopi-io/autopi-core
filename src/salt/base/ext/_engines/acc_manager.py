@@ -92,12 +92,15 @@ def interrupt_query_handler(cmd, *args, **kwargs):
 
 
 @edmp.register_hook()
-def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, use_interrupt=False, file=None):
+def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, interrupt_driven=False, file=None):
     """
     Dumps raw XYZ readings to screen or file.
     """
 
     # Validate input
+    if duration > 300:
+        raise ValueError("Maximum duration is 300 seconds")
+
     if duration * rate > 100 and file == None:
         raise ValueError("Too much data to return - please adjust parameters 'duration' and 'rate' or instead specify a file to write to")
 
@@ -111,7 +114,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
         "decimals": decimals,
     }
 
-    if use_interrupt:
+    if interrupt_driven:
         ret["interrupt_timeouts"] = 0
 
     data = []
@@ -137,7 +140,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
         stop = start + duration
         while timer() < stop:
 
-            if use_interrupt:
+            if interrupt_driven:
 
                 # Wait for data ready interrupt if not already set
                 if not interrupt_event.wait(timeout=2/conn._data_rate):
