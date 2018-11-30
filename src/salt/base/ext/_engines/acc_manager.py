@@ -1,12 +1,17 @@
+import datetime
 import gpio_pin
 import inspect
+import json
 import logging
+import os
 import RPi.GPIO as gpio
 import salt.loader
 import threading
 
+from common_util import abs_file_path
 from messaging import EventDrivenMessageProcessor
 from mma8x5x_conn import MMA8X5XConn
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
@@ -73,6 +78,8 @@ def query_handler(cmd, *args, **kwargs):
 @edmp.register_hook(synchronize=False)  # Prevents lockup while waiting on data ready interrupt
 def interrupt_query_handler(cmd, *args, **kwargs):
 
+    # TODO: Improve performance by using internal FIFO data buffer
+
     # Wait for data ready interrupt if not already set
     if not interrupt_event.wait(timeout=2/conn._data_rate):
         context["interrupt"]["timeout"] += 1
@@ -82,6 +89,100 @@ def interrupt_query_handler(cmd, *args, **kwargs):
 
     # Perform a normal data read
     return query_handler(cmd, *args, **kwargs)
+
+
+@edmp.register_hook()
+def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, use_interrupt=False, file=None):
+    """
+    Dumps raw XYZ readings to screen or file.
+    """
+
+    # Validate input
+    if duration * rate > 100 and file == None:
+        raise ValueError("Too much data to return - please adjust parameters 'duration' and 'rate' or instead specify a file to write to")
+
+    file_path = abs_file_path(file, "/opt/autopi/acc", ext="json") if file != None else None
+    if file_path != None and os.path.isfile(file_path):
+        raise ValueError("File already exists: {:}".format(file_path)) 
+
+    ret = {
+        "range": range,
+        "rate": rate,
+        "decimals": decimals,
+    }
+
+    if use_interrupt:
+        ret["interrupt_timeouts"] = 0
+
+    data = []
+
+    # Remember settings to restore when done
+    orig_range = conn._range
+    orig_rate = conn._data_rate
+
+    try:
+
+        # Play sound to indicate recording has begun
+        if sound:
+            __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
+
+        # Apply specified settings
+        conn.config({
+            "range": range,
+            "data_rate": rate,
+        })
+
+        # Run for specified duration
+        start = timer()
+        stop = start + duration
+        while timer() < stop:
+
+            if use_interrupt:
+
+                # Wait for data ready interrupt if not already set
+                if not interrupt_event.wait(timeout=2/conn._data_rate):
+                    ret["interrupt_timeouts"] += 1
+
+                interrupt_event.clear()
+
+            res = conn.xyz(decimals=decimals)
+            if timestamp:
+                res["_stamp"] = datetime.datetime.utcnow().isoformat()
+
+            data.append(res)
+
+        ret["duration"] = timer() - start
+        ret["samples"] = len(data)
+
+    finally:
+
+        # Restore original settings
+        conn.config({
+            "range": orig_range,
+            "data_rate": orig_rate,
+        })
+
+        # Play sound to indicate recording has ended
+        if sound:
+            __salt__["cmd.run"]("aplay /opt/autopi/audio/beep.wav")
+
+    # Write data to file if requested
+    if file_path != None:
+
+        # Ensure folders are created
+        __salt__["file.mkdir"](os.path.dirname(file_path))
+
+        with open(file_path, "w") as f:
+            res = ret.copy()
+            res["data"] = data
+
+            json.dump(res, f, indent=4)
+
+            ret["file"] = f.name
+    else:
+        ret["data"] = data
+
+    return ret
 
 
 @edmp.register_hook(synchronize=False)

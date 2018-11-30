@@ -1,4 +1,5 @@
 import logging
+import os
 
 
 log = logging.getLogger(__name__)
@@ -31,4 +32,15 @@ def dict_filter(items, key_func=None):
 
 def dict_key_by_value(dic, val):
     kv = { k: v for k, v in dic.items() if v == val }
+    if not kv:
+        raise ValueError("Value {:} is not available - valid options are: {:}".format(val, ", ".join(str(v) for v in dic.values())))
+
     return next(iter(kv))
+
+
+def abs_file_path(name, fallback_folder, ext=None):
+        ret = name if os.path.isabs(name) else os.path.join(fallback_folder, name)
+        if ext and not ret.endswith(".{:}".format(ext)):
+            ret += ".{:}".format(ext)
+
+        return ret

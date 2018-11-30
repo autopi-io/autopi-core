@@ -249,7 +249,10 @@ class MMA8X5XConn(I2CConn):
         super(MMA8X5XConn, self).setup(settings)
 
         self._data_bits = settings.get("data_bits", self._data_bits)
-        
+
+        self.config(settings)
+
+    def config(self, settings):
         try:
             self.active(value=False)
 
@@ -266,7 +269,7 @@ class MMA8X5XConn(I2CConn):
 
         finally:
             self.active(value=True)
-    
+
     def mode(self):
         """
         Indicates the current device operating mode.
@@ -304,9 +307,7 @@ class MMA8X5XConn(I2CConn):
         Read and calculate accelerometer data.
         """
 
-        ret = {
-            "range": self._range
-        }
+        ret = {}
 
         bytes = self.read(OUT_X_MSB, length=6)
         words = self._concat_bytes(bytes, bits=self._data_bits)

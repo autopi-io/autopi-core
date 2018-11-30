@@ -34,6 +34,14 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(msg_pack(cmd, *args, **kwargs))
 
 
+def dump(**kwargs):
+    """
+    Dumps raw XYZ readings to screen or file.
+    """
+
+    return client.send_sync(msg_pack(_handler="dump", **kwargs))
+
+
 def context(**kwargs):
     """
     Gets current context.

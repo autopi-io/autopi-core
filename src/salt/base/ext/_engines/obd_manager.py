@@ -9,6 +9,7 @@ import os
 import psutil
 import salt.loader
 
+from common_util import abs_file_path
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
 from timeit import default_timer as timer
@@ -220,7 +221,8 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
 
     # Write result to file if specified
     if file != None:
-        path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
+        path = abs_file_path(file, "/opt/autopi/obd")
+
         __salt__["file.mkdir"](os.path.dirname(path))
 
         protocol = conn.protocol()
