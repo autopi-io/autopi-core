@@ -29,6 +29,15 @@ def help():
 def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwargs):
     """
     Queries a given OBD command.
+
+    To see supported OBD commands for your vehicle run: obd.commands
+
+    Examples:
+        obd.query RPM
+        obd.query SPEED
+        obd.query FUEL_LEVEL force=True
+        obd.query custom_intake_temp_raw mode=01 pid=0F 
+        obd.query custom_intake_temp     mode=01 pid=0F decoder=temp
     """
 
     return client.send_sync(msg_pack(cmd, mode=mode, pid=pid, bytes=bytes, decoder=decoder, force=force, **kwargs))
