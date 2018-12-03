@@ -96,6 +96,13 @@ def dtc(clear=False, **kwargs):
 def dump(**kwargs):
     """
     Dumps all messages from OBD bus to screen or file.
+
+    Optional arguments:
+        duration (int): How many seconds to record data? Default value is 2 seconds.
+        file (str): Write data to a file with the given name.
+        description (str): Additional description to the file.
+        protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
+        baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
     """
 
     return client.send_sync(msg_pack(_handler="dump", **kwargs))
@@ -111,7 +118,32 @@ def recordings(**kwargs):
 
 def play(file, **kwargs):
     """
-    Plays all messages from file on the OBD bus.
+    Plays all messages from a file on the OBD bus.
+
+    Arguments:
+        file (str): Path to file recorded with the 'obd.dump' command.
+
+    Optional arguments:
+        delay (float): Delay in seconds between sending each message. Default value is 0.
+        slice (str): Slice the list of messages before sending on the CAN bus. Based one the divide and conquer algorithm. Multiple slice characters can be specified in continuation of each other.
+            Acceptable values:
+              t: Top half of remaining result.
+              b: Bottom half of remaining result.
+        filter (str): Filter out messages before sending on the CAN bus. Multiple filters can be specified if separated using comma characters.
+            Acceptable values:
+                +[id][#][data]: Include only messages matching string.
+                -[id][#][data]: Exclude messages matching string.
+                +duplicate: Include only messages where duplicates exist.
+                -duplicate: Exclude messages where duplicates exist.
+                +mutate: Include only messages where data mutates.
+                -mutate: Exclude messages where data mutates.
+        group (str): How to group the result of sent messages. This only affects the display values returned from this command. Default value is 'id'.
+            Acceptable values:
+                id: Group by message ID only.
+                msg: Group by entire message string.
+        protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
+        baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+        test (bool): Run command in test-only (dry-run) mode. No data will be sent on CAN bus. Default value is False.
     """
 
     return client.send_sync(msg_pack(file, _handler="play", **kwargs))

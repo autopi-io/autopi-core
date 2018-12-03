@@ -29,6 +29,8 @@ def help():
 def query(cmd, *args, **kwargs):
     """
     Queries a given accelerometer command.
+
+    Example: acc.query active value=False
     """
 
     return client.send_sync(msg_pack(cmd, *args, **kwargs))
@@ -37,6 +39,16 @@ def query(cmd, *args, **kwargs):
 def dump(**kwargs):
     """
     Dumps raw XYZ readings to screen or file.
+
+    Optional arguments:
+        duration (int): How many seconds to record data? Default value is 1.
+        file (str): Write data to a file with the given name.
+        range (int): Maximum number of g-forces being measured. Default value is 8.
+        rate (float): How many Hz (samples per second)? Default value is 50.
+        decimals (int): How many decimals to calculate? Default value is 4.
+        timestamp (bool): Add timestamp to each sample? Default value is True.
+        sound (bool): Play sound when starting and stopping recording? Default value is True.
+        interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is False.
     """
 
     return client.send_sync(msg_pack(_handler="dump", **kwargs))
