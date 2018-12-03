@@ -572,8 +572,9 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Configure connection
-        conn.setup(serial_conn)
+        conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
+        conn.setup(serial_conn)
 
         # Initialize and run message processor
         edmp.init(__opts__, workers=workers)

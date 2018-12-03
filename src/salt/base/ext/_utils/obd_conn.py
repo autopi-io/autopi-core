@@ -38,6 +38,7 @@ class OBDConn(object):
 
         self.is_permanently_closed = False
 
+        self.on_status = None
         self.on_closing = None
         self.on_closed = None
 
@@ -69,9 +70,10 @@ class OBDConn(object):
 
         log.debug("Opening OBD connection")
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX)
+            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX, status_callback=self._status_callback)
 
             return self
+
         except Exception:
             log.exception("Failed to open OBD connection")
 
@@ -230,3 +232,19 @@ class OBDConn(object):
 
         # Format messages
         return [l.replace(" ", "#", 1).replace(" ", "") for l in self._obd.interface.monitor_all(**kwargs)]
+
+    def _status_callback(self, status, **kwargs):
+        if self.on_status:
+            try:
+                data = {}
+
+                if "protocol" in kwargs:
+                    data["protocol"] = kwargs["protocol"].ID
+                    data["autodetected"] = kwargs["protocol"].autodetected
+
+                self.on_status(status, data)
+            except:
+                log.exception("Error in 'on_status' event handler")
+
+
+
