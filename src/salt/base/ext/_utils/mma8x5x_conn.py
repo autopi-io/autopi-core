@@ -430,6 +430,9 @@ class MMA8X5XConn(I2CConn):
         """
         Set user offset correction in mg.
         Offset correction register will be erased after accelerometer reset.
+
+        TODO: This function needs to be tested more.
+        TODO: Offset might need to be adjusted according to current range?
         """
 
         if x != None and not -.256 <= x <= .254:
@@ -445,13 +448,22 @@ class MMA8X5XConn(I2CConn):
         ret = {}
 
         if x != None:
-            self.write(OFF_X, int(x * 1000 / 2))
+            self.write(OFF_X, self._signed_int(int(x * 1000 / 2)))
+
+            # Also seems to work:
+            #self.write(OFF_X, int(x * 1000 / 2))
 
         if y != None:
-            self.write(OFF_Y, int(y * 1000 / 2))
+            self.write(OFF_Y, self._signed_int(int(y * 1000 / 2)))
+
+            # Also seems to work:
+            #self.write(OFF_Y, int(y * 1000 / 2))
 
         if z != None:
-            self.write(OFF_Z, int(z * 1000 / 2))
+            self.write(OFF_Z, self._signed_int(int(z * 1000 / 2)))
+
+            # Also seems to work:
+            #self.write(OFF_Z, int(z * 1000 / 2))
 
         res = self.read(OFF_X, length=3)
 

@@ -134,24 +134,46 @@ class I2CConn(object):
         return byte
 
     def _update_bits(self, byte, mask, value):
+
         # First clear the bits indicated by the mask
         byte &= ~mask
+
+        # Then set the bits indicated by the value
         if value:
-            # Then set the bits indicated by the value
             byte |= value
 
         return byte
 
     def _concat_bytes(self, bytes, bits=10):
         words = []
+
         for idx in range(0, len(bytes), 2): # Only loop on even numbers
+
             # Concat bytes
             word = bytes[idx] << 8 | bytes[idx + 1]
+
             # Shorten word to match specified bit length
             word = word >> 16 - bits
             words.append(word)
+
         return words
 
     def _signed_int(self, word, bits=8):
-        # Calculate signed integer value
-        return word - (word >> bits-1) * pow(2, bits)
+        """
+        Calculate signed integer as a two's complement number.
+
+        Examples:
+
+            127  -> 127
+            1    -> 1
+            0    -> 0
+            255  -> -1
+            128  -> -128
+
+            127  -> 127 (01111111)
+            1    -> 1   (00000001)
+            -1   -> 255 (11111111)
+            -128 -> 128 (10000000)
+        """
+
+        return word - (word >> bits-1) * (2 ** bits)
