@@ -28,9 +28,15 @@ def help():
 
 def query(cmd, *args, **kwargs):
     """
-    Queries a given accelerometer command.
+    Queries a given accelerometer command. For additional help run: acc.query help
 
-    Example: acc.query active value=False
+    Examples:
+        acc.query status
+        acc.query xyz
+        acc.query active value=False
+        acc.range value=4
+        acc.data_rate value=12.5
+        acc.offset x=0.1 y=-0.1 z=0
     """
 
     return client.send_sync(msg_pack(cmd, *args, **kwargs))
