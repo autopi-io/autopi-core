@@ -28,7 +28,9 @@ def help():
 
 def query(cmd, *args, **kwargs):
     """
-    Queries a given accelerometer command. For additional help run: acc.query help
+    Queries a given accelerometer command.
+
+    For additional help run: acc.query help
 
     Examples:
         acc.query status
