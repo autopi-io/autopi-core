@@ -191,7 +191,7 @@ minion:
                 kwargs:
                   force: True
                 returner: alternating_value
-    - mma8x5x_manager:
+    - acc_manager:
         i2c_conn:
           port: 1
           address: 0x1c

@@ -1,4 +1,4 @@
-import mma8x5x_helper as mma8x5x
+import mma8x5x_conn as mma8x5x
 
 
 def signed_int_alt(word, bits=10):
