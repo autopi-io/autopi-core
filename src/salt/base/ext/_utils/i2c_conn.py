@@ -84,7 +84,8 @@ class I2CConn(object):
     def read_byte(self, register):
         byte = self._bus.read_byte_data(self._address, register)
 
-        log.info("Read register {:d}: {:08b}".format(register, byte))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Read register {:d}: {:08b}".format(register, byte))
 
         return byte
 
@@ -117,7 +118,8 @@ class I2CConn(object):
     def write(self, register, byte):
         self._bus.write_byte_data(self._address, register, byte)
 
-        log.info("Wrote register {:d}: {:08b}".format(register, byte))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Wrote register {:d}: {:08b}".format(register, byte))
 
         if self.on_written:
             self.on_written(register, byte)
@@ -126,7 +128,9 @@ class I2CConn(object):
     def read_write(self, register, mask, value):
         byte = self.read_byte.undecorated(self, register)
 
-        log.info("Updating byte {:08b} using mask {:d} and value {:d}".format(byte, mask, value))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Updating byte {:08b} using mask {:d} and value {:d}".format(byte, mask, value))
+
         byte = self._update_bits(byte, mask, value)
 
         self.write.undecorated(self, register, byte)
