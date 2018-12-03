@@ -636,4 +636,4 @@ class MMA8X5XConn(I2CConn):
     def _calc_g(self, word, decimals=4):
         s_int = self._signed_int(word, bits=self._data_bits)
         div = pow(2, self._data_bits - 1) / self._range
-        return round(s_int / div, decimals)
+        return round(s_int / div, decimals) + 0  # Adding zero will prevent '-0.0'
