@@ -65,7 +65,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Ensure protocol if given
-    if protocol:
+    if protocol and protocol != str(None):  # Also support empty value from pillar
         conn.ensure_protocol(protocol, baudrate=baudrate)
 
     # Check if command is supported

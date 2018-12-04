@@ -695,8 +695,6 @@ def msg_pack(*args, **kwargs):
         msg["args"] = args
     if kwargs:
         for k, v in kwargs.iteritems():
-            if v == None:
-                continue
             if k.startswith("__"):  # Filter out Salt params (__pub_*)
                 continue
 

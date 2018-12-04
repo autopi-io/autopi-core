@@ -88,7 +88,7 @@ def battery(**kwargs):
     Gets current battery voltage
     """
 
-    return client.send_sync(msg_pack("ELM_VOLTAGE", force=True, _converter="battery", **kwargs))
+    return client.send_sync(msg_pack("ELM_VOLTAGE", protocol=None, force=True, _converter="battery", **kwargs))
 
 
 def dtc(clear=False, **kwargs):
