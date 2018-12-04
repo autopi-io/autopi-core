@@ -70,7 +70,7 @@ class OBDConn(object):
 
         log.debug("Opening OBD connection")
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX, status_callback=self._status_callback)
+            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX, status_callback=self._status_callback, fast=False)
 
             return self
 
