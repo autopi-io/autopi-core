@@ -1,6 +1,6 @@
 import logging
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 log = logging.getLogger(__name__)
@@ -26,7 +26,7 @@ def cache(cmd, *args, **kwargs):
 
     kwargs["_handler"] = "cache"
 
-    return client.send_sync(msg_pack(cmd, *args, **kwargs))
+    return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
 def upload(**kwargs):
@@ -34,7 +34,7 @@ def upload(**kwargs):
     Upload cached data to cloud.
     """
 
-    return client.send_sync(msg_pack(_handler="upload", **kwargs))
+    return client.send_sync(_msg_pack(_handler="upload", **kwargs))
 
 
 def upload_batch():
@@ -53,7 +53,7 @@ def status(**kwargs):
     Get current status.
     """
 
-    return client.send_sync(msg_pack(_handler="status", **kwargs))
+    return client.send_sync(_msg_pack(_handler="status", **kwargs))
 
 
 def manage(*args, **kwargs):
@@ -63,4 +63,4 @@ def manage(*args, **kwargs):
       - 'spm.manage worker list *'  Lists all existing worker threads.
     """
 
-    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

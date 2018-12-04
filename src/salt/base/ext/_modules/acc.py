@@ -1,6 +1,6 @@
 import logging
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 __virtualname__ = "acc"
@@ -41,7 +41,7 @@ def query(cmd, *args, **kwargs):
         acc.offset x=0.1 y=-0.1 z=0
     """
 
-    return client.send_sync(msg_pack(cmd, *args, **kwargs))
+    return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
 def dump(**kwargs):
@@ -59,7 +59,7 @@ def dump(**kwargs):
         interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is False.
     """
 
-    return client.send_sync(msg_pack(_handler="dump", **kwargs))
+    return client.send_sync(_msg_pack(_handler="dump", **kwargs))
 
 
 def context(**kwargs):
@@ -67,7 +67,7 @@ def context(**kwargs):
     Gets current context.
     """
 
-    return client.send_sync(msg_pack(_handler="context", **kwargs))
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
 
 
 def manage(*args, **kwargs):
@@ -75,4 +75,4 @@ def manage(*args, **kwargs):
     Example: acc.manage worker list *
     """
 
-    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

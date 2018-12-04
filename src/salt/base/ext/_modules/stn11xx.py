@@ -3,7 +3,7 @@ import parsing
 import re
 import salt.exceptions
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 # Define the module's virtual name
@@ -49,7 +49,7 @@ def _execute(cmd, **kwargs):
     Private helper function to execute commands.
     """
 
-    res = client.send_sync(msg_pack(cmd, _handler="execute", **kwargs))
+    res = client.send_sync(_msg_pack(cmd, _handler="execute", **kwargs))
 
     if not "value" in res and not "values" in res:
         raise salt.exceptions.CommandExecutionError(

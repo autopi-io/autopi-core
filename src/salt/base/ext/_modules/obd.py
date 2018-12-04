@@ -1,6 +1,6 @@
 import logging
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 __virtualname__ = "obd"
@@ -40,7 +40,7 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
         obd.query custom_intake_temp     mode=01 pid=0F decoder=temp
     """
 
-    return client.send_sync(msg_pack(cmd, mode=mode, pid=pid, bytes=bytes, decoder=decoder, force=force, **kwargs))
+    return client.send_sync(_msg_pack(cmd, mode=mode, pid=pid, bytes=bytes, decoder=decoder, force=force, **kwargs))
 
 
 def commands(**kwargs):
@@ -48,7 +48,7 @@ def commands(**kwargs):
     Lists all supported OBD commands found for vehicle.
     """
 
-    return client.send_sync(msg_pack(_handler="commands", **kwargs))
+    return client.send_sync(_msg_pack(_handler="commands", **kwargs))
 
 
 def protocol(**kwargs):
@@ -56,7 +56,7 @@ def protocol(**kwargs):
     Configures protocol or lists all supported.
     """
 
-    return client.send_sync(msg_pack(_handler="protocol", **kwargs))
+    return client.send_sync(_msg_pack(_handler="protocol", **kwargs))
 
 
 def send(msg, **kwargs):
@@ -64,7 +64,7 @@ def send(msg, **kwargs):
     Sends a raw message on bus.
     """
 
-    return client.send_sync(msg_pack(str(msg), _handler="send", **kwargs))
+    return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
 
 
 def execute(cmd, **kwargs):
@@ -72,7 +72,7 @@ def execute(cmd, **kwargs):
     Executes an AT/ST command.
     """
 
-    return client.send_sync(msg_pack(str(cmd), _handler="execute", **kwargs))
+    return client.send_sync(_msg_pack(str(cmd), _handler="execute", **kwargs))
 
 
 def status(**kwargs):
@@ -80,7 +80,7 @@ def status(**kwargs):
     Gets current connection status and more.
     """
 
-    return client.send_sync(msg_pack(_handler="status", **kwargs))
+    return client.send_sync(_msg_pack(_handler="status", **kwargs))
 
 
 def battery(**kwargs):
@@ -88,7 +88,7 @@ def battery(**kwargs):
     Gets current battery voltage
     """
 
-    return client.send_sync(msg_pack("ELM_VOLTAGE", protocol=None, force=True, _converter="battery", **kwargs))
+    return client.send_sync(_msg_pack("ELM_VOLTAGE", protocol=None, force=True, _converter="battery", **kwargs))
 
 
 def dtc(clear=False, **kwargs):
@@ -114,7 +114,7 @@ def dump(**kwargs):
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
     """
 
-    return client.send_sync(msg_pack(_handler="dump", **kwargs))
+    return client.send_sync(_msg_pack(_handler="dump", **kwargs))
 
 
 def recordings(**kwargs):
@@ -122,7 +122,7 @@ def recordings(**kwargs):
     Lists all dumped recordings available on disk.
     """
 
-    return client.send_sync(msg_pack(_handler="recordings", **kwargs))
+    return client.send_sync(_msg_pack(_handler="recordings", **kwargs))
 
 
 def play(file, **kwargs):
@@ -155,7 +155,7 @@ def play(file, **kwargs):
         test (bool): Run command in test-only (dry-run) mode. No data will be sent on CAN bus. Default value is False.
     """
 
-    return client.send_sync(msg_pack(file, _handler="play", **kwargs))
+    return client.send_sync(_msg_pack(file, _handler="play", **kwargs))
 
 
 def manage(*args, **kwargs):
@@ -163,5 +163,5 @@ def manage(*args, **kwargs):
     Example: obd.manage worker list *
     """
 
-    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
 
