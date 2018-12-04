@@ -36,7 +36,8 @@ obd-test:
 
 acc-test:
   module.run:
-    - name: acc.xyz
+    - name: acc.query
+    - cmd: xyz
 
 rpi-test:
   module.run:

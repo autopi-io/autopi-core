@@ -525,7 +525,7 @@ def _rpm_listener(result):
 
         # Trigger event
         edmp.trigger_event({},
-            "engine/{:s}".format(ctx["state"]))
+            "vehicle/engine/{:s}".format(ctx["state"]))
 
 
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "bat")
@@ -552,8 +552,8 @@ def _battery_listener(result):
         # Trigger only event if battery state (in tag) and/or level (in data) has changed
         edmp.trigger_event(
             {"level": result["level"]} if result["state"] in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE] else {},
-            "battery/{:s}".format(result["state"]),
-            skip_duplicates_filter="battery/*"
+            "vehicle/battery/{:s}".format(result["state"]),
+            skip_duplicates_filter="vehicle/battery/*"
         )
 
 

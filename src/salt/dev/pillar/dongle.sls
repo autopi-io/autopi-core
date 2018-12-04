@@ -90,7 +90,7 @@ minion:
                   - cloud.returner_event
                   - $event
           # Reset sleep timer when engine is running
-          - regex: ^engine/running
+          - regex: ^vehicle/engine/running
             actions:
               - handler: module_direct
                 args:
@@ -98,7 +98,7 @@ minion:
                 kwargs:
                   enable: False
           # Set sleep timer when engine is stopped
-          - regex: ^engine/stopped
+          - regex: ^vehicle/engine/stopped
             actions:
               - handler: module_direct
                 args:
@@ -109,7 +109,7 @@ minion:
                   interval: 3600
                   reason: engine_stopped
           # Set sleep timer when powered on after sleep
-          - regex: ^power/on
+          - regex: ^system/power/on
             condition: $event["data"]["trigger"] == "timer"
             actions:
               - handler: module_direct
@@ -121,7 +121,7 @@ minion:
                   interval: 3600
                   reason: inactivity
           # Upload data to cloud before going to sleep
-          - regex: ^power/(sleep|reboot)
+          - regex: ^system/power/(sleep|reboot)
             actions:
               - handler: module
                 args:

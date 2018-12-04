@@ -220,7 +220,7 @@ def _position_listener(result):
 
         # Trigger event
         edmp.trigger_event({},
-            "position/{:s}".format(ctx["state"]))
+            "vehicle/position/{:s}".format(ctx["state"]))
 
 
 def start(serial_conn, returner, workers, **kwargs):

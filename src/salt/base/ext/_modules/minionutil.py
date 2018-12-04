@@ -79,7 +79,7 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
             __salt__["event.fire"]({
                     "reason": reason
                 },
-                "minion/restart"
+                "system/minion/restart"
             )
 
             # Give some time for event to get cached
@@ -188,7 +188,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
             __salt__["event.fire"]({
                     "id": new["id"]
                 },
-                "release/{:}".format(new["state"])
+                "system/release/{:}".format(new["state"])
             )
 
             # Ensure dynamic modules are updated (refresh of modules is done in highstate)
@@ -226,7 +226,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
             __salt__["event.fire"]({
                     "id": new["id"]
                 },
-                "release/{:}".format(new["state"])
+                "system/release/{:}".format(new["state"])
             )
 
         finally:

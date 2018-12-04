@@ -121,7 +121,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     # Set accelerometer in standby mode
     if acc_off:
         try:
-            __salt__["acc.active"](enable=False)
+            __salt__["acc.query"]("active", value=False)
         except:
             log.exception("Failed to put accelerometer into standby mode")
 
@@ -146,7 +146,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
             "interval": interval,
             "reason": reason
         },
-        "power/{:}".format("sleep" if interval > 0 else "hibernate")
+        "system/power/{:}".format("sleep" if interval > 0 else "hibernate")
     )
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
@@ -242,7 +242,7 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
             __salt__["event.fire"]({
                     "reason": reason
                 },
-                "power/reboot"
+                "system/power/reboot"
             )
 
             # TODO: Delay reboot 10 secs to allow cloud upload of above event
