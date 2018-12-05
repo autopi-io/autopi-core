@@ -144,7 +144,8 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     __salt__["event.fire"]({
             "delay": delay,
             "interval": interval,
-            "reason": reason
+            "reason": reason,
+            "uptime": __salt__["status.uptime"]()["seconds"]
         },
         "system/power/{:}".format("sleep" if interval > 0 else "hibernate")
     )
@@ -240,7 +241,8 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
 
             # Fire a reboot event
             __salt__["event.fire"]({
-                    "reason": reason
+                    "reason": reason,
+                    "uptime": __salt__["status.uptime"]()["seconds"]
                 },
                 "system/power/reboot"
             )
