@@ -35,7 +35,7 @@ context = {
         "recurrences": 0,
         "recurrence_thresholds": {
             "*": 3,  # Default is three repetitions
-            battery_util.CRITICAL_LEVEL_STATE: 300
+            battery_util.CRITICAL_LEVEL_STATE: 180
         },
         "critical_limit": 0
     },
