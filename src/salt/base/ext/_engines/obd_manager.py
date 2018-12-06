@@ -532,7 +532,7 @@ def _rpm_listener(result):
     # Check if state has chaged since last known state
     old_state = ctx["state"]
     new_state = "running" if result.get("value", 0) > 0 else \
-                    ("stopped" if old_state == "running" else "not_running") 
+                    ("stopped" if old_state in ["stopped", "running"] else "not_running")
     if old_state != new_state:
         ctx["state"] = new_state
 
