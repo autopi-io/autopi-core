@@ -104,6 +104,7 @@ class OBDConn(object):
                 log.exception("Error in 'on_closing' event handler")
 
         self.is_permanently_closed = permanent
+        self.on_status = None  # We do not want any more status updates
 
         self._obd.close()
         self._obd = None
