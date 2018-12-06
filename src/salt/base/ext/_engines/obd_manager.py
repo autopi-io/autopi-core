@@ -10,6 +10,7 @@ import psutil
 import salt.loader
 
 from common_util import abs_file_path
+from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
 from timeit import default_timer as timer
@@ -48,6 +49,10 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
     Queries an OBD command.
     """
 
+    ret = {
+        "_type": name.lower()
+    }
+
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
 
@@ -66,7 +71,20 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
 
     # Ensure protocol if given
     if protocol and protocol != str(None):  # Also support empty value from pillar
-        conn.ensure_protocol(protocol, baudrate=baudrate)
+
+        # We do not want to break workflow upon failure because then listeners will not get called
+        try:
+            conn.ensure_protocol(protocol, baudrate=baudrate)
+        except OBDError as err:
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Failed to ensure protocol: %s", str(err))
+
+            # IMPORTANT: By returning error result the RPM listener function will still get called for RPM results
+            #            and thus always trigger appropriate engine event
+            ret["error"] = str(err)
+
+            return ret
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
@@ -76,12 +94,6 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
-
-    # Prepare return value
-    ret = {
-        "_type": cmd.name.lower(),
-        "value": None
-    }
 
     # Unpack command result
     if not res.is_null():
@@ -449,7 +461,7 @@ def battery_converter(result):
     Enriches a voltage reading result with battery charge state and level.
     """
 
-    voltage = result["value"]
+    voltage = result.get("value", None)
     ret = {
         "_type": "bat",
         "level": battery_util.charge_percentage_for(voltage),
@@ -469,9 +481,8 @@ def dtc_converter(res):
     if res.get("_type", None) != "get_dtc":
         raise Exception("Unable to convert as DTC result: {:}".format(res))
 
-    if "value" in res:
-        res["_type"] = "dtc"
-        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
+    res["_type"] = "dtc"
+    res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value", None) or []]
 
     return res
 
@@ -482,6 +493,7 @@ def alternating_value_returner(message, result):
     Returns alternating/changed values to configured Salt returner module.
     """
 
+    # Skip failed results
     if "error" in result:
         return
 
@@ -519,7 +531,7 @@ def _rpm_listener(result):
 
     # Check if state has chaged since last known state
     old_state = ctx["state"]
-    new_state = "running" if result["value"] > 0 else "stopped"
+    new_state = "running" if result.get("value", 0) > 0 else "stopped"
     if old_state != new_state:
         ctx["state"] = new_state
 
