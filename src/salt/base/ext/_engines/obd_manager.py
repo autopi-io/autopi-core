@@ -43,6 +43,15 @@ context = {
 }
 
 
+@edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
+
+
 @edmp.register_hook()
 def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, force=False):
     """
@@ -176,6 +185,37 @@ def commands_handler(mode=None):
 
 
 @edmp.register_hook()
+def status_handler():
+    """
+    Gets current status information.
+    """
+
+    ret = {
+        "connection": conn.status(),
+        "protocol": conn.protocol(),
+    }
+
+    return ret
+
+
+@edmp.register_hook()
+def connection_handler(baudrate=None, reset=None):
+    """
+    Manages connection.
+    """
+
+    if baudrate != None:
+        conn.change_baudrate(baudrate)
+
+    if reset:
+        conn.reset(mode=reset)
+
+    ret = conn.status()
+
+    return ret
+
+
+@edmp.register_hook()
 def protocol_handler(set=None, baudrate=None):
     """
     Configures protocol or lists all supported.
@@ -190,23 +230,6 @@ def protocol_handler(set=None, baudrate=None):
         conn.change_protocol(set, baudrate=baudrate)
 
     ret["current"] = conn.protocol()
-
-    return ret
-
-
-@edmp.register_hook()
-def status_handler(reset=None):
-    """
-    Gets current connection status and more.
-    """
-
-    if reset:
-        conn.reset(mode=reset)
-
-    ret = {
-        "connection": conn.status(),
-        "context": context
-    }
 
     return ret
 

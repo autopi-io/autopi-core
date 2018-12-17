@@ -51,9 +51,44 @@ def commands(**kwargs):
     return client.send_sync(_msg_pack(_handler="commands", **kwargs))
 
 
+def status(**kwargs):
+    """
+    Gets current status information.
+    """
+
+    return client.send_sync(_msg_pack(_handler="status", **kwargs))
+
+
+def connection(**kwargs):
+    """
+    Manages current connection.
+
+    Optional arguments:
+        baudrate (int): Changes baudrate used to communicate with interface.
+        reset (str): Reboots interface and re-initializes connection. 
+
+    Examples:
+        obd.connection
+        obd.connection baudrate=1152000
+        obd.connection reset=True
+    """
+
+    return client.send_sync(_msg_pack(_handler="connection", **kwargs))
+
+
 def protocol(**kwargs):
     """
     Configures protocol or lists all supported.
+
+    Optional arguments:
+        set (str): Change to protocol with given identifier.
+        baudrate (int): Use custom protocol baudrate. 
+
+    Examples:
+        obd.protocol
+        obd.protocol set=auto
+        obd.protocol set=6
+        obd.connection set=53 baudrate=250000
     """
 
     return client.send_sync(_msg_pack(_handler="protocol", **kwargs))
@@ -75,12 +110,12 @@ def execute(cmd, **kwargs):
     return client.send_sync(_msg_pack(str(cmd), _handler="execute", **kwargs))
 
 
-def status(**kwargs):
+def context(**kwargs):
     """
-    Gets current connection status and more.
+    Gets current context.
     """
 
-    return client.send_sync(_msg_pack(_handler="status", **kwargs))
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
 
 
 def battery(**kwargs):

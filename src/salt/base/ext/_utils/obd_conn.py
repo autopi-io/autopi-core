@@ -124,8 +124,7 @@ class OBDConn(object):
             "serial": {
                 "port": serial.portstr,
                 "baudrate": serial.baudrate,
-            },
-            "protocol": self.protocol.undecorated(self)  # No need to call the 'ensure_open' decorator again
+            }
         }
 
     @Decorators.ensure_open
