@@ -128,8 +128,8 @@ class OBDConn(object):
         }
 
     @Decorators.ensure_open
-    def protocol(self):
-        protocol = self._obd.protocol()
+    def protocol(self, **kwargs):
+        protocol = self._obd.protocol(**kwargs)
 
         return {
             "id": protocol.ID,
@@ -172,12 +172,13 @@ class OBDConn(object):
         ident = str(ident).upper()
 
         # Check if already autodetected
-        protocol = self._obd.protocol()
+        protocol = self._obd.protocol(verify=kwargs.pop("verify", True))  # Default is to verify protocol on each call
         if ident == "AUTO" and protocol.autodetected \
             or ident == protocol.ID:  # Or if already set
 
             # Finally check if baudrate matches
-            if baudrate == None or baudrate == protocol.baudrate:
+            if baudrate == None or baudrate == getattr(protocol, "baudrate", None):
+
                 return  # No changes
 
         # We need to change protocol and/or baudrate

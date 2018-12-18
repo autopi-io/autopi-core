@@ -53,7 +53,7 @@ def context_handler():
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
     """
@@ -83,7 +83,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
 
         # We do not want to break workflow upon failure because then listeners will not get called
         try:
-            conn.ensure_protocol(protocol, baudrate=baudrate)
+            conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
         except OBDError as err:
 
             if log.isEnabledFor(logging.DEBUG):
@@ -126,7 +126,9 @@ def send_handler(msg, **kwargs):
 
     # Ensure protocol
     protocol = kwargs.pop("protocol", None)  # Default is no protocol change
-    conn.ensure_protocol(protocol, baudrate=kwargs.pop("baudrate", None))
+    conn.ensure_protocol(protocol,
+        baudrate=kwargs.pop("baudrate", None),
+        verify=kwargs.pop("verify", False))
 
     res = conn.send(msg, **kwargs)
 
@@ -235,7 +237,7 @@ def protocol_handler(set=None, baudrate=None):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, file=None, description=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -243,7 +245,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
     ret = {}
 
     # Ensure protocol
-    conn.ensure_protocol(protocol, baudrate=baudrate)
+    conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Play sound to indicate recording has begun
     __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
@@ -261,7 +263,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
 
         __salt__["file.mkdir"](os.path.dirname(path))
 
-        protocol = conn.protocol()
+        protocol = conn.protocol(verify=verify)
 
         # Use config parser to write file
         config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -322,7 +324,7 @@ def recordings_handler(path=None):
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, test=False, experimental=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, verify=False, test=False, experimental=False):
     """
     Plays messages from file on the OBD bus.
     """
@@ -449,7 +451,8 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
         # Ensure protocol
         conn.ensure_protocol(protocol or header.get("protocol", None),
-            baudrate=baudrate or header.get("baudrate", None))
+            baudrate=baudrate or header.get("baudrate", None),
+            verify=verify)
 
         start = timer()
 

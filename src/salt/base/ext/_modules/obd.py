@@ -97,6 +97,17 @@ def protocol(**kwargs):
 def send(msg, **kwargs):
     """
     Sends a raw message on bus.
+
+    Arguments:
+        msg (str): Message to send.
+
+    Optional arguments:
+        header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
+        auto_format (bool): Apply automatic formatting of message. Default value is False.
+        expect_response (bool): Wait for a respone message after sending. Default value is False.
+        protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
+        baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+        verify (bool): Verify that communication is possible with the desired protocol. Default value is False.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
@@ -147,6 +158,7 @@ def dump(**kwargs):
         description (str): Additional description to the file.
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+        verify (bool): Verify that communication is possible with the desired protocol. Default value is False.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))
@@ -187,6 +199,7 @@ def play(file, **kwargs):
                 msg: Group by entire message string.
         protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+        verify (bool): Verify that communication is possible with the desired protocol. Default value is False.
         test (bool): Run command in test-only (dry-run) mode. No data will be sent on CAN bus. Default value is False.
     """
 
