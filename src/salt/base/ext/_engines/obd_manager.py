@@ -32,9 +32,10 @@ context = {
     },
     "battery": {
         "state": "",
-        "recurrences": 0,
-        "recurrence_thresholds": {
-            "*": 3,  # Default is three repetitions
+        "count": 0,
+        "timer": 0.0,
+        "event_thresholds": {
+            "*": 3,  # Default is three seconds
             battery_util.CRITICAL_LEVEL_STATE: 180
         },
         "critical_limit": 0
@@ -570,7 +571,7 @@ def _rpm_listener(result):
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "bat")
 def _battery_listener(result):
     """
-    Listens for battery results and triggers battery state events when voltage changes.
+    Listens for battery results and triggers battery events when voltage changes.
     """
 
     if log.isEnabledFor(logging.DEBUG):
@@ -581,12 +582,16 @@ def _battery_listener(result):
     # Check if state has chaged since last time
     if ctx["state"] != result["state"]:
         ctx["state"] = result["state"]
-        ctx["recurrences"] = 1
+        ctx["timer"] = timer()
+        ctx["count"] = 1
     else:
-        ctx["recurrences"] += 1
+        ctx["count"] += 1
 
-    # Trigger only event when battery state is repeated according to recurrence threshold
-    if ctx["recurrences"] % ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)) == 0:
+    # Proceed only when battery state is repeated at least once and timer threshold is reached
+    if ctx["count"] > 1 and timer() - ctx["timer"] >= ctx["event_thresholds"].get(result["state"], ctx["event_thresholds"].get("*", 3)):
+
+        # Reset timer
+        ctx["timer"] = timer()
 
         # Trigger only event if battery state (in tag) and/or level (in data) has changed
         edmp.trigger_event(
