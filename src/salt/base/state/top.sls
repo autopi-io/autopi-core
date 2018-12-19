@@ -17,4 +17,5 @@ base:
     - ec2x.config
 {%- endif %}
     - ui.install
+    - power.stn.config
     - power.spm.install  # Highest risk last
