@@ -4,6 +4,7 @@
 from __future__ import print_function
 
 import json
+import re
 import sys
 import time
 import urllib2  # 'requests' is slow to load so we use 'urllib2'
@@ -96,7 +97,9 @@ def main():
     cmd_args = []
     cmd_kwargs = {}
     for arg in args:
-        if "=" in arg:
+
+        # Check if keyword argument
+        if re.match("^[^'\"]+=", arg):
             key, val = arg.split("=", 1)
             cmd_kwargs[key] = try_eval(val)
         else:
