@@ -99,7 +99,7 @@ def main():
     for arg in args:
 
         # Check if keyword argument
-        if re.match("^[^'\"]+=", arg):
+        if re.match("^[_\w\d]+=", arg):
             key, val = arg.split("=", 1)
             cmd_kwargs[key] = try_eval(val)
         else:
