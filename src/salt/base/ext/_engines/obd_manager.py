@@ -450,9 +450,14 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     # Send lines
     if not test:
 
+        # Only use protocol settings from header when no protocol is specified
+        if protocol == None:
+            protocol = header.get("protocol", None)
+            baudrate = baudrate or header.get("baudrate", None)
+
         # Ensure protocol
-        conn.ensure_protocol(protocol or header.get("protocol", None),
-            baudrate=baudrate or header.get("baudrate", None),
+        conn.ensure_protocol(protocol,
+            baudrate=baudrate,
             verify=verify)
 
         start = timer()
