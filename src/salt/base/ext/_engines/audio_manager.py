@@ -29,15 +29,6 @@ def _ensure_mixer():
         return
 
     try:
-        log.debug("Initially powering off amplifier chip")
-
-        gpio.setwarnings(False)
-        gpio.setmode(gpio.BOARD)
-
-        gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
-        gpio.output(gpio_pin.AMP_ON, gpio.LOW)
-        log.debug("GPIO pin #%d is set low", gpio_pin.AMP_ON)
-
         settings = ctx["settings"]
 
         globals()["pygame"] = importlib.import_module("pygame")
@@ -79,7 +70,7 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
     log.debug("Loading audio file: %s", audio_file)
     pygame.mixer.music.load(audio_file)
 
-    # Power on amplifier
+    # Ensure amplifier is powered on
     gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
 
     log.info("Playback of audio file: %s", audio_file)
@@ -139,15 +130,22 @@ def volume_handler(value=None):
 
 @edmp.register_hook()
 def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10, timeout=10):
-    _ensure_mixer()  # Needed to turn on amplifier chip
+    """
+    Unfortunately 'espeak' command is not always reliable - sometimes it fails for uncertain reasons.
+    """
+
+    ret = {}
+
+    # Ensure amplifier is powered on
+    gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
 
     res = __salt__["cmd.run_all"]("espeak -a {:d} -v {:s} -p {:d} -s {:d} -g {:d} -X '{:s}'".format(volume, language, pitch, speed, word_gap, text),
-        timeout=timeout)  # Timeout added because espeak hangs sometimes
+        timeout=timeout)  # Timeout added because espeak sometimes hangs
     if res["retcode"] != 0:
         raise salt.exceptions.CommandExecutionError(res["stderr"])
 
-    ret = {}
     ret["result"] = res["stdout"]
+
     return ret
 
 
@@ -156,6 +154,13 @@ def start(mixer, **kwargs):
         log.debug("Starting audio manager")
 
         context["mixer"]["settings"] = mixer
+
+        gpio.setwarnings(False)
+        gpio.setmode(gpio.BOARD)
+        gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
+
+        gpio.output(gpio_pin.AMP_ON, gpio.LOW)
+        log.debug("Initially powered off amplifier chip by setting GPIO pin #%d low", gpio_pin.AMP_ON)
 
         # Initialize and run message processor
         edmp.init(__opts__)
