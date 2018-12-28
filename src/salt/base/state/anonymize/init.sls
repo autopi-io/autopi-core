@@ -70,8 +70,9 @@ regenerate-ssh-host-keys-enabled:
   file.absent
 /etc/salt/minion_id:
   file.absent
-/etc/salt/grains:
-  file.absent
+# This is commented out because clearing grains will also make it forget which version it is currently running.
+# /etc/salt/grains:
+#   file.absent
 /etc/salt/minion.d/:
   file.absent
 # /var/cache/salt/minion/:
