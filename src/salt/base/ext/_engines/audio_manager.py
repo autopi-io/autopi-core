@@ -138,9 +138,11 @@ def volume_handler(value=None):
 
 
 @edmp.register_hook()
-def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10):
+def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10, timeout=10):
+    _ensure_mixer()  # Needed to turn on amplifier chip
 
-    res = __salt__["cmd.run_all"]("espeak -a {:d} -v {:s} -p {:d} -s {:d} -g {:d} -X '{:s}'".format(volume, language, pitch, speed, word_gap, text))
+    res = __salt__["cmd.run_all"]("espeak -a {:d} -v {:s} -p {:d} -s {:d} -g {:d} -X '{:s}'".format(volume, language, pitch, speed, word_gap, text),
+        timeout=timeout)  # Timeout added because espeak hangs sometimes
     if res["retcode"] != 0:
         raise salt.exceptions.CommandExecutionError(res["stderr"])
 
