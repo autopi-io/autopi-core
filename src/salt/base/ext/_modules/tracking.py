@@ -7,7 +7,7 @@ __virtualname__ = "tracking"
 
 log = logging.getLogger(__name__)
 
-client = EventDrivenMessageClient("tracking")
+client = EventDrivenMessageClient(__virtualname__)
 
 
 def __virtual__():

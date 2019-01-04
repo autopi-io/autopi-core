@@ -28,8 +28,8 @@ class MessageProcessor(object):
         - 'dedicated': Workflow is performed by a dedicated thread.
 
     Built-in workflows and their additional hooks:
-        - 'simple':    <handler> --> [returner]
-        - 'extended':  [validator] (--> [returner]) --> <handler> --> [converter] --> [retuner]
+        - 'simple':    <handler> --> [filter] --> [returner]
+        - 'extended':  [validator] (--> [returner]) --> <handler> --> [converter] --> [filter] --> [retuner]
         - 'manage':    Special workflow for management stuff. See implementation for details.
 
     NOTES:
@@ -68,11 +68,12 @@ class MessageProcessor(object):
         def decorator(func):
             ret_func = func
 
-            # Wrap in synchronizer if requeexitsted
+            # Wrap in synchronizer if requested
             if synchronize:
                 def synchronizer(*args, **kwargs):
                     with self._hook_lock:
                         return func(*args, **kwargs)
+
                 ret_func = synchronizer
 
             # Add function to hook registry
@@ -85,6 +86,21 @@ class MessageProcessor(object):
             return ret_func
 
         return decorator
+
+    def add_hook(self, name, kind, func, synchronize=True):
+        """
+        Add hook function manually to this message processor.
+        """
+
+        # Wrap in synchronizer if requested
+        if synchronize:
+            def synchronizer(*args, **kwargs):
+                with self._hook_lock:
+                    return func(*args, **kwargs)
+
+            func = synchronizer
+
+        self._hook_funcs["{:}_{:}".format(name, kind)] = func
 
     def register_listener(self, matcher=None):
         """
@@ -256,6 +272,11 @@ class MessageProcessor(object):
         # Call result listeners
         self._call_listeners_for(message, result)
 
+        # Call filter hook
+        found, filtered_result = self._call_hook_for(message, "filter", result)
+        if found:
+            result = filtered_result
+
         # Call returner hook
         self._call_hook_for(message, "returner", message, result)
 
@@ -280,12 +301,17 @@ class MessageProcessor(object):
         found, result = self._call_hook_for(message, "handler", *args, **kwargs)
 
         # Call converter hook
-        found, convert = self._call_hook_for(message, "converter", result)
+        found, converted_result = self._call_hook_for(message, "converter", result)
         if found:
-            result = convert
+            result = converted_result
 
         # Call result listeners
         self._call_listeners_for(message, result)
+
+        # Call filter hook
+        found, filtered_result = self._call_hook_for(message, "filter", result)
+        if found:
+            result = filtered_result
 
         # Call returner hook
         self._call_hook_for(message, "returner", message, result)
@@ -434,21 +460,21 @@ class EventDrivenMessageProcessor(MessageProcessor):
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
 
-    def init(self, opts, workers=None):
+    def init(self, __salt__, __opts__, workers=[], returners=[]):
         """
         Initialize this instance.
         """
 
         # Dedicated event bus handle for receiving events
         self._incoming_bus = salt.utils.event.get_event("minion",
-            opts=opts,
-            transport=opts["transport"],
+            opts=__opts__,
+            transport=__opts__["transport"],
             listen=True)
 
         # Dedicated event bus handle for sending events
         self._outgoing_bus = salt.utils.event.get_event("minion",
-            opts=opts,
-            transport=opts["transport"],
+            opts=__opts__,
+            transport=__opts__["transport"],
             listen=False)
 
         # Register matcher for event processor
@@ -457,16 +483,41 @@ class EventDrivenMessageProcessor(MessageProcessor):
             self.process_event,
             match_type="regex")
 
-        # Add given workers
-        if workers:
-            for worker in workers:
-                messages = worker.pop("messages")
+        # Add specified Salt returners as workflow hooks
+        salt_returners = salt.loader.returners(__opts__, __salt__)
+        for returner in returners:
 
-                self.dedicated_worker(None, start=False, **worker)
+            # Load Salt returner function
+            returner_func = salt_returners["{:}.{:}".format(returner["name"], returner.get("func", "returner_data"))]
 
-                # Enqueue all messages to worker
-                for message in messages:
-                    self.dedicated_worker(message, enqueue=worker["name"])
+            # Wrap returner function to add defined args and kwargs
+            def returner_wrapper(message, result, returner=returner, returner_func=returner_func):
+
+                # Skip empty results
+                if not result:
+                    return
+
+                args = returner.get("args", [])
+                kwargs = returner.get("kwargs", {})
+
+                # Automatically set namespace as kind for data results
+                if not args and returner_func.__name__ == "returner_data":
+                    args.append(self._namespace)
+
+                return returner_func(result, *args, **kwargs)
+
+            # Add returner as unsynchronized hook
+            self.add_hook(returner["name"], "returner", returner_wrapper, synchronize=False)
+
+        # Add specified workers
+        for worker in workers:
+            messages = worker.pop("messages")
+
+            self.dedicated_worker(None, start=False, **worker)
+
+            # Enqueue all messages to worker
+            for message in messages:
+                self.dedicated_worker(message, enqueue=worker["name"])
 
     def _custom_match_tag_regex(self, event_tag, search_tag):
         return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)

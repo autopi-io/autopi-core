@@ -121,7 +121,7 @@ def start(endpoint, workers, **kwargs):
         cache.setup(**options)
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, workers=workers)
         edmp.run()
 
     except Exception:

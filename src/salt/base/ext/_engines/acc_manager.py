@@ -23,8 +23,6 @@ edmp = EventDrivenMessageProcessor("acc",
 # MMA8X5X I2C connection
 conn = MMA8X5XConn()
 
-returner_func = None
-
 interrupt_event = threading.Event()
 
 context = {
@@ -189,13 +187,14 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
 
 
 @edmp.register_hook(synchronize=False)
-def alternating_readout_returner(message, result):
+def alternating_readout_filter(result):
     """
-    Returns alternating/changed values to configured Salt returner module.
+    Filter that only returns alternating/changed values.
     """
 
     # TODO: Move this function to 'messaging.py' and make it reusable?
 
+    # Skip failed results
     if "error" in result:
         return
 
@@ -216,18 +215,14 @@ def alternating_readout_returner(message, result):
     if old_read != None and old_read == new_read:
         return
 
-    # Call Salt returner module
-    returner_func(new_read, "acc")
+    # Return changed value
+    return new_read
 
 
-def start(mma8x5x_conn, returner, workers, **kwargs):
+def start(mma8x5x_conn, returners, workers, **kwargs):
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting accelerometer manager")
-
-        # Prepare returner function
-        global returner_func
-        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Setup interrupt GPIO pin
         gpio.setmode(gpio.BOARD)
@@ -238,7 +233,7 @@ def start(mma8x5x_conn, returner, workers, **kwargs):
         conn.setup(mma8x5x_conn)
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
         edmp.run()
 
     except Exception:

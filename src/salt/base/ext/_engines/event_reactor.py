@@ -11,8 +11,6 @@ log = logging.getLogger(__name__)
 # Message processor
 edmp = EventDrivenMessageProcessor("reactor")
 
-returner_func = None
-
 context = {
     "cache.get": lambda *args, **kwargs: dict_find(context, "cache", *args, **kwargs),
 }
@@ -121,28 +119,24 @@ def cache_handler(key=None, **kwargs):
     return ret
 
 
-@edmp.register_hook()
-def alternating_cache_event_returner(message, result):
+@edmp.register_hook(synchronize=False)
+def alternating_cache_event_filter(result):
     """
-    Returns alternating/changed events from cache to configured Salt returner module.
+    Filter that only returns alternating/changed events from cache.
     """
 
     if result["value"]["_count"] != 1:
         return
 
-    returner_func(result["value"]["event"])
+    return result["value"]["event"]
 
 
-def start(returner, mappings, **kwargs):
+def start(returners, mappings, **kwargs):
     try:
         log.debug("Starting event reactor")
 
-        # Prepare returner function
-        global returner_func
-        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_event".format(returner)]
-
         # Initialize message processor
-        edmp.init(__opts__)
+        edmp.init(__salt__, __opts__, returners=returners)
 
         # Setup event matchers
         for mapping in mappings:
@@ -183,7 +177,6 @@ def start(returner, mappings, **kwargs):
                                 log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
 
                             break
-
 
             match_type = None
             if "regex" in mapping:

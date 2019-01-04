@@ -163,7 +163,7 @@ def start(mixer, **kwargs):
         log.debug("Initially powered off amplifier chip by setting GPIO pin #%d low", gpio_pin.AMP_ON)
 
         # Initialize and run message processor
-        edmp.init(__opts__)
+        edmp.init(__salt__, __opts__)
         edmp.run()
 
     except Exception:

@@ -7,6 +7,7 @@ except ImportError:
     HAS_REDIS = False
 
 from cloud_cache import CloudCache
+from salt.returners import get_returner_options
 from salt.utils import jid
 
 
@@ -22,6 +23,55 @@ def __virtual__():
                       "redis python client is not installed."
 
     return __virtualname__
+
+
+def _get_options(ret=None):
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Getting options for: {:}".format(ret))
+
+    defaults = {
+        "host": "localhost",
+        "port": 6379,
+        "db": 1
+    }
+
+    attrs = {
+        "host": "redis_host",
+        "port": "redis_port",
+        "db": "redis_db"
+    }
+
+    _options = get_returner_options(
+        "{:}_cache".format(__virtualname__),
+        ret,
+        attrs,
+        __salt__=__salt__,
+        __opts__=__opts__,
+        defaults=defaults)
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Generated options: {:}".format(_options))
+
+    return _options
+
+
+def _get_cloud_cache_for(ret):
+
+    # Get cloud cache instance from context if present
+    _cloud_cache = __context__.get("cloud_cache", None)
+
+    # Create new instance if no existing found
+    if _cloud_cache == None:
+        options = _get_options(ret)
+        log.info("Creating cloud cache instance with Redis options: {:}".format(options))
+
+        _cloud_cache = CloudCache().setup(redis=options)
+        __context__["cloud_cache"] = _cloud_cache
+    elif log.isEnabledFor(logging.DEBUG):
+        log.debug("Re-using cloud cache instance found in context")
+
+    return _cloud_cache
 
 
 def _prepare_recursively(result, kind, timestamp=None):
@@ -66,55 +116,67 @@ def _prepare_recursively(result, kind, timestamp=None):
     return ret
 
 
-def returner(result):
-    returner_job(result)
+def returner(ret):
+    returner_job(ret)
 
 
-def returner_job(result):
+def returner_job(job):
     """
     Return a Salt job.
     """
 
-    if not result or not result.get("success", False):
-        log.info("Skipping unsuccessful result with JID: {:}".format(result.get("jid", None)))
+    if not job or not job.get("success", False):
+        log.warn("Skipping unsuccessful job result with JID: {:}".format(job.get("jid", None)))
+
         return
 
     # TODO: Timestamp can be extracted from JID value
 
-    kind = result["fun"] if not "_type" in result["return"] else result["fun"].split(".")[0]
+    kind = job["fun"] if not "_type" in job["return"] else job["fun"].split(".")[0]
 
-    res = _prepare_recursively(result["return"], kind, timestamp=None)
+    res = _prepare_recursively(job["return"], kind, timestamp=None)
 
-    cloud_cache = CloudCache().setup(**__salt__["config.get"]("cloud_cache"))
+    cloud_cache = _get_cloud_cache_for(job)
     for r in res:
         cloud_cache.enqueue(r)
 
 
-def returner_event(result):
+def returner_event(event):
     """
     Return an event.
     """
 
-    tag_parts = result["tag"].lstrip("/").split("/")
+    if not event:
+        log.debug("Skipping empty event result")
+
+        return
+
+    tag_parts = event["tag"].lstrip("/").split("/")
     kind = "event.{:s}".format(".".join(tag_parts[:-1]))
 
-    data = result["data"].copy()
-    data["@tag"] = result["tag"]
+    data = event["data"].copy()
+    data["@tag"] = event["tag"]
 
-    returner_raw(data, kind)
+    returner_data(data, kind)
 
 
-def returner_raw(result, kind):
+def returner_data(data, kind, **kwargs):
     """
     Return any arbitrary data structure.
     """
 
-    if not result or "error" in result:
-        log.info("Skipping empty or error result")
+    if not data:
+        log.debug("Skipping empty data result")
+
         return
 
-    res = _prepare_recursively(result, kind)
+    if "error" in data:
+        log.warn("Skipping data result because of error: {:}".format(data["error"]))
 
-    cloud_cache = CloudCache().setup(**__salt__["config.get"]("cloud_cache"))
+        return
+
+    res = _prepare_recursively(data, kind)
+
+    cloud_cache = _get_cloud_cache_for(kwargs)
     for r in res:
         cloud_cache.enqueue(r)

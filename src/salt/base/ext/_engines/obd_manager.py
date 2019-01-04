@@ -24,8 +24,6 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 # OBD connection
 conn = OBDConn()
 
-returner_func = None
-
 context = {
     "engine": {
         "state": ""
@@ -505,25 +503,27 @@ def battery_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def dtc_converter(res):
+def dtc_converter(result):
     """
     Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
     """
 
-    if res.get("_type", None) != "get_dtc":
-        raise Exception("Unable to convert as DTC result: {:}".format(res))
+    if result.get("_type", None) != "get_dtc":
+        raise Exception("Unable to convert as DTC result: {:}".format(result))
 
-    res["_type"] = "dtc"
-    res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value", None) or []]
+    result["_type"] = "dtc"
+    result["values"] = [{"code": r[0], "text": r[1]} for r in result.pop("value", None) or []]
 
-    return res
+    return result
 
 
-@edmp.register_hook()
-def alternating_value_returner(message, result):
+@edmp.register_hook(synchronize=False)
+def alternating_readout_filter(result):
     """
-    Returns alternating/changed values to configured Salt returner module.
+    Filter that only returns alternating/changed values.
     """
+
+    # TODO: Move this function to 'messaging.py' and make it reusable?
 
     # Skip failed results
     if "error" in result:
@@ -546,8 +546,8 @@ def alternating_value_returner(message, result):
     if old_read != None and old_read == new_read:
         return
 
-    # Call Salt returner module
-    returner_func(new_read, "obd")
+    # Return changed value
+    return new_read
 
 
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "rpm")
@@ -606,15 +606,11 @@ def _battery_listener(result):
         )
 
 
-def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs):
+def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs):
     try:
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager")
-
-        # Prepare returner function
-        global returner_func
-        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
@@ -627,7 +623,7 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
         conn.setup(serial_conn)
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
         edmp.run()
 
     except Exception:
