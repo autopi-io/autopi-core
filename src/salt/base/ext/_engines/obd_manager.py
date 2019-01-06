@@ -120,6 +120,10 @@ def send_handler(msg, **kwargs):
     Sends a raw message on bus.
     """
 
+    ret = {
+        "_type": kwargs.pop("type", "raw")
+    }
+
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Sending: %s", msg)
 
@@ -129,15 +133,12 @@ def send_handler(msg, **kwargs):
         baudrate=kwargs.pop("baudrate", None),
         verify=kwargs.pop("verify", False))
 
-    # Get output type
+    # Get desired data type for output
     output = kwargs.pop("output", "list")
     if output not in ["dict", "list"]:
         raise ValueError("Unsupported output type - supported values are 'dict' or 'list'")
 
     res = conn.send(msg, **kwargs)
-
-    # Prepare return value(s)
-    ret = {}
     if res:
         if output == "dict":
             if len(res) == 1:
