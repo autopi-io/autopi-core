@@ -129,13 +129,21 @@ def send_handler(msg, **kwargs):
         baudrate=kwargs.pop("baudrate", None),
         verify=kwargs.pop("verify", False))
 
+    # Get output type
+    output = kwargs.pop("output", "list")
+    if output not in ["dict", "list"]:
+        raise ValueError("Unsupported output type - supported values are 'dict' or 'list'")
+
     res = conn.send(msg, **kwargs)
 
     # Prepare return value(s)
     ret = {}
     if res:
-        if len(res) == 1:
-            ret["value"] = res[0]
+        if output == "dict":
+            if len(res) == 1:
+                ret["value"] = res[0]
+            else:
+                ret["values"] = {idx: val for idx, val in enumerate(res, 1)}
         else:
             ret["values"] = res
 

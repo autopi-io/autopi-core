@@ -108,6 +108,7 @@ def send(msg, **kwargs):
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
         verify (bool): Verify that communication is possible with the desired protocol. Default value is False.
+        output (str): What data type should the output be returned in? Default is a list.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
