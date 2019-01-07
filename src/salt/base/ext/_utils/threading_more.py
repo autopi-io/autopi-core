@@ -42,8 +42,8 @@ class WorkerThread(threading.Thread):
     def run(self):
         try:
 
-            if self.delay > 0:
-                log.info("Delayed start of %d second(s) of worker thread '%s'", self.delay, self.name)
+            if self.delay and self.delay > 0.0:
+                log.info("Delayed start of %f second(s) of worker thread '%s'", self.delay, self.name)
 
                 self.context["state"] = "pending"
 
