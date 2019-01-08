@@ -78,7 +78,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Ensure protocol if given
-    if protocol and protocol != str(None):  # Also support empty value from pillar
+    if protocol and protocol not in [str(None), "null"]:  # Workaround: Also support empty value from pillar
 
         # We do not want to break workflow upon failure because then listeners will not get called
         try:
