@@ -323,20 +323,22 @@ class MessageProcessor(object):
         Administration workflow to query and manage this processor instance.
 
         Supported commands:
-            - <hook> [name]
+            - <hook> <list|call> [name]
             - <worker> <list|show|create|start|kill> [name|*]
+            - <run>
         """
 
         args = message.get("args", [])
         kwargs = message.get("kwargs", {})
 
         if len(args) > 1 and args[0] == "hook":
-            if len(args) > 2:
-                return self._get_func(args[1])(*args[2:], **kwargs)
-            else:
+            if args[1] == "list":
                 return {
                     "values": [h for h in self._hook_funcs]
                 }
+
+            elif args[1] == "call" and len(args) > 3:
+                return self._get_func(args[2])(*args[3:], **kwargs)
 
         elif len(args) > 1 and args[0] == "worker":
             if args[1] == "list":
@@ -367,6 +369,10 @@ class MessageProcessor(object):
                 return {
                     "values": [t.name for t in threads]
                 }
+
+        elif len(args) > 0 and args[0] == "run":
+            msg = kwargs
+            return self.process(msg)
 
         raise Exception("Invalid or unknown command")
 
