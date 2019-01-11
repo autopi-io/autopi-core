@@ -3,3 +3,5 @@ INTERFACE=wwan0
 PING_HOST=google.com
 MAX_RETRY=10
 VERBOSE=false
+ONLINE_CALLBACK='autopi event.fire "{}" "system/network/$INTERFACE/online"'
+OFFLINE_CALLBACK='autopi event.fire "{\"reason\": \"$REASON\"}" "system/network/$INTERFACE/offline"'

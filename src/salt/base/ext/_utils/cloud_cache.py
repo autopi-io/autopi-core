@@ -63,7 +63,7 @@ class CloudCache(object):
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Creating Redis connection pool")
-        self.conn_pool = redis.ConnectionPool(**options.get("redis", {}))
+        self.conn_pool = redis.ConnectionPool(**options.get("redis", {k.replace("redis_", "", 1): v for k, v in options.iteritems() if k.startswith("redis_")}))
 
         self.client = redis.StrictRedis(connection_pool=self.conn_pool)
 

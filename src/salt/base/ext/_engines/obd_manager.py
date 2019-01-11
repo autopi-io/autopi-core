@@ -9,6 +9,8 @@ import os
 import psutil
 import salt.loader
 
+from common_util import abs_file_path
+from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
 from timeit import default_timer as timer
@@ -22,18 +24,17 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 # OBD connection
 conn = OBDConn()
 
-returner_func = None
-
 context = {
     "engine": {
         "state": ""
     },
     "battery": {
         "state": "",
-        "recurrences": 0,
-        "recurrence_thresholds": {
-            "*": 3,  # Default is three repetitions
-            battery_util.CRITICAL_LEVEL_STATE: 60
+        "count": 0,
+        "timer": 0.0,
+        "event_thresholds": {
+            "*": 3,  # Default is three seconds
+            battery_util.CRITICAL_LEVEL_STATE: 180
         },
         "critical_limit": 0
     },
@@ -41,11 +42,24 @@ context = {
 }
 
 
+@edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
+
+
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
     """
+
+    ret = {
+        "_type": name.lower()
+    }
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
@@ -63,8 +77,22 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
-    # Ensure protocol
-    conn.ensure_protocol(protocol, baudrate=baudrate)
+    # Ensure protocol if given
+    if protocol and protocol not in [str(None), "null"]:  # Workaround: Also support empty value from pillar
+
+        # We do not want to break workflow upon failure because then listeners will not get called
+        try:
+            conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+        except OBDError as err:
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Failed to ensure protocol: %s", str(err))
+
+            # IMPORTANT: By returning error result the RPM listener function will still get called for RPM results
+            #            and thus always trigger appropriate engine event
+            ret["error"] = str(err)
+
+            return ret
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
@@ -74,12 +102,6 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
-
-    # Prepare return value
-    ret = {
-        "_type": cmd.name.lower(),
-        "value": None
-    }
 
     # Unpack command result
     if not res.is_null():
@@ -98,20 +120,31 @@ def send_handler(msg, **kwargs):
     Sends a raw message on bus.
     """
 
+    ret = {
+        "_type": kwargs.pop("type", "raw")
+    }
+
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Sending: %s", msg)
 
     # Ensure protocol
     protocol = kwargs.pop("protocol", None)  # Default is no protocol change
-    conn.ensure_protocol(protocol, baudrate=kwargs.pop("baudrate", None))
+    conn.ensure_protocol(protocol,
+        baudrate=kwargs.pop("baudrate", None),
+        verify=kwargs.pop("verify", False))
+
+    # Get desired data type for output
+    output = kwargs.pop("output", "list")
+    if output not in ["dict", "list"]:
+        raise ValueError("Unsupported output type - supported values are 'dict' or 'list'")
 
     res = conn.send(msg, **kwargs)
-
-    # Prepare return value(s)
-    ret = {}
     if res:
-        if len(res) == 1:
-            ret["value"] = res[0]
+        if output == "dict":
+            if len(res) == 1:
+                ret["value"] = res[0]
+            else:
+                ret["values"] = {idx: val for idx, val in enumerate(res, 1)}
         else:
             ret["values"] = res
 
@@ -162,6 +195,37 @@ def commands_handler(mode=None):
 
 
 @edmp.register_hook()
+def status_handler():
+    """
+    Gets current status information.
+    """
+
+    ret = {
+        "connection": conn.status(),
+        "protocol": conn.protocol(),
+    }
+
+    return ret
+
+
+@edmp.register_hook()
+def connection_handler(baudrate=None, reset=None):
+    """
+    Manages connection.
+    """
+
+    if baudrate != None:
+        conn.change_baudrate(baudrate)
+
+    if reset:
+        conn.reset(mode=reset)
+
+    ret = conn.status()
+
+    return ret
+
+
+@edmp.register_hook()
 def protocol_handler(set=None, baudrate=None):
     """
     Configures protocol or lists all supported.
@@ -181,24 +245,7 @@ def protocol_handler(set=None, baudrate=None):
 
 
 @edmp.register_hook()
-def status_handler(reset=None):
-    """
-    Gets current connection status and more.
-    """
-
-    if reset:
-        conn.reset(mode=reset)
-
-    ret = {
-        "connection": conn.status(),
-        "context": context
-    }
-
-    return ret
-
-
-@edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, file=None, description=None):
+def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -206,7 +253,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
     ret = {}
 
     # Ensure protocol
-    conn.ensure_protocol(protocol, baudrate=baudrate)
+    conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Play sound to indicate recording has begun
     __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
@@ -220,10 +267,11 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
 
     # Write result to file if specified
     if file != None:
-        path = file if os.path.isabs(file) else os.path.join("/opt/autopi/obd", file)
+        path = abs_file_path(file, "/opt/autopi/obd")
+
         __salt__["file.mkdir"](os.path.dirname(path))
 
-        protocol = conn.protocol()
+        protocol = conn.protocol(verify=verify)
 
         # Use config parser to write file
         config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -284,7 +332,7 @@ def recordings_handler(path=None):
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, test=False, experimental=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, verify=False, test=False, experimental=False):
     """
     Plays messages from file on the OBD bus.
     """
@@ -409,9 +457,15 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     # Send lines
     if not test:
 
+        # Only use protocol settings from header when no protocol is specified
+        if protocol == None:
+            protocol = header.get("protocol", None)
+            baudrate = baudrate or header.get("baudrate", None)
+
         # Ensure protocol
-        conn.ensure_protocol(protocol or header.get("protocol", None),
-            baudrate=baudrate or header.get("baudrate", None))
+        conn.ensure_protocol(protocol,
+            baudrate=baudrate,
+            verify=verify)
 
         start = timer()
 
@@ -446,7 +500,7 @@ def battery_converter(result):
     Enriches a voltage reading result with battery charge state and level.
     """
 
-    voltage = result["value"]
+    voltage = result.get("value", None)
     ret = {
         "_type": "bat",
         "level": battery_util.charge_percentage_for(voltage),
@@ -458,27 +512,29 @@ def battery_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def dtc_converter(res):
+def dtc_converter(result):
     """
     Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
     """
 
-    if res.get("_type", None) != "get_dtc":
-        raise Exception("Unable to convert as DTC result: {:}".format(res))
+    if result.get("_type", None) != "get_dtc":
+        raise Exception("Unable to convert as DTC result: {:}".format(result))
 
-    if "value" in res:
-        res["_type"] = "dtc"
-        res["values"] = [{"code": r[0], "text": r[1]} for r in res.pop("value")]
+    result["_type"] = "dtc"
+    result["values"] = [{"code": r[0], "text": r[1]} for r in result.pop("value", None) or []]
 
-    return res
+    return result
 
 
-@edmp.register_hook()
-def alternating_value_returner(message, result):
+@edmp.register_hook(synchronize=False)
+def alternating_readout_filter(result):
     """
-    Returns alternating/changed values to configured Salt returner module.
+    Filter that only returns alternating/changed values.
     """
 
+    # TODO: Move this function to 'messaging.py' and make it reusable?
+
+    # Skip failed results
     if "error" in result:
         return
 
@@ -499,8 +555,8 @@ def alternating_value_returner(message, result):
     if old_read != None and old_read == new_read:
         return
 
-    # Call Salt returner module
-    returner_func(new_read, "obd")
+    # Return changed value
+    return new_read
 
 
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "rpm")
@@ -516,19 +572,20 @@ def _rpm_listener(result):
 
     # Check if state has chaged since last known state
     old_state = ctx["state"]
-    new_state = "running" if result["value"] > 0 else "stopped"
+    new_state = "running" if result.get("value", 0) > 0 else \
+                    ("stopped" if old_state in ["stopped", "running"] else "not_running")
     if old_state != new_state:
         ctx["state"] = new_state
 
         # Trigger event
         edmp.trigger_event({},
-            "engine/{:s}".format(ctx["state"]))
+            "vehicle/engine/{:s}".format(ctx["state"]))
 
 
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "bat")
 def _battery_listener(result):
     """
-    Listens for battery results and triggers battery state events when voltage changes.
+    Listens for battery results and triggers battery events when voltage changes.
     """
 
     if log.isEnabledFor(logging.DEBUG):
@@ -539,30 +596,30 @@ def _battery_listener(result):
     # Check if state has chaged since last time
     if ctx["state"] != result["state"]:
         ctx["state"] = result["state"]
-        ctx["recurrences"] = 1
+        ctx["timer"] = timer()
+        ctx["count"] = 1
     else:
-        ctx["recurrences"] += 1
+        ctx["count"] += 1
 
-    # Trigger only event when battery state is repeated according to recurrence threshold
-    if ctx["recurrences"] % ctx["recurrence_thresholds"].get(result["state"], ctx["recurrence_thresholds"].get("*", 2)) == 0:
+    # Proceed only when battery state is repeated at least once and timer threshold is reached
+    if ctx["count"] > 1 and timer() - ctx["timer"] >= ctx["event_thresholds"].get(result["state"], ctx["event_thresholds"].get("*", 3)):
+
+        # Reset timer
+        ctx["timer"] = timer()
 
         # Trigger only event if battery state (in tag) and/or level (in data) has changed
         edmp.trigger_event(
             {"level": result["level"]} if result["state"] in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE] else {},
-            "battery/{:s}".format(result["state"]),
-            skip_duplicates_filter="battery/*"
+            "vehicle/battery/{:s}".format(result["state"]),
+            skip_duplicates_filter="vehicle/battery/*"
         )
 
 
-def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs):
+def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs):
     try:
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager")
-
-        # Prepare returner function
-        global returner_func
-        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
@@ -570,11 +627,12 @@ def start(serial_conn, returner, workers, battery_critical_limit=None, **kwargs)
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Configure connection
-        conn.setup(serial_conn)
+        conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
+        conn.setup(serial_conn)
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
         edmp.run()
 
     except Exception:

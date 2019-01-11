@@ -1,13 +1,13 @@
 import logging
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 __virtualname__ = "tracking"
 
 log = logging.getLogger(__name__)
 
-client = EventDrivenMessageClient("tracking")
+client = EventDrivenMessageClient(__virtualname__)
 
 
 def __virtual__():
@@ -31,7 +31,7 @@ def status(**kwargs):
     Get current status.
     """
 
-    return client.send_sync(msg_pack(_handler="status", **kwargs))
+    return client.send_sync(_msg_pack(_handler="status", **kwargs))
 
 
 def manage(*args, **kwargs):
@@ -39,5 +39,5 @@ def manage(*args, **kwargs):
     Example: tracking.manage worker list *
     """
 
-    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
 

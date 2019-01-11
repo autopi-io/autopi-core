@@ -31,12 +31,14 @@ spm-test:
 obd-test:
   module.run:
     - name: obd.query
-    - cmd: rpm
-    - force: true
+    - cmd: elm_voltage
+    - kwargs:
+        protocol: None
 
 acc-test:
   module.run:
-    - name: acc.xyz
+    - name: acc.query
+    - cmd: xyz
 
 rpi-test:
   module.run:

@@ -1,7 +1,7 @@
 import logging
 import salt.exceptions
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 
 
 log = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def play(audio_file, force=False, loops=0, volume=None):
         volume (int): 
     """
 
-    return client.send_sync(msg_pack(audio_file, force=force, loops=loops, volume=volume, _handler="play"))
+    return client.send_sync(_msg_pack(audio_file, force=force, loops=loops, volume=volume, _handler="play"))
 
 
 def queue(audio_file):
@@ -43,7 +43,7 @@ def queue(audio_file):
         audio_file (str): 
     """
 
-    return client.send_sync(msg_pack(audio_file, _handler="queue"))
+    return client.send_sync(_msg_pack(audio_file, _handler="queue"))
 
 
 def stop():
@@ -51,7 +51,7 @@ def stop():
     Stops playback of the current audio.
     """
 
-    return client.send_sync(msg_pack(_handler="stop"))
+    return client.send_sync(_msg_pack(_handler="stop"))
 
 
 def volume(value=None):
@@ -62,7 +62,7 @@ def volume(value=None):
         value (int): 
     """
 
-    return client.send_sync(msg_pack(value=value, _handler="volume"))
+    return client.send_sync(_msg_pack(value=value, _handler="volume"))
 
 
 def speak(text, **kwargs):
@@ -73,5 +73,5 @@ def speak(text, **kwargs):
         text (str): 
     """
 
-    return client.send_sync(msg_pack(text, _handler="speak", **kwargs))
+    return client.send_sync(_msg_pack(text, _handler="speak", **kwargs))
 

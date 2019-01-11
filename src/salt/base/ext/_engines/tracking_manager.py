@@ -16,8 +16,6 @@ edmp = EventDrivenMessageProcessor("tracking", default_hooks={"workflow": "exten
 # Serial connection
 conn = SerialConn()
 
-returner_func = None
-
 context = {
     "position": {
         "state": None,  # Available states: unknown|standstill|moving
@@ -159,10 +157,10 @@ def gnss_location_to_position_converter(result):
     return ret
 
 
-@edmp.register_hook()
-def significant_position_returner(message, result):
+@edmp.register_hook(synchronize=False)
+def significant_position_filter(result):
     """
-    Returns significant non duplicated positions to configured Salt returner module.
+    Filter that only returns significant non duplicated positions.
     """
 
     # First check for position with a location
@@ -188,11 +186,10 @@ def significant_position_returner(message, result):
         elif old_pos["loc"]["lat"] == new_pos["loc"]["lat"] and old_pos["loc"]["lon"] == new_pos["loc"]["lon"]:
             return
 
-    # Call Salt returner module
-    returner_func(new_pos, "track")
-
-    # Update context with reported position
+    # Update context with last reported position
     ctx["last_reported"] = new_pos
+
+    return new_pos
 
 
 @edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "pos")
@@ -220,22 +217,18 @@ def _position_listener(result):
 
         # Trigger event
         edmp.trigger_event({},
-            "position/{:s}".format(ctx["state"]))
+            "vehicle/position/{:s}".format(ctx["state"]))
 
 
-def start(serial_conn, returner, workers, **kwargs):
+def start(serial_conn, returners, workers, **kwargs):
     try:
         log.debug("Starting tracking manager")
-
-        # Prepare returner function
-        global returner_func
-        returner_func = salt.loader.returners(__opts__, __salt__)["{:s}.returner_raw".format(returner)]
 
         # Initialize serial connection
         conn.init(serial_conn)
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
         edmp.run()
 
     except Exception:

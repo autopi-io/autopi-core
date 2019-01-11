@@ -38,6 +38,7 @@ class OBDConn(object):
 
         self.is_permanently_closed = False
 
+        self.on_status = None
         self.on_closing = None
         self.on_closed = None
 
@@ -69,9 +70,10 @@ class OBDConn(object):
 
         log.debug("Opening OBD connection")
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX)
+            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX, status_callback=self._status_callback, fast=False)
 
             return self
+
         except Exception:
             log.exception("Failed to open OBD connection")
 
@@ -102,6 +104,7 @@ class OBDConn(object):
                 log.exception("Error in 'on_closing' event handler")
 
         self.is_permanently_closed = permanent
+        self.on_status = None  # We do not want any more status updates
 
         self._obd.close()
         self._obd = None
@@ -121,13 +124,12 @@ class OBDConn(object):
             "serial": {
                 "port": serial.portstr,
                 "baudrate": serial.baudrate,
-            },
-            "protocol": self.protocol.undecorated(self)  # No need to call the 'ensure_open' decorator again
+            }
         }
 
     @Decorators.ensure_open
-    def protocol(self):
-        protocol = self._obd.protocol()
+    def protocol(self, **kwargs):
+        protocol = self._obd.protocol(**kwargs)
 
         return {
             "id": protocol.ID,
@@ -170,12 +172,13 @@ class OBDConn(object):
         ident = str(ident).upper()
 
         # Check if already autodetected
-        protocol = self._obd.protocol()
+        protocol = self._obd.protocol(verify=kwargs.pop("verify", True))  # Default is to verify protocol on each call
         if ident == "AUTO" and protocol.autodetected \
             or ident == protocol.ID:  # Or if already set
 
             # Finally check if baudrate matches
-            if baudrate == None or baudrate == protocol.baudrate:
+            if baudrate == None or baudrate == getattr(protocol, "baudrate", None):
+
                 return  # No changes
 
         # We need to change protocol and/or baudrate
@@ -230,3 +233,19 @@ class OBDConn(object):
 
         # Format messages
         return [l.replace(" ", "#", 1).replace(" ", "") for l in self._obd.interface.monitor_all(**kwargs)]
+
+    def _status_callback(self, status, **kwargs):
+        if self.on_status:
+            try:
+                data = {}
+
+                if "protocol" in kwargs:
+                    data["protocol"] = kwargs["protocol"].ID
+                    data["autodetected"] = kwargs["protocol"].autodetected
+
+                self.on_status(status, data)
+            except:
+                log.exception("Error in 'on_status' event handler")
+
+
+

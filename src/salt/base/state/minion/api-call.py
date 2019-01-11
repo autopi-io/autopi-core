@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+
 import json
+import re
 import sys
 import time
 import urllib2  # 'requests' is slow to load so we use 'urllib2'
@@ -72,7 +75,7 @@ def try_eval(val):
         return val.lower() in ["true", "yes"]
 
     try:
-       return eval(val)
+       return eval(val, {"__builtins__": None}, {})
     except:
         return val
 
@@ -94,7 +97,9 @@ def main():
     cmd_args = []
     cmd_kwargs = {}
     for arg in args:
-        if "=" in arg:
+
+        # Check if keyword argument
+        if re.match("^[_\w\d]+=", arg):
             key, val = arg.split("=", 1)
             cmd_kwargs[key] = try_eval(val)
         else:
@@ -111,7 +116,7 @@ def main():
         except Exception:
             pass
 
-        print(Colors.FAIL + code + response_text + Colors.ENDC)
+        print(Colors.FAIL + code + response_text + Colors.ENDC, file=sys.stderr)
         return
 
     if cmd.startswith("state.") and isinstance(res,dict):

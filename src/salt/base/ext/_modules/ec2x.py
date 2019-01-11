@@ -5,7 +5,7 @@ import nmea_util
 import os
 import pynmea2
 
-from messaging import EventDrivenMessageClient, msg_pack
+from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 from pynmea2 import nmea_utils
 
 
@@ -41,7 +41,7 @@ def query(cmd, cooldown_delay=None, **kwargs):
     Low-level function to execute AT commands.
     """
 
-    return client.send_sync(msg_pack(cmd, cooldown_delay=cooldown_delay, **kwargs))
+    return client.send_sync(_msg_pack(cmd, cooldown_delay=cooldown_delay, **kwargs))
 
     # TODO Sanity check
     #assert res.get("command", None) == cmd, "Received command '{:}' is not equal to sent command '{:}'".format(res.get("command", None), cmd)
@@ -52,7 +52,7 @@ def power(cmd, **kwargs):
     Low-level function to run power command.
     """
 
-    return client.send_sync(msg_pack(cmd, _handler="power", **kwargs), timeout=60)
+    return client.send_sync(_msg_pack(cmd, _handler="power", **kwargs), timeout=60)
 
 
 def upload(cmd, src, **kwargs):
@@ -60,7 +60,7 @@ def upload(cmd, src, **kwargs):
     Low-level function to upload files.
     """
 
-    return client.send_sync(msg_pack(cmd, src, _handler="upload", **kwargs))
+    return client.send_sync(_msg_pack(cmd, src, _handler="upload", **kwargs))
 
 
 def download(cmd, size, dest, **kwargs):
@@ -68,7 +68,7 @@ def download(cmd, size, dest, **kwargs):
     Low-level function to download files.
     """
 
-    return client.send_sync(msg_pack(cmd, size, dest, _handler="download", **kwargs))
+    return client.send_sync(_msg_pack(cmd, size, dest, _handler="download", **kwargs))
 
 
 def help():
@@ -129,7 +129,7 @@ def sync_time(force=False, **kwargs):
     Synchronize system time with network time.
     """
 
-    return client.send_sync(msg_pack(force=force, _handler="sync_time", **kwargs))
+    return client.send_sync(_msg_pack(force=force, _handler="sync_time", **kwargs))
 
 
 def error_format_config(value=None):
@@ -169,12 +169,12 @@ def urc_port_config(value=None):
     return res
 
 
-def power_off(normal=True):
+def power_off(normal=True, **kwargs):
     """
     Used to shut down the entire EC2x module.
     """
 
-    res = power("AT+QPOWD={:d}".format(normal))
+    res = power("AT+QPOWD={:d}".format(normal), **kwargs)
 
     return res
 
@@ -896,5 +896,5 @@ def manage(*args, **kwargs):
     Example: ec2x.manage worker list *
     """
 
-    return client.send_sync(msg_pack(*args, _workflow="manage", **kwargs))
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
 

@@ -77,7 +77,7 @@ def heartbeat_handler():
                        # Last boot time is considered identical to last power off time because of 'fake-hwclock'
                         edmp.trigger_event({
                             "timestamp": boot_time
-                        }, "power/last_off")
+                        }, "system/power/last_off")
                 except:
                     log.exception("Failed to trigger last system off event")
 
@@ -85,7 +85,7 @@ def heartbeat_handler():
                 if res["last_trigger"]["down"] not in ["none", "rpi"]:
                     edmp.trigger_event({
                         "trigger": res["last_trigger"]["down"]
-                    }, "power/recover")
+                    }, "system/power/recover")
 
             # Check if state has changed
             if old_state != new_state:
@@ -94,7 +94,7 @@ def heartbeat_handler():
                 # Trigger state event
                 edmp.trigger_event({
                     "trigger": res["last_trigger"]["up"]
-                }, "power/{:}{:}".format("_" if new_state in ["booting"] else "", new_state))
+                }, "system/power/{:}{:}".format("_" if new_state in ["booting"] else "", new_state))
 
     finally:
 
@@ -158,7 +158,7 @@ def start(workers, **kwargs):
         conn.setup()
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, workers=workers)
         edmp.run()
 
     except Exception:

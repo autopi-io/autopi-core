@@ -1,8 +1,8 @@
-import datetime
 import logging
 import re
 import time
 
+from datetime import datetime
 from messaging import EventDrivenMessageProcessor
 from serial_conn import SerialConn
 
@@ -17,7 +17,12 @@ edmp = EventDrivenMessageProcessor("ec2x",
 conn = SerialConn()
 
 error_regex = re.compile("ERROR|\+(?P<type>.+) ERROR: (?P<reason>.+)")
+
+rtc_time_regex = re.compile('^\+CCLK: "(?P<year>\d{2})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+)"$')
+# Example: +CCLK: "08/01/04,00:19:43+00"
+
 network_time_regex = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
+# Example: +QLTS: "2017/01/13,03:40:48+32,0"
 
 context = {
     "time": {
@@ -61,7 +66,7 @@ def exec_handler(cmd, **kwargs):
 
 
 @edmp.register_hook()
-def power_handler(cmd):
+def power_handler(cmd, reason="unknown"):
     # We need to give the module a cooldown period of 30 secs to power off completely and prevent
     # new requests when not ready. If an open serial connection exists during power off it will block
     # everything when using an USB hub connected to the RPi's built-in USB - yup, go figure!
@@ -71,7 +76,17 @@ def power_handler(cmd):
     #nmea_conn.close()
     #nmea_conn = None
 
-    return _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
+    log.warn("Powering down EC2X module - will restart momentartily")
+
+    # TODO: Sometimes raises SerialException: device reports readiness to read but returned no data (device disconnected or multiple access on port?)
+    res = _exec(cmd, ready_words=["OK", "POWERED DOWN"], keep_conn=False, cooldown_delay=30)
+
+    # Trigger power off event
+    edmp.trigger_event({
+        "reason": reason,
+    }, "system/device/ec2x/power_off")
+
+    return res
 
 
 @edmp.register_hook()
@@ -120,18 +135,20 @@ def sync_time_handler(force=False):
 
     ctx = context["time"]
 
+    # Skip if time has already been synchronized
+    if ctx["state"] == "synced":
+        log.info("System time has already been synchronized")
+
+        return ret
+
     # Check if system time is already NTP synchronized
     status = __salt__["time.status"]()
     if not force and status["ntp_synchronized"] == "yes":
         log.info("System time is already NTP synchronized")
 
-        ctx["state"] = "synced"
+        ret["source"] = "ntp"
 
-        # Trigger time synced event
-        edmp.trigger_event(
-            {"source": "ntp"},
-            "time/{:}".format(ctx["state"])
-        )
+        ctx["state"] = "synced"
 
     else:
 
@@ -146,44 +163,60 @@ def sync_time_handler(force=False):
 
         try:
 
-            # Get current UTC network time
-            res = _exec("AT+QLTS=1")
-            if "error" in res:
-                raise Exception("Unable to retrieve network time: {:}".format(res["error"]))
+            time = None
 
-            match = network_time_regex.match(res["data"])
-            if not match:
-                raise Exception("Failed to match network time result: {:}".format(res["data"]))
+            # First try to get time from module's RTC
+            res = _exec("AT+CCLK?")
+            if not "error" in res:
+                match = rtc_time_regex.match(res["data"])
+                if match:
+                    time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
 
-            time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
+                    # Validate time is within acceptable range otherwise discard it
+                    if abs((datetime.utcnow() - datetime.strptime(time, "%y-%m-%d %H:%M:%S")).days) > 365:
+                        log.info("Skipping invalid time retrieved from module's RTC: {:}".format(time))
+
+                        time = None
+                    else:
+                        ret["source"] = "rtc"
+                else:
+                    log.warning("Failed to match time result from module's RTC: {:}".format(res["data"]))                
+            else:
+                log.warning("Unable to retrieve time from module's RTC: {:}".format(res["error"]))
+
+            # Alternatively, try to get time from module network
+            if time == None:
+
+                # Get current UTC network time
+                res = _exec("AT+QLTS=1")
+                if "error" in res:
+                    raise Exception("Unable to retrieve module network time: {:}".format(res["error"]))
+
+                match = network_time_regex.match(res["data"])
+                if not match:
+                    raise Exception("Failed to match time result from module network: {:}".format(res["data"]))
+
+                time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
+                ret["source"] = "network"
 
             # Set old time before we adjust clock
-            ret["old"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ret["old"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Set time manually
+            # Set sytem time manually
             __salt__["time.set"](time, adjust_system_clock=True)
 
             ret["new"] = time
 
-            log.info("Synchronized system time with network time")
+            log.info("Synchronized system time with time from module source '{:}'".format(ret["source"]))
 
             ctx["state"] = "synced"
-
-            # Trigger time synced event
-            edmp.trigger_event({
-                    "source": "ec2x",
-                    "old": ret["old"],
-                    "new": ret["new"],
-                },
-                "time/{:}".format(ctx["state"])
-            )
 
         except:
             if ctx["state"] != "uncertain":
                 ctx["state"] = "uncertain"
 
                 # Trigger time uncertain event
-                edmp.trigger_event({}, "time/{:}".format(ctx["state"]))
+                edmp.trigger_event({}, "system/time/{:}".format(ctx["state"]))
 
             raise
 
@@ -191,6 +224,20 @@ def sync_time_handler(force=False):
 
             # Re-enable automatic time synchronization
             __salt__["time.ntp"](enable=True)
+
+    # Trigger time synced event
+    edmp.trigger_event(
+        ret,
+        "system/time/{:}".format(ctx["state"])
+    )
+
+    # Always update module's RTC time if synchronized from different source
+    if ret["source"] != "rtc":
+        res = _exec("AT+CCLK=\"{0:%y/%m/%d,%H:%M:%S}+00\"".format(datetime.utcnow()))
+        if not "error" in res:
+            log.info("Updated time of module's RTC")
+        else:
+            log.warning("Unable to update time of module's RTC: {:}".format(res["error"]))
 
     return ret
 
@@ -218,7 +265,7 @@ def start(serial_conn, **kwargs):
         }]
 
         # Initialize and run message processor
-        edmp.init(__opts__, workers=workers)
+        edmp.init(__salt__, __opts__, workers=workers)
         edmp.run()
 
     except Exception:
