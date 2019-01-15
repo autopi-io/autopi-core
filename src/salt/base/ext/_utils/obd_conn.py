@@ -174,15 +174,20 @@ class OBDConn(object):
 
         ident = str(ident).upper()
 
-        # Check if already autodetected
-        protocol = self._obd.protocol(verify=verify)  # Default is to verify protocol on each call
-        if ident == "AUTO" and protocol.autodetected \
-            or ident == protocol.ID:  # Or if already set
+        # Check current protocol
+        try:
+            protocol = self._obd.protocol(verify=verify)  # Default is to verify protocol on each call
 
-            # Finally check if baudrate matches
-            if baudrate == None or baudrate == getattr(protocol, "baudrate", None):
+            # Check if already autodetected
+            if ident == "AUTO" and protocol.autodetected \
+                or ident == protocol.ID:  # Or if already set
 
-                return  # No changes
+                # Finally check if baudrate matches
+                if baudrate == None or baudrate == getattr(protocol, "baudrate", None):
+
+                    return  # No changes
+        except:
+            log.exception("Failed to determine current protocol")
 
         # We need to change protocol and/or baudrate
         self.change_protocol.undecorated(self, ident, baudrate=baudrate, verify=verify)  # No need to call the 'ensure_open' decorator again
