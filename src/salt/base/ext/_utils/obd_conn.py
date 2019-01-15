@@ -128,8 +128,8 @@ class OBDConn(object):
         }
 
     @Decorators.ensure_open
-    def protocol(self, **kwargs):
-        protocol = self._obd.protocol(**kwargs)
+    def protocol(self, verify=False):
+        protocol = self._obd.protocol(verify=verify)
 
         return {
             "id": protocol.ID,
@@ -147,7 +147,7 @@ class OBDConn(object):
         return ret
 
     @Decorators.ensure_open
-    def change_protocol(self, ident, **kwargs):
+    def change_protocol(self, ident, baudrate=None, verify=True):
         if ident == None:
             raise ValueError("Protocol must be specified")
 
@@ -155,11 +155,14 @@ class OBDConn(object):
         if not ident in self.supported_protocols.undecorated(self):  # No need to call the 'ensure_open' decorator again
             raise ValueError("Unsupported protocol specified")
 
-        self._obd.change_protocol(None if ident == "AUTO" else ident, **kwargs)
+        if ident == "AUTO":
+            ident = None
+            verify = True  # Force verify when autodetecting protocol
+
+        self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
     @Decorators.ensure_open
-    def ensure_protocol(self, ident, **kwargs):
-        baudrate = kwargs.get("baudrate", None)
+    def ensure_protocol(self, ident, baudrate=None, verify=True):
 
         # Validate input
         if ident == None:
@@ -172,7 +175,7 @@ class OBDConn(object):
         ident = str(ident).upper()
 
         # Check if already autodetected
-        protocol = self._obd.protocol(verify=kwargs.pop("verify", True))  # Default is to verify protocol on each call
+        protocol = self._obd.protocol(verify=verify)  # Default is to verify protocol on each call
         if ident == "AUTO" and protocol.autodetected \
             or ident == protocol.ID:  # Or if already set
 
@@ -182,7 +185,7 @@ class OBDConn(object):
                 return  # No changes
 
         # We need to change protocol and/or baudrate
-        self.change_protocol.undecorated(self, ident, **kwargs)  # No need to call the 'ensure_open' decorator again
+        self.change_protocol.undecorated(self, ident, baudrate=baudrate, verify=verify)  # No need to call the 'ensure_open' decorator again
 
     @Decorators.ensure_open
     def query(self, cmd, **kwargs):

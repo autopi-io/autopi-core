@@ -52,7 +52,7 @@ def context_handler():
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=False, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=True, force=False):
     """
     Queries an OBD command.
     """
@@ -226,7 +226,7 @@ def connection_handler(baudrate=None, reset=None):
 
 
 @edmp.register_hook()
-def protocol_handler(set=None, baudrate=None):
+def protocol_handler(set=None, baudrate=None, verify=False):
     """
     Configures protocol or lists all supported.
     """
@@ -237,9 +237,9 @@ def protocol_handler(set=None, baudrate=None):
         ret["supported"] = conn.supported_protocols()
 
     if set != None:
-        conn.change_protocol(set, baudrate=baudrate)
+        conn.change_protocol(set, baudrate=baudrate, verify=verify)
 
-    ret["current"] = conn.protocol()
+    ret["current"] = conn.protocol(verify=verify)
 
     return ret
 
