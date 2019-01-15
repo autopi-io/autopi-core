@@ -52,7 +52,7 @@ def context_handler():
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=True, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
     """
