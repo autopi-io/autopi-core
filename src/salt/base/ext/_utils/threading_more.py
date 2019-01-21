@@ -4,6 +4,11 @@ import re
 import threading
 
 
+PROFILING = False
+
+if PROFILING:
+    import cProfile as profile
+
 log = logging.getLogger(__name__)
 
 
@@ -40,6 +45,19 @@ class WorkerThread(threading.Thread):
             raise ValueError("Worker thread '{:s}' already added to registry".format(name))
 
     def run(self):
+        if PROFILING:
+            prof_file = "/tmp/{:%Y%m%d%H%M%S}_{:}.prof".format(datetime.datetime.now(), self.name)
+
+            log.warning("Profiling worker thread '%s' - after thread termination stats file will be written to: %s", self.name, prof_file)
+
+            profile.runctx("self.work()", globals(), locals(), prof_file)
+
+            log.info("Profiling stats written to: %s", prof_file)
+
+        else:
+            self.work()
+
+    def work(self):
         try:
 
             if self.delay and self.delay > 0.0:
