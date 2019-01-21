@@ -1,0 +1,14 @@
+398c398
+<         logging.root.setLevel(GARBAGE)
+---
+>         logging.root.setLevel(logging.NOTSET)
+519a520,523
+>     # Set log level according to handler's
+>     if logging.root.level == logging.NOTSET or level < logging.root.level:
+>         logging.root.level = level
+> 
+701a706,709
+> 
+>     # Set log level according to handler's
+>     if root_logger.level == logging.NOTSET or level < root_logger.level:
+>         root_logger.level = level

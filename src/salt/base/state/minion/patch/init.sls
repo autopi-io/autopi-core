@@ -119,3 +119,25 @@ utils-schedule-script-rolled-back:
     - force: true
     - onfail:
       - file: utils-schedule-script-patched
+
+log-setup-script-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/log/setup.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/log/setup.py
+    - force: true
+    - prereq:
+      - file: log-setup-script-patched
+log-setup-script-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/log/setup.py
+    - source: salt://minion/patch/log/setup.py.patch
+    - hash: 3dfe270678c4bff4247fdb35e41f887c7938d332
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+log-setup-script-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/log/setup.py
+    - source: /usr/lib/python2.7/dist-packages/salt/log/setup.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: log-setup-script-patched
