@@ -152,7 +152,7 @@ def send_handler(msg, **kwargs):
 
 
 @edmp.register_hook()
-def execute_handler(cmd, reset=None, keep_conn=True):
+def execute_handler(cmd, reset=None, keep_conn=True, assert_result=None):
     """
     Executes an AT/ST command.
     """
@@ -164,6 +164,14 @@ def execute_handler(cmd, reset=None, keep_conn=True):
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got execute result: {:}".format(res))
+
+    # Assert the result if requested
+    if assert_result != None:
+        if not isinstance(assert_result, list):
+            assert_result = [assert_result]
+
+        if assert_result != res:
+            raise ValueError("Unexpected result: {:}".format(res))
 
     # Reset interface if requested
     if reset:
