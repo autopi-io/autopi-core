@@ -716,7 +716,7 @@ def gnss_assist(enable=None):
 
     res = query("AT+QGPSXTRA?")
     if "data" in res:
-        res["enabled"] = bool(_parse_dict(res.pop("data"))["+QGPSXTRA"])
+        res["enabled"] = bool(int(_parse_dict(res.pop("data"))["+QGPSXTRA"]))
 
     return res
 
