@@ -125,16 +125,23 @@ def returner_job(job):
     Return a Salt job.
     """
 
-    if not job or not job.get("success", False):
-        log.warn("Skipping unsuccessful job result with JID: {:}".format(job.get("jid", None)))
+    if not job or not job.get("jid", None):
+        log.warn("Skipping invalid job result: {:}".format(job))
+
+        return
+
+    ret = job.get("return", job.get("ret", None))
+
+    if not ret or not job.get("success", True):  # Default is success if not specified
+        log.warn("Skipping unsuccessful job result with JID {:}: {:}".format(job["jid"], job))
 
         return
 
     # TODO: Timestamp can be extracted from JID value
 
-    kind = job["fun"] if not "_type" in job["return"] else job["fun"].split(".")[0]
+    kind = job["fun"] if not "_type" in ret else job["fun"].split(".")[0]
 
-    res = _prepare_recursively(job["return"], kind, timestamp=None)
+    res = _prepare_recursively(ret, kind, timestamp=None)
 
     cloud_cache = _get_cloud_cache_for(job)
     for r in res:
