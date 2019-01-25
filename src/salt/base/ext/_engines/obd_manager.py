@@ -194,12 +194,29 @@ def execute_handler(cmd, reset=None, keep_conn=True, assert_result=None):
 
 
 @edmp.register_hook()
-def commands_handler(mode=None):
+def commands_handler(protocol="auto", baudrate=None, verify=True, output="dict"):
     """
-    Lists all supported OBD commands found for vehicle.
+    Lists all supported OBD commands/PIDs found for vehicle.
     """
 
-    return {cmd.name: cmd.desc for cmd in conn.supported_commands()}
+    # Validate input
+    if output not in ["dict", "list"]:
+        raise ValueError("Unsupported output type - supported values are 'dict' or 'list'")
+
+    # Ensure protocol
+    conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+
+    # Prepare return value
+    ret = {
+        "protocol": conn.protocol()
+    }
+
+    if output == "dict":
+        ret["supported"] = {cmd.name: cmd.desc for cmd in conn.supported_commands()}
+    else:
+        ret["supported"] = [cmd.name for cmd in conn.supported_commands()]
+
+    return ret
 
 
 @edmp.register_hook()
