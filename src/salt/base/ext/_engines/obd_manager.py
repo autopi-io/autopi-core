@@ -52,7 +52,7 @@ def context_handler():
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="auto", baudrate=None, verify=False, force=False):
+def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, formula=None, unit=None, protocol="auto", baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
     """
@@ -98,7 +98,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
     if not cmd in conn.supported_commands() and not force:
         raise Exception("Command may not be supported - add 'force=True' to run it anyway")
 
-    res = conn.query(cmd, force=force)
+    res = conn.query(cmd, formula=formula, force=force)
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
@@ -107,9 +107,11 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, protocol="au
     if not res.is_null():
         if isinstance(res.value, obd.UnitsAndScaling.Unit.Quantity):
             ret["value"] = res.value.m
-            ret["unit"] = str(res.value.u)
+            ret["unit"] = unit or str(res.value.u)
         else:
             ret["value"] = res.value
+            if unit != None:
+                ret["unit"] = unit
 
     return ret
 

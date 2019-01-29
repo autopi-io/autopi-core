@@ -2,6 +2,7 @@ import collections
 import gpio_pin
 import logging
 import obd
+import obd.utils
 import RPi.GPIO as gpio
 
 from obd.interfaces import STN11XX
@@ -193,15 +194,24 @@ class OBDConn(object):
         self.change_protocol.undecorated(self, ident, baudrate=baudrate, verify=verify)  # No need to call the 'ensure_open' decorator again
 
     @Decorators.ensure_open
-    def query(self, cmd, **kwargs):
-        return self._obd.query(cmd, **kwargs)
+    def query(self, cmd, formula=None, **kwargs):
+        res = self._obd.query(cmd, **kwargs)
+
+        # Calculate formula if given
+        if formula != None:
+            if isinstance(res.value, obd.UnitsAndScaling.Unit.Quantity):
+                raise ValueError("Cannot calculate formula for already decoded result")
+
+            res.value = self._calc_formula(formula, res.messages) or res.value
+
+        return res
 
     @Decorators.ensure_open
     def supported_commands(self):
         return self._obd.supported_commands
 
     @Decorators.ensure_open
-    def send(self, msg, **kwargs):
+    def send(self, msg, formula=None, **kwargs):
 
         # Parse out header if found
         hash_pos = msg.find("#")
@@ -209,7 +219,14 @@ class OBDConn(object):
             kwargs["header"] = msg[:hash_pos]
             msg = msg[hash_pos + 1:]
 
-        return self._obd.send(msg, **kwargs)
+        res = self._obd.send(msg, **kwargs)
+
+        # TODO: Find out how to parse raw messages
+        # Calculate formula if given
+        #if formula != None:
+        #    res = self._calc_formula(formula, res)
+
+        return res
 
     @Decorators.ensure_open
     def send_all(self, msgs, delay=None):
@@ -255,5 +272,24 @@ class OBDConn(object):
             except:
                 log.exception("Error in 'on_status' event handler")
 
+    def _calc_formula(self, expression, messages, default=None):
 
+        if not messages:
+            log.warn("No messages found to calculate formula: {:}".format(expression))
 
+            return default
+
+        try:
+            return eval(expression, {}, {
+                # Helper functions
+                "bytes_to_int": obd.utils.bytes_to_int,
+                "bytes_to_hex": obd.utils.bytes_to_hex,
+                "twos_comp": obd.utils.twos_comp,
+                # Message data
+                "message": messages[0],
+                "messages": messages
+            })
+        except Exception as ex:
+            log.exception("Failed to calculate formula")
+
+            raise Exception("Failed to calculate formula: {:}".format(ex))
