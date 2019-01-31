@@ -498,10 +498,6 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
         if experimental:
 
-            # Not sure if this have any effect/improvement
-            proc = psutil.Process(os.getpid())
-            proc.nice(-20)
-
             # For some reason this runs much faster when profiling - go firgure!
             profile.runctx("conn.send_all(lines, delay=delay)", globals(), locals())
         else:
@@ -647,6 +643,9 @@ def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager")
+
+        # Give process highest 'nice' priority
+        psutil.Process(os.getpid()).nice(-20)
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
