@@ -1,5 +1,7 @@
 
+#
 # IMPORTANT: These states will only run when minion comes online and is connected to master 
+#
 
 include:
   {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}

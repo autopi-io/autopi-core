@@ -1,12 +1,26 @@
+
 include:
   - checkout.test
-  - ec2x.gnss.update
-  - power.stn.config
-  - power.spm.install
 
-gnss-test:
+# Prevents power off/sleep
+sleep-timers-reset:
   module.run:
-    - name: ec2x.gnss_assist_data
+    - name: power.sleep_timer
+    - enable: false
+
+# Force update release
+force-release-updated:
+  module.run:
+    - name: minionutil.update_release
+    - force: true
+
+# Restart minion if restart is pending (after running pending SLS or update release)
+restart-minion-if-pending-after-release-updated:
+  module.run:
+    - name: minionutil.request_restart
+    - pending: false
+    - immediately: true
+    - reason: changes_made_during_checkout
 
 states-locally-cached:
   module.run:

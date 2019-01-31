@@ -199,9 +199,6 @@ class OBDConn(object):
 
         # Calculate formula if given
         if formula != None:
-            if isinstance(res.value, obd.UnitsAndScaling.Unit.Quantity):
-                raise ValueError("Cannot calculate formula for already decoded result")
-
             res.value = self._calc_formula(formula, res.messages) or res.value
 
         return res

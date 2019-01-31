@@ -15,7 +15,6 @@ assert-modem-ttyusb:
 sim-card-present:
   cmd.run:
     - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
-{%- endif %}
 
 modem-test:
   module.run:
@@ -24,6 +23,8 @@ modem-test:
 qmi-test:
   module.run:
     - name: qmi.system_info
+
+{%- endif %}
 
 spm-test:
   module.run:
