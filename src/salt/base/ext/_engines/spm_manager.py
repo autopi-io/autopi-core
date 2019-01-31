@@ -151,8 +151,8 @@ def start(workers, **kwargs):
     try:
         log.debug("Starting SPM manager")
 
-        # Give process highest 'nice' priority
-        psutil.Process(os.getpid()).nice(-20)
+        # Give process higher 'nice' priority
+        psutil.Process(os.getpid()).nice(-10)
 
         # Setting up SPM connection
         conn.setup()
