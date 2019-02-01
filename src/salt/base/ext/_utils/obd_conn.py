@@ -34,6 +34,7 @@ class OBDConn(object):
     def __init__(self):
         self._device = None
         self._baudrate = None
+        self._timeout = None
 
         self._obd = None
 
@@ -56,6 +57,9 @@ class OBDConn(object):
             raise ValueError("Setting 'baudrate' has unsupported value")
         self._baudrate = settings["baudrate"]
 
+        if "timeout" in settings:
+            self._timeout = settings["timeout"]
+
         # Prepare GPIO to listen on STN power pin
         gpio.setmode(gpio.BOARD)
         gpio.setup(gpio_pin.STN_PWR, gpio.IN)
@@ -71,7 +75,14 @@ class OBDConn(object):
 
         log.debug("Opening OBD connection")
         try :
-            self._obd = obd.OBD(portstr=self._device, baudrate=self._baudrate, interface_cls=STN11XX, status_callback=self._status_callback, fast=False)
+            self._obd = obd.OBD(
+                portstr=self._device,
+                baudrate=self._baudrate,
+                timeout=self._timeout,
+                interface_cls=STN11XX,
+                status_callback=self._status_callback,
+                fast=False
+            )
 
             return self
 

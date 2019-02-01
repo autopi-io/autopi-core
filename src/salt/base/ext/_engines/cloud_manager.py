@@ -93,6 +93,7 @@ def upload_handler():
 
     finally:
 
+        # TODO: Update this status for each batch upload!
         # Update context
         ctx["count"] += 1
         for key, val in ret.iteritems():
