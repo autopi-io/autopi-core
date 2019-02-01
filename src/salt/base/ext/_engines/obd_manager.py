@@ -644,8 +644,8 @@ def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager")
 
-        # Give process highest 'nice' priority
-        psutil.Process(os.getpid()).nice(-20)
+        # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
+        psutil.Process(os.getpid()).nice(-2)
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
