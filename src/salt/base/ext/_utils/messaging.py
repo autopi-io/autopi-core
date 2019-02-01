@@ -70,11 +70,7 @@ class MessageProcessor(object):
 
             # Wrap in synchronizer if requested
             if synchronize:
-                def synchronizer(*args, **kwargs):
-                    with self._hook_lock:
-                        return func(*args, **kwargs)
-
-                ret_func = synchronizer
+                ret_func = self._synchronize_wrapper(self._hook_lock, func)
 
             # Add function to hook registry
             name = func.__name__
@@ -94,11 +90,7 @@ class MessageProcessor(object):
 
         # Wrap in synchronizer if requested
         if synchronize:
-            def synchronizer(*args, **kwargs):
-                with self._hook_lock:
-                    return func(*args, **kwargs)
-
-            func = synchronizer
+            func = self._synchronize_wrapper(self._hook_lock, func)
 
         self._hook_funcs["{:}_{:}".format(name, kind)] = func
 
@@ -172,6 +164,9 @@ class MessageProcessor(object):
         # Terminates worker thread after a successful run without warnings nor exceptions
         kill_upon_success = settings.pop("kill_upon_success", False)
 
+        # Perform entire job iteration transactionally
+        transactional = settings.pop("transactional", False)
+
         # Prepare function that performs actual work
         def do_work(thread, context):
             success = True
@@ -221,7 +216,12 @@ class MessageProcessor(object):
 
                     # Finally suppress or propagate the exception
                     if suppress_exceptions:
-                        log.info("Suppressing prior exception in worker thread '{:}' and continues as normal".format(thread.name))
+                        if transactional:
+                            log.info("Suppressing prior exception in worker thread '{:}' and skips any following work".format(thread.name))
+
+                            break
+                        else:
+                            log.info("Suppressing prior exception in worker thread '{:}' and continues as normal".format(thread.name))
                     else:
                         raise
 
@@ -236,7 +236,7 @@ class MessageProcessor(object):
 
         # Add new worker thread
         thread = threading_more.WorkerThread(
-            target=do_work,
+            target=self._synchronize_wrapper(self._hook_lock, do_work) if transactional else do_work,
             context={"messages": [message] if message else []},
             registry=self._worker_threads,  # Registers thread in registry
             **settings)  # Pass additional settings
@@ -452,6 +452,13 @@ class MessageProcessor(object):
                 listener["func"](result)
             except Exception:
                 log.exception("Failed executing listener: {:}".format(listener))
+
+    def _synchronize_wrapper(self, lock, func):
+        def synchronizer(*args, **kwargs):
+            with lock:
+                return func(*args, **kwargs)
+
+        return synchronizer
 
     #endregion
 
