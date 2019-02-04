@@ -638,7 +638,7 @@ def _battery_listener(result):
         )
 
 
-def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs):
+def start(serial_conn, returners, workers, battery_critical_limit=None, measure_stats=False, **kwargs):
     try:
 
         if log.isEnabledFor(logging.DEBUG):
@@ -659,6 +659,7 @@ def start(serial_conn, returners, workers, battery_critical_limit=None, **kwargs
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__, returners=returners, workers=workers)
+        edmp.measure_stats = measure_stats
         edmp.run()
 
     except Exception:

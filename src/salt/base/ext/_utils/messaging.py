@@ -43,12 +43,21 @@ class MessageProcessor(object):
         self._hook_lock = threading.RLock()  # Used to synchronize hook function calls
         self._worker_threads = threading_more.ThreadRegistry()  # Keeps track of all active workers
         self._listeners = []
+        self._measure_stats = False
 
         # Set default hooks that will be used if none specified
         if not "worker" in self._default_hooks:
             self._default_hooks["worker"] = "shared"
         if not "workflow" in self._default_hooks:
             self._default_hooks["workflow"] = "simple"
+
+    @property
+    def measure_stats(self):
+        return self._measure_stats
+
+    @measure_stats.setter
+    def measure_stats(self, value):
+        self._measure_stats = value
 
     def close(self):
 
@@ -400,10 +409,42 @@ class MessageProcessor(object):
         # Get hook function by name
         func = self._get_func("{:s}_{:s}".format(name, kind))
 
+        # Wrap hook function in order to measure statistics
+        if self._measure_stats:
+            func = self._stats_wrapper_for(message, kind, func)
+
         if parse_settings:
             return (func, settings)
         else:
             return func
+
+    def _stats_wrapper_for(self, message, kind, func):
+        def stats_wrapper(*args, **kwargs):
+            start = timer()
+
+            try:
+                return func(*args, **kwargs)
+            finally:
+                duration = timer() - start
+
+                stats = message.setdefault("_stats", {}).setdefault(kind, {
+                    "duration": {
+                        "acc": 0.0,
+                        "avg": 0.0,
+                        "min": 0.0,
+                        "max": 0.0
+                    },
+                    "count": 0
+                })
+                stats["count"] += 1
+                stats["duration"]["acc"] += duration
+                stats["duration"]["avg"] = stats["duration"]["acc"] / stats["count"]
+                if duration < stats["duration"]["min"] or not stats["duration"]["min"]:
+                    stats["duration"]["min"] = duration
+                if duration > stats["duration"]["max"] or not stats["duration"]["max"]:
+                    stats["duration"]["max"] = duration
+
+        return stats_wrapper
 
     def _parse_hook_url(self, url):
         u = urlparse.urlparse(url)
