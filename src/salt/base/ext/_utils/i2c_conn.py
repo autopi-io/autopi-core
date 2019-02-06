@@ -48,6 +48,8 @@ class I2CConn(object):
 
         self._bus = smbus.SMBus()
 
+        return self
+
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self):
         log.info("Opening I2C connection on port: %d", self._port)
@@ -123,6 +125,17 @@ class I2CConn(object):
 
         if self.on_written:
             self.on_written(register, byte)
+
+    @Decorators.ensure_open
+    def write_block(self, register, block):
+        self._bus.write_i2c_block_data(self._address, register, block)
+
+        if log.isEnabledFor(logging.DEBUG):
+            for idx, byt in enumerate(block):
+                log.debug("Wrote byte {:d}/{:d} of block to register {:d}: {:08b}".format(idx, len(block), register, byt))
+
+        if self.on_written:
+            self.on_written(register, block)
 
     @Decorators.ensure_open
     def read_write(self, register, mask, value):
