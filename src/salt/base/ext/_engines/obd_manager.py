@@ -52,7 +52,7 @@ def context_handler():
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, formula=None, unit=None, protocol="auto", baudrate=None, verify=False, force=False):
+def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol="auto", baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
     """
@@ -98,7 +98,7 @@ def query_handler(name, mode=None, pid=None, bytes=0, decoder=None, formula=None
     if not cmd in conn.supported_commands() and not force:
         raise Exception("Command may not be supported - add 'force=True' to run it anyway")
 
-    res = conn.query(cmd, formula=formula, force=force)
+    res = conn.query(cmd, header=header, formula=formula, force=force)
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
