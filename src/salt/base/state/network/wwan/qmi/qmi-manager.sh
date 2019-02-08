@@ -163,6 +163,11 @@ up ()
         echoerr "[WARN] No SIM config file found at '$SIM_CONF'"
     fi
 
+    # Ensure QMI device is in online operating mode
+    qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to ensure that QMI device is in online operating mode" && return $ERROR
+    [ $VERBOSE == true ] && echo "[INFO] QMI device is in online operating mode"
+
     # Check for network
     retry 2 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
     [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
@@ -198,6 +203,17 @@ down ()
         retcode=$ERROR
     elif [ $VERBOSE == true ]; then
         echo "[INFO] Stopped QMI network"
+    fi
+
+    # Put QMI device into low power operating mode if enabled
+    if [ $POWER_SAVE == true ]; then
+        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=low-power
+        if [ $? -gt 0 ]; then
+            echoerr "[ERROR] Failed to put QMI device into low power operating mode"
+            retcode=$ERROR
+        elif [ $VERBOSE == true ]; then
+            echo "[INFO] QMI device is put into low power operating mode"
+        fi
     fi
 
     # Stop uDHCP client
