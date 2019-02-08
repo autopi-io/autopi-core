@@ -164,12 +164,20 @@ up ()
     fi
 
     # Ensure QMI device is in online operating mode
-    qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
-    [ $? -gt 0 ] && echoerr "[ERROR] Failed to ensure that QMI device is in online operating mode" && return $ERROR
-    [ $VERBOSE == true ] && echo "[INFO] QMI device is in online operating mode"
+    qmicli --device-open-$MODE --device $DEVICE --dms-get-operating-mode | grep -q "Mode: 'online'"
+    if [ $? -gt 0 ]; then
+        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
+        [ $? -gt 0 ] && echoerr "[ERROR] Failed to put QMI device into online operating mode" && return $ERROR
+        [ $VERBOSE == true ] && echo "[INFO] QMI device is put into online operating mode"
+
+        # Give device some time to be ready before network check
+        sleep 0.5
+    else
+        [ $VERBOSE == true ] && echo "[INFO] QMI device is already in online operating mode"
+    fi
 
     # Check for network
-    retry 2 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
     [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Mobile network present"
 
