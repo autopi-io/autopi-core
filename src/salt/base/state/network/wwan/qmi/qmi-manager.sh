@@ -170,8 +170,9 @@ up ()
         [ $? -gt 0 ] && echoerr "[ERROR] Failed to put QMI device into online operating mode" && return $ERROR
         [ $VERBOSE == true ] && echo "[INFO] QMI device is put into online operating mode"
 
-        # Give device some time to be ready before network check
-        sleep 0.5
+        # Give device some time to be ready before network check and start of connection
+        # NOTE: Too little time results in errors and establish of connection fails
+        sleep 1
     else
         [ $VERBOSE == true ] && echo "[INFO] QMI device is already in online operating mode"
     fi
@@ -215,7 +216,9 @@ down ()
 
     # Put QMI device into low power operating mode if enabled
     if [ $POWER_SAVE == true ]; then
-        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=low-power
+
+        # Will do IMSI detach and RF off, and if the module resets the setting is re-applied (i.e. it doesn't go to online automatically)
+        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=persistent-low-power
         if [ $? -gt 0 ]; then
             echoerr "[ERROR] Failed to put QMI device into low power operating mode"
             retcode=$ERROR
