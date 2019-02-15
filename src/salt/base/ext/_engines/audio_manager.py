@@ -70,15 +70,8 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
     log.debug("Loading audio file: %s", audio_file)
     pygame.mixer.music.load(audio_file)
 
-    # Ensure amplifier is powered on
-    gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
-
     log.info("Playback of audio file: %s", audio_file)
     pygame.mixer.music.play(loops=loops)
-
-    # TODO: Power off when stopped playing - use: set_endevent()
-    # Power off amplifier
-    #gpio.output(gpio_pin.AMP_ON, gpio.LOW)
 
     return {
         "playing": True
@@ -136,9 +129,6 @@ def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_
 
     ret = {}
 
-    # Ensure amplifier is powered on
-    gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
-
     res = __salt__["cmd.run_all"]("espeak -a {:d} -v {:s} -p {:d} -s {:d} -g {:d} -X '{:s}'".format(volume, language, pitch, speed, word_gap, text),
         timeout=timeout)  # Timeout added because espeak sometimes hangs
     if res["retcode"] != 0:
@@ -151,7 +141,8 @@ def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_
 
 def start(mixer, **kwargs):
     try:
-        log.debug("Starting audio manager")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting audio manager")
 
         context["mixer"]["settings"] = mixer
 
@@ -159,8 +150,10 @@ def start(mixer, **kwargs):
         gpio.setmode(gpio.BOARD)
         gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
 
-        gpio.output(gpio_pin.AMP_ON, gpio.LOW)
-        log.debug("Initially powered off amplifier chip by setting GPIO pin #%d low", gpio_pin.AMP_ON)
+        # Ensure amplifier is powered on
+        gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Initially powered on amplifier chip by setting GPIO pin #%d high", gpio_pin.AMP_ON)
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__)
