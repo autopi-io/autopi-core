@@ -283,14 +283,14 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
     conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Play sound to indicate recording has begun
-    __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
+    __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
     try:
         res = conn.monitor_all(duration=duration, mode=monitor_mode, auto_format=auto_format)
     finally:
 
         # Play sound to indicate recording has ended
-        __salt__["cmd.run"]("aplay /opt/autopi/audio/beep.wav")
+        __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/beep.wav")
 
     # Write result to file if specified
     if file != None:

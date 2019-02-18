@@ -125,7 +125,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
 
         # Play sound to indicate recording has begun
         if sound:
-            __salt__["cmd.run"]("aplay /opt/autopi/audio/bleep.wav")
+            __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
         # Apply specified settings
         conn.config({
@@ -165,7 +165,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
 
         # Play sound to indicate recording has ended
         if sound:
-            __salt__["cmd.run"]("aplay /opt/autopi/audio/beep.wav")
+            __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/beep.wav")
 
     # Write data to file if requested
     if file_path != None:
