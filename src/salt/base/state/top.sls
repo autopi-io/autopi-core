@@ -1,7 +1,7 @@
 
 base:
   '*':
-    - requirements
+    - requirements  # Most important
     - raspi.install
     - minion.install
 {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "ec2x" %}
