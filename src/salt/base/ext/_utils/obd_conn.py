@@ -34,6 +34,8 @@ class OBDConn(object):
     def __init__(self):
         self._device = None
         self._baudrate = None
+        self._protocol = None  # Results in autodetect
+        self._verify = True
         self._timeout = None
 
         self._obd = None
@@ -57,6 +59,12 @@ class OBDConn(object):
             raise ValueError("Setting 'baudrate' has unsupported value")
         self._baudrate = settings["baudrate"]
 
+        if "protocol" in settings:
+            self._protocol = str(settings["protocol"]) if str(settings["protocol"]).upper() != "AUTO" else None
+
+        if "verify" in settings:
+            self._verify = settings["verify"]
+
         if "timeout" in settings:
             self._timeout = settings["timeout"]
 
@@ -78,6 +86,8 @@ class OBDConn(object):
             self._obd = obd.OBD(
                 portstr=self._device,
                 baudrate=self._baudrate,
+                protocol=self._protocol,
+                verify=self._verify,
                 timeout=self._timeout,
                 interface_cls=STN11XX,
                 status_callback=self._status_callback,
