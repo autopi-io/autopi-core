@@ -77,7 +77,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
-    # Ensure protocol if given
+    # Only ensure protocol if given
     if protocol and protocol not in [str(None), "null"]:  # Workaround: Also support empty value from pillar
 
         # We do not want to break workflow upon failure because then listeners will not get called
@@ -130,8 +130,7 @@ def send_handler(msg, **kwargs):
         log.debug("Sending: %s", msg)
 
     # Ensure protocol
-    protocol = kwargs.pop("protocol", None)  # Default is no protocol change
-    conn.ensure_protocol(protocol,
+    conn.ensure_protocol(kwargs.pop("protocol", None),
         baudrate=kwargs.pop("baudrate", None),
         verify=kwargs.pop("verify", False))
 

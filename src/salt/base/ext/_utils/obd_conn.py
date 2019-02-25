@@ -32,12 +32,15 @@ class OBDConn(object):
             return decorator
 
     def __init__(self):
+
+        # Settings
         self._device = None
         self._baudrate = None
-        self._protocol = None  # Results in autodetect
-        self._verify = True
         self._timeout = None
-
+        self._protocol_id = "AUTO"
+        self._protocol_baudrate = None
+        self._protocol_verify = True
+        
         self._obd = None
 
         self.is_permanently_closed = False
@@ -59,14 +62,16 @@ class OBDConn(object):
             raise ValueError("Setting 'baudrate' has unsupported value")
         self._baudrate = settings["baudrate"]
 
-        if "protocol" in settings:
-            self._protocol = str(settings["protocol"]) if str(settings["protocol"]).upper() != "AUTO" else None
-
-        if "verify" in settings:
-            self._verify = settings["verify"]
-
         if "timeout" in settings:
             self._timeout = settings["timeout"]
+
+        if "protocol" in settings:
+            if "id" in settings["protocol"]:
+                self._protocol_id = str(settings["protocol"]["id"]).upper() if settings["protocol"]["id"] not in [None, str(None), "null"] else None
+            else:
+                self._protocol_id = self._protocol_id
+            self._protocol_baudrate = settings["protocol"].get("baudrate", self._protocol_baudrate)
+            self._protocol_verify = settings["protocol"].get("verify", self._protocol_verify)
 
         # Prepare GPIO to listen on STN power pin
         gpio.setmode(gpio.BOARD)
@@ -86,9 +91,13 @@ class OBDConn(object):
             self._obd = obd.OBD(
                 portstr=self._device,
                 baudrate=self._baudrate,
-                protocol=self._protocol,
-                verify=self._verify,
                 timeout=self._timeout,
+                protocol={
+                    "id": self._protocol_id if self._protocol_id != "AUTO" else None,  # None value will result in autodetection
+                    "baudrate": self._protocol_baudrate,
+                    "verify": self._protocol_verify
+                },
+                load_commands=self._protocol_verify,  # Only load supported commands when protocol is verified
                 interface_cls=STN11XX,
                 status_callback=self._status_callback,
                 fast=False
@@ -191,8 +200,15 @@ class OBDConn(object):
             if baudrate != None:
                 raise ValueError("Protocol must also be specified when baudrate is specified")
 
-            # No changes requested
-            return
+            # Use protocol from settings as default if defined
+            if self._protocol_id != None:
+                ident = self._protocol_id
+                baudrate = self._protocol_baudrate
+                verify = self._protocol_verify
+            else:
+
+                # No protocol requested and no default available
+                return
 
         ident = str(ident).upper()
 
