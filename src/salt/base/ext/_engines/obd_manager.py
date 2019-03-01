@@ -637,6 +637,7 @@ def _battery_listener(result):
         )
 
 
+# TODO: Rename 'serial_conn' to 'obd_conn'?
 def start(serial_conn, returners, workers, battery_critical_limit=None, measure_stats=False, **kwargs):
     try:
 
