@@ -83,7 +83,7 @@ def protocol(**kwargs):
     Optional arguments:
         set (str): Change to protocol with given identifier.
         baudrate (int): Use custom protocol baudrate. 
-        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
 
     Examples:
         obd.protocol
@@ -97,18 +97,20 @@ def protocol(**kwargs):
 
 def send(msg, **kwargs):
     """
-    Sends a raw message on bus.
+    Sends a message on bus.
 
     Arguments:
         msg (str): Message to send.
 
     Optional arguments:
         header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
-        auto_format (bool): Apply automatic formatting of message. Default value is False.
-        expect_response (bool): Wait for a response after sending. Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is False.  
+        auto_format (bool): Apply automatic formatting of messages? Default value is False.
+        expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is False.
+        echo (bool): Include the request message in the response? Default value is False.
+        raw (bool): Get raw response without error validation? Default value is False.
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
-        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
         output (str): What data type should the output be returned in? Default is a 'list'.
         type (str): Specify a name of the type of the result. Default is 'raw'.
     """
@@ -160,11 +162,11 @@ def monitor(**kwargs):
         limit (int): The maximum number of messages to read. Default value is 500.
         duration (float): How many seconds to monitor? If not set there is no limitation.
         mode (int): The STN monitor mode. Default is 0.
-        auto_format (bool): Apply automatic formatting of messages. Default value is False.
+        auto_format (bool): Apply automatic formatting of messages? Default value is False.
         filtering (bool): Use filters while monitoring or monitor all messages? Default value is False.
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
-        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
         type (str): Specify a name of the type of the result. Default is 'raw'.
     """
 
@@ -197,7 +199,7 @@ def dump(**kwargs):
         description (str): Additional description to the file.
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
-        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))
@@ -238,8 +240,8 @@ def play(file, **kwargs):
                 msg: Group by entire message string.
         protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
-        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
-        test (bool): Run command in test-only (dry-run) mode. No data will be sent on CAN bus. Default value is False.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
+        test (bool): Run command in test-only? (dry-run) mode. No data will be sent on CAN bus. Default value is False.
     """
 
     return client.send_sync(_msg_pack(file, _handler="play", **kwargs))
