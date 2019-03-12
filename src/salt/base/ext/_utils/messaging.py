@@ -198,7 +198,17 @@ class MessageProcessor(object):
                     context.setdefault("distinct_warnings", {}).setdefault(msg, 0)
                     context["distinct_warnings"][msg] += 1
 
-                    log.info("Warning in worker thread '{:}': {:}".format(thread.name, wa))
+                    # Only allow recurring warnings to be logged every minute
+                    if context["distinct_warnings"][msg] > 3 \
+                        and timer() - getattr(thread, "warning_log_timer", 0) < 60:
+                        return
+                    setattr(thread, "warning_log_timer", timer())
+
+                    # Go ahead and log the warning
+                    if context["distinct_warnings"][msg] > 1:
+                        log.info("Recurring warning ({:} times) in worker thread '{:}': {:}".format(context["distinct_warnings"][msg], thread.name, wa))
+                    else:
+                        log.info("Warning in worker thread '{:}': {:}".format(thread.name, wa))
 
                 except Exception as ex:
                     success = False
@@ -233,6 +243,11 @@ class MessageProcessor(object):
                             log.info("Suppressing prior exception in worker thread '{:}' and continues as normal".format(thread.name))
                     else:
                         raise
+
+            # Clear any warnings and errors on success
+            if success:
+                context.pop("distinct_warnings", None)
+                context.pop("distinct_errors", None)
 
             if kill_upon_success and success:
                 thread.kill()
@@ -431,17 +446,17 @@ class MessageProcessor(object):
                     "duration": {
                         "acc": 0.0,
                         "avg": 0.0,
-                        "min": 0.0,
-                        "max": 0.0
+                        "min": -1.0,
+                        "max": -1.0
                     },
                     "count": 0
                 })
                 stats["count"] += 1
                 stats["duration"]["acc"] += duration
                 stats["duration"]["avg"] = stats["duration"]["acc"] / stats["count"]
-                if duration < stats["duration"]["min"] or not stats["duration"]["min"]:
+                if duration < stats["duration"]["min"] or stats["duration"]["min"] < 0:
                     stats["duration"]["min"] = duration
-                if duration > stats["duration"]["max"] or not stats["duration"]["max"]:
+                if duration > stats["duration"]["max"]:
                     stats["duration"]["max"] = duration
 
         return stats_wrapper
