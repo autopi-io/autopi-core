@@ -1,3 +1,5 @@
+from __future__ import division
+
 import battery_util
 import ConfigParser
 import cProfile as profile
@@ -38,15 +40,27 @@ context = {
         },
         "critical_limit": 0
     },
-    "readout": {}
+    "readout": {},
+    "monitor": {
+        "count": 0,
+        "readout": {
+            "acc": 0,
+            "avg": 0.0,
+            "min": -1,
+            "max": -1
+        }
+    }
 }
 
 
 @edmp.register_hook(synchronize=False)
-def context_handler():
+def context_handler(key=None):
     """
     Gets current context.
     """
+
+    if key:
+        return context.get(key, None)
 
     return context
 
@@ -271,7 +285,69 @@ def protocol_handler(set=None, baudrate=None, verify=False):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
+def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=False, filtering=False, protocol=None, baudrate=None, verify=False, type="raw"):
+    """
+    Monitors messages on bus until limit or duration is reached.
+    """
+
+    ret = {
+        "_type": type
+    }
+
+    # Ensure protocol
+    conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+
+    # Monitor until limit reached
+    res = conn.monitor_continuously(wait=wait, limit=limit, duration=duration, mode=mode, auto_format=auto_format, filtering=filtering)
+
+    # Update context with summary
+    ctx = context["monitor"]
+    ctx["count"] += 1
+    ctx["readout"]["acc"] += len(res)
+    ctx["readout"]["avg"] = ctx["readout"]["acc"] / ctx["count"]
+    if len(res) < ctx["readout"]["min"] or ctx["readout"]["min"] < 0:
+        ctx["readout"]["min"] = len(res)
+    if len(res) > ctx["readout"]["max"]:
+        ctx["readout"]["max"] = len(res)
+
+    # Check for received messages
+    if not res:
+        raise Warning("No messages received on bus")
+
+    ret["values"] = res
+
+    return ret
+
+
+@edmp.register_hook()
+def filter_handler(action, **kwargs):
+    """
+    Manages filters used when monitoring.
+    """
+
+    ret = {}
+
+    if action.lower() == "list":
+        ret["values"] = conn.list_filters(type=kwargs.get("type", None))
+
+    elif action.lower() == "add":
+        conn.add_filter(kwargs.get("type", None), kwargs.get("pattern", ""), kwargs.get("mask", ""))
+
+        ret["values"] = conn.list_filters(type=kwargs.get("type", None))
+
+    elif action.lower() == "clear":
+        conn.clear_filters(type=kwargs.get("type", None))
+
+        ret["values"] = []
+
+    else:
+        raise ValueError("Unsupported action - allowed options are: 'list', 'add', 'clear'")
+
+    return ret
+
+
+@edmp.register_hook()
+def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
     """
     Dumps all messages from OBD bus to screen or file.
     """
@@ -285,7 +361,7 @@ def dump_handler(duration=2, monitor_mode=0, auto_format=False, protocol=None, b
     __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
     try:
-        res = conn.monitor_all(duration=duration, mode=monitor_mode, auto_format=auto_format)
+        res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format)
     finally:
 
         # Play sound to indicate recording has ended

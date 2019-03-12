@@ -1,4 +1,5 @@
 import collections
+import datetime
 import gpio_pin
 import logging
 import obd
@@ -200,11 +201,11 @@ class OBDConn(object):
             if baudrate != None:
                 raise ValueError("Protocol must also be specified when baudrate is specified")
 
-            # Use protocol from settings as default if defined
+            # No protocol given - use protocol from settings as default if defined
             if self._protocol_id != None:
                 ident = self._protocol_id
                 baudrate = self._protocol_baudrate
-                verify = self._protocol_verify
+                # IMPORTANT: We do not use verify from settings but always the given value
             else:
 
                 # No protocol requested and no default available
@@ -288,10 +289,38 @@ class OBDConn(object):
         return self._obd.interface.set_baudrate(value)
 
     @Decorators.ensure_open
-    def monitor_all(self, **kwargs):
+    def monitor(self, **kwargs):
 
         # Format messages
-        return [l.replace(" ", "#", 1).replace(" ", "") for l in self._obd.interface.monitor_all(**kwargs)]
+        return [l.replace(" ", "#", 1).replace(" ", "") for l in self._obd.interface.monitor(**kwargs)]
+
+    @Decorators.ensure_open
+    def monitor_continuously(self, **kwargs):
+        return self._obd.interface.monitor_continuously(enrich=self._enrich_monitor_entry, **kwargs)
+
+    @Decorators.ensure_open
+    def list_filters(self, *args, **kwargs):
+        return self._obd.interface.list_filters(*args, **kwargs)
+
+    @Decorators.ensure_open
+    def add_filter(self, *args, **kwargs):
+        return self._obd.interface.add_filter(*args, **kwargs)
+
+    @Decorators.ensure_open
+    def clear_filters(self, *args, **kwargs):
+        return self._obd.interface.clear_filters(*args, **kwargs)
+
+    def _enrich_monitor_entry(self, res):
+        ret = {
+            "_stamp": datetime.datetime.utcnow().isoformat()
+        }
+
+        if res in self._obd.interface.ERRORS:
+            ret["error"] = self.ERRORS[res]
+        else:
+            ret["value"] = res.replace(" ", "#", 1).replace(" ", "")
+
+        return ret
 
     def _status_callback(self, status, **kwargs):
         if self.on_status:

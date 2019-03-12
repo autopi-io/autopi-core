@@ -151,9 +151,45 @@ def dtc(clear=False, **kwargs):
     return query("get_dtc", _converter="dtc", **kwargs)
 
 
+def monitor(**kwargs):
+    """
+    Monitors messages on bus until limit or duration is reached.
+
+    Optional arguments:
+        wait (bool): Wait according to the default timeout of the serial connection when reading each message/line. Default value is False.
+        limit (int): The maximum number of messages to read. Default value is 500.
+        duration (float): How many seconds to monitor? If not set there is no limitation.
+        mode (int): The STN monitor mode. Default is 0.
+        auto_format (bool): Apply automatic formatting of messages. Default value is False.
+        filtering (bool): Use filters while monitoring or monitor all messages? Default value is False.
+        protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
+        baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+        verify (bool): Verify that OBD-II communication is possible with the desired protocol. Default value is False.
+        type (str): Specify a name of the type of the result. Default is 'raw'.
+    """
+
+    return client.send_sync(_msg_pack(_handler="monitor", **kwargs))
+
+
+def filter(action, **kwargs):
+    """
+    Manages filters used when monitoring.
+
+    Arguments:
+        action (str): Action to perform. Available actions are 'list', 'add' and 'clear'.
+
+    Examples:
+        obd.filter list
+        obd.filter add type=<pass|block|flow> pattern=7C8 mask=7FF
+        obd.filter clear [type=<pass|block|flow>]
+    """
+
+    return client.send_sync(_msg_pack(action, _handler="filter", **kwargs))
+
+
 def dump(**kwargs):
     """
-    Dumps all messages from OBD bus to screen or file.
+    Dumps all messages from bus to screen or file.
 
     Optional arguments:
         duration (int): How many seconds to record data? Default value is 2 seconds.
@@ -177,7 +213,7 @@ def recordings(**kwargs):
 
 def play(file, **kwargs):
     """
-    Plays all messages from a file on the OBD bus.
+    Plays all messages from a file on the bus.
 
     Arguments:
         file (str): Path to file recorded with the 'obd.dump' command.
