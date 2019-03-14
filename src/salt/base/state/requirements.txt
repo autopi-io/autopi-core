@@ -7,4 +7,4 @@ flask==0.12.2
 flask-cors==3.0.3
 flask-api==1.0
 git+git://github.com/autopi-io/py-nmea@e257773cee103f16f75dd1ea4f9e2ef64645540a#pynmea2
-git+git://github.com/autopi-io/py-obd@6698a7d708985c674c5c155e90d3c09883745ee3#obd
+git+git://github.com/autopi-io/py-obd@1b44232b7491873ae1dc5a4002eab2e6e3682bbc#obd

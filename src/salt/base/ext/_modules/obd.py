@@ -106,8 +106,8 @@ def send(msg, **kwargs):
         header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
         auto_format (bool): Apply automatic formatting of messages? Default value is False.
         expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is False.
+        raw_response (bool): Get raw response without any validation nor parsing? Default value is False.
         echo (bool): Include the request message in the response? Default value is False.
-        raw (bool): Get raw response without error validation? Default value is False.
         protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
         baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
         verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is False.
