@@ -6,6 +6,7 @@ import re
 import redis
 import requests
 import time
+import zlib
 
 from requests.exceptions import RequestException
 from timeit import default_timer as timer
@@ -123,6 +124,18 @@ class CloudCache(object):
             "authorization": "token {:}".format(endpoint.get("auth_token")),
             "content-type": "application/json",
         }
+
+        if "compression" in self.options:
+            if self.options["compression"]["algorithm"] == "gzip":
+                start = timer()
+                compressed_payload = zlib.compress(payload, self.options["compression"].get("level", -1))
+                
+                log.info("Compressed payload with size {:} to {:} in {:} second(s)".format(len(payload), len(compressed_payload), timer() - start))
+
+                payload = compressed_payload
+                headers["content-encoding"] = "gzip"
+            else:
+                log.warning("Unsupported compression algorithm configured - skipping compression")
 
         try:
             res = requests.post(endpoint.get("url"), data=payload, headers=headers)
