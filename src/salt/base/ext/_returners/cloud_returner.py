@@ -93,11 +93,14 @@ def _prepare_recursively(result, kind, timestamp=None):
             # Flatten lonely list into seperate results
             ret.extend(_prepare_recursively(result[lone_key], kind, timestamp))
         else:
-            result.update({
-                "@ts": timestamp,
-                "@t": kind,
-            })
-            ret.append(result)
+
+            # Skip adding result if empty after timestamp and kind have been removed
+            if result:
+                result.update({
+                    "@ts": timestamp,
+                    "@t": kind,
+                })
+                ret.append(result)
 
     elif isinstance(result, (list, set, tuple)):
         timestamp = timestamp or datetime.datetime.utcnow().isoformat()
