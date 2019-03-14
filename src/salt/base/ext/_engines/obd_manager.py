@@ -167,10 +167,14 @@ def send_handler(msg, **kwargs):
 
 
 @edmp.register_hook()
-def execute_handler(cmd, reset=None, keep_conn=True, assert_result=None):
+def execute_handler(cmd, assert_result=None, reset=None, keep_conn=True, type=None):
     """
     Executes an AT/ST command.
     """
+
+    ret = {
+        "_type": type or cmd.lower()
+    }
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Executing: %s", cmd)
@@ -198,7 +202,6 @@ def execute_handler(cmd, reset=None, keep_conn=True, assert_result=None):
         log.warn("Closed connection permanently after executing command: {:}".format(cmd))
 
     # Prepare return value(s)
-    ret = {}
     if res:
         if len(res) == 1:
             ret["value"] = res[0]

@@ -121,6 +121,15 @@ def send(msg, **kwargs):
 def execute(cmd, **kwargs):
     """
     Executes an AT/ST command.
+
+    Arguments:
+        cmd (str): Command to execute.
+
+    Optional arguments:
+        assert_result (str or list): Validate the response by checking that is matches this specific value.
+        reset (str): Reset interface after execution. Valid options are: warm, cold
+        keep_conn (bool): Keep connection to interface after execution or close it permanently? Default value is True.
+        type (str): Specify a name of the type of the result. Default is the given command.
     """
 
     return client.send_sync(_msg_pack(str(cmd), _handler="execute", **kwargs))
