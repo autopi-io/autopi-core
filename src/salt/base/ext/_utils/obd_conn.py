@@ -237,7 +237,7 @@ class OBDConn(object):
 
         # Calculate formula if given
         if formula != None:
-            res.value = self._calc_formula(formula, res.messages) or res.value
+            res.value = self._calc_formula(formula, res.messages)
 
         return res
 
