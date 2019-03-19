@@ -167,7 +167,7 @@ def monitor(**kwargs):
     Monitors messages on bus until limit or duration is reached.
 
     Optional arguments:
-        wait (bool): Wait according to the default timeout of the serial connection when reading each message/line. Default value is False.
+        wait (bool): Wait for each message/line to read according to the default timeout of the serial connection (default 1 second). Otherwise there will only be waiting on the first line. line/message. Default value is False.
         limit (int): The maximum number of messages to read. Default value is 500.
         duration (float): How many seconds to monitor? If not set there is no limitation.
         mode (int): The STN monitor mode. Default is 0.
