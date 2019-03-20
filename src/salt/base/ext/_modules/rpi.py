@@ -12,7 +12,7 @@ _linux_boot_log_regex = re.compile("^(?P<timestamp>.+) raspberrypi kernel: .+$")
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"]("rpi")

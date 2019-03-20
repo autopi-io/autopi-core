@@ -14,7 +14,7 @@ def __virtual__():
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"](__virtualname__)
@@ -39,6 +39,12 @@ def status():
 def set(value, adjust_system_clock=False):
     """
     Set system time.
+
+    Arguments:
+      - value (str): Time string to set.
+
+    Optional arguments:
+      - adjust_system_clock (bool): Default is 'False'.
     """
 
     ret = {}
@@ -58,6 +64,9 @@ def set(value, adjust_system_clock=False):
 def ntp(enable=True):
     """
     Enable or disable network time synchronization.
+
+    Optional arguments:
+      - enable (bool): Default is 'True'.
     """
 
     ret = {}

@@ -13,7 +13,7 @@ def _run(name, device="/dev/cdc-wdm0"):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"]("qmi")
@@ -58,6 +58,9 @@ def cell_info():
 def signal_strength(rated_only=False):
     """
     Current signal strength values.
+
+    Optional arguments:
+      - rated_only (bool): Default is 'False'.
     """
 
     out = _run("nas-get-signal-strength")

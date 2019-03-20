@@ -13,9 +13,10 @@ def __init__(opts):
 
 
 def help():
-    '''
-    This command.
-    '''
+    """
+    Shows this help information.
+    """
+    
     return __salt__["sys.doc"]("cloud.*")
 
 
@@ -37,10 +38,10 @@ def upload(**kwargs):
     return client.send_sync(_msg_pack(_handler="upload", **kwargs))
 
 
+# TODO: Delete when scheduled job '_cloud_upload' is removed from pillar in backend.
 def upload_batch():
     """
     DEPRECATED: This will no longer upload anything.
-    TODO: Delete when scheduled job '_cloud_upload' is removed from pillar in backend.
 
     Upload next batch of logged data to the cloud server.
     """

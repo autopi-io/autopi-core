@@ -73,8 +73,9 @@ def download(cmd, size, dest, **kwargs):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
+    
     return __salt__["sys.doc"]("ec2x")
 
 
@@ -107,9 +108,9 @@ def time(mode=1):
     Obtain the latest time synchronized through network
 
     Query network time mode:
-        0 = Query the latest time that has been synchronized through network
-        1 = Query the current GMT time calculated from the latest time that has been synchronized through network
-        2 = Query the current LOCAL time calculated from the latest time that has been synchronized through network
+      - '0' = Query the latest time that has been synchronized through network
+      - '1' = Query the current GMT time calculated from the latest time that has been synchronized through network
+      - '2' = Query the current LOCAL time calculated from the latest time that has been synchronized through network
     """
 
     res = query("AT+QLTS={:d}".format(mode))
@@ -134,8 +135,8 @@ def sync_time(force=False, **kwargs):
 
 def error_format_config(value=None):
     """
-    Controls the format of error result codes: "ERROR", error numbers or
-    verbose messages as "+CME ERROR: <err>" and "+CMS ERROR: <err>".
+    Controls the format of error result codes: 'ERROR', error numbers or
+    verbose messages as '+CME ERROR: <err>' and '+CMS ERROR: <err>'.
     """
 
     if value != None:
@@ -153,9 +154,9 @@ def urc_port_config(value=None):
     Configure the output port of URC (Unsolicited Result Code).
 
     Port options:
-        usbat    = USB AT port
-        usbmodem = USB modem port
-        uart1    = Main UART
+      - 'usbat' (USB AT port)
+      - 'usbmodem' (USB modem port)
+      - 'uart1' (Main UART)
     """
 
     if value != None:
@@ -215,8 +216,10 @@ def ri_sms_config(value=None, pulse_duration=120, pulse_count=1):
     """
     Specifies the RI (Ring Indicator) behavior when incoming SMS URCs are presented.
 
-    Uses params:
-        (value=None, pulse_duration=120, pulse_count=1)
+    Optional arguments:
+      - value (str):
+      - pulse_duration (int): Default value is '120'.
+      - pulse_count (int): Default value is '1'.
     """
 
     if value != None:
@@ -238,8 +241,10 @@ def ri_other_config(value=None, pulse_duration=120, pulse_count=1):
     """
     Specifies the RI (Ring Indicator) behavior when other URCs are presented.
 
-    Uses params:
-        (value=None, pulse_duration=120, pulse_count=1)
+    Optional arguments:
+      - value (str):
+      - pulse_duration (int): Default value is '120'.
+      - pulse_count (int): Default value is '1'.
     """
 
     if value != None:
@@ -261,8 +266,8 @@ def ri_signal_config(value=None):
     """
     Specifies the RI (Ring Indicator) signal output carrier.
 
-    Uses params:
-        (value=None)
+    Optional arguments:
+      - value (str):
     """
 
     if value != None:
@@ -301,7 +306,7 @@ def gnss(enable=None, mode=1, fix_max_time=30, fix_max_dist=50, fix_count=0, fix
     """
     The command is used to turn on GNSS function. Currently <mode> only supports
     turning on GNSS in Stand-alone Solution. When <fixcount> is 0, GNSS will fix
-    position continuously, and it can be turned off via AT+QGPSEND. When <fixcount>
+    position continuously, and it can be turned off via 'AT+QGPSEND'. When <fixcount>
     is non-zero and reaches the specified value, GNSS will be turned off automatically.
 
     When GNSS is turned on and <fixcount> is 0, GNSS fixes position continuously.
@@ -309,8 +314,13 @@ def gnss(enable=None, mode=1, fix_max_time=30, fix_max_dist=50, fix_count=0, fix
     <fixcount> is non-zero, GNSS will be turned off automatically when the
     parameter reaches the specified value, and thus the command can be ignored.
 
-    Uses params:
-        (enable=None, mode=1, fix_max_time=30, fix_max_dist=50, fix_count=0, fix_rate=1)
+    Optional arguments:
+      - enable (bool):
+      - mode (int): Default value is '1'.
+      - fix_max_time (int): Default value is '30'.
+      - fix_max_dist (int): Default value is '50'.
+      - fix_count (int): Default value is '0'.
+      - fix_rate (int): Default value is '1'.
     """
 
     if enable == None:
@@ -352,13 +362,13 @@ def gnss_config(value=None):
     NOTE: Requires restart of EC2x module to take effect.
 
     Supported GNSS constellation (GPS is always on):
-        0 = GLONASS off/BeiDou off/Galileo off
-        1 = GLONASS on/BeiDou on/Galileo on
-        2 = GLONASS on/BeiDou on/Galileo off
-        3 = GLONASS on/BeiDou off/Galileo on
-        4 = GLONASS on/BeiDou off/Galileo off
-        5 = GLONASS off/BeiDou on/Galileo on
-        6 = GLONASS off/BeiDou off/Galileo on
+      - '0' = GLONASS off/BeiDou off/Galileo off
+      - '1' = GLONASS on/BeiDou on/Galileo on
+      - '2' = GLONASS on/BeiDou on/Galileo off
+      - '3' = GLONASS on/BeiDou off/Galileo on
+      - '4' = GLONASS on/BeiDou off/Galileo off
+      - '5' = GLONASS off/BeiDou on/Galileo on
+      - '6' = GLONASS off/BeiDou off/Galileo on
     """
 
     if value != None:
@@ -377,9 +387,9 @@ def gnss_nmea_port(value=None):
     Configure the output port of NMEA sentences, and the configuration parameter will be automatically saved to NVRAM.
 
     Port options:
-        none      = Close NMEA sentence output 
-        usbnmea   = Output via USB NMEA port
-        uartdebug = Output via UART debug port
+      - 'none' = Close NMEA sentence output 
+      - 'usbnmea' = Output via USB NMEA port
+      - 'uartdebug' = Output via UART debug port
     """
 
     if value != None:
@@ -414,12 +424,12 @@ def gnss_nmea_raw(type, verbose=False):
     Acquire NMEA sentence(s) data on request.
 
     Available types:
-      - GGA (Fix information)
-      - RMC (Recommended minimum data for GPS)
-      - GSV (Detailed satellite data)
-      - GSA (Overall satellite data)
-      - VTG (Vector track an speed over the ground)
-      - GNS
+      - 'GGA' (Fix information)
+      - 'RMC' (Recommended minimum data for GPS)
+      - 'GSV' (Detailed satellite data)
+      - 'GSA' (Overall satellite data)
+      - 'VTG' (Vector track an speed over the ground)
+      - 'GNS'
     """
 
     res = query('AT+QGPSGNMEA="{:s}"'.format(type))
@@ -547,12 +557,13 @@ def gnss_nmea_output_gps(value=None):
 
     Output type of GPS NMEA sentences by ORed, and the configuration parameter will be automatically saved to NVRAM.
     The default value is 31 which means that all the five types of sentences will be output.
-        0  = Disable
-        1  = GGA (Essential fix data which provide 3D location and accuracy data)
-        2  = RMC (Recommended minimum data for GPS)
-        4  = GSV (Detailed satellite data)
-        8  = GSA (Overall satellite data)
-        16 = VTG (Vector track and speed over the ground)
+
+      - '0' = Disable
+      - '1' = GGA (Essential fix data which provide 3D location and accuracy data)
+      - '2' = RMC (Recommended minimum data for GPS)
+      - '4' = GSV (Detailed satellite data)
+      - '8' = GSA (Overall satellite data)
+      - '16' = VTG (Vector track and speed over the ground)
     """
 
     if value != None:
@@ -574,10 +585,11 @@ def gnss_nmea_output_glonass(value=None):
 
     Configure output type of GLONASS NMEA sentences by ORed, and the configuration parameter will be automatically saved to NVRAM.
     The default value is 0.
-        0 = Disable
-        1 = GSV
-        2 = GSA
-        4 = GNS
+
+      - '0' = Disable
+      - '1' = GSV
+      - '2' = GSA
+      - '4' = GNS
     """
 
     if value != None:
@@ -599,8 +611,9 @@ def gnss_nmea_output_galileo(value=None):
 
     Configure output type of Galileo NMEA sentences by ORed, and the configuration parameter will be automatically saved to NVRAM.
     The default value is 0.
-        0 = Disable
-        1 = GSV
+
+      - '0' = Disable
+      - '1' = GSV
     """
 
     if value != None:
@@ -622,9 +635,10 @@ def gnss_nmea_output_beidou(value=None):
 
     Configure output type of BeiDou NMEA sentences via ORed, and the configuration parameter will be automatically saved to NVRAM.
     The default value is 0.
-        0 = Disable
-        1 = GSA
-        2 = GSV
+
+      - '0' = Disable
+      - '1' = GSA
+      - '2' = GSV
     """
 
     if value != None:
@@ -680,9 +694,9 @@ def gnss_location(mode=2):
     Acquire positioning information on request.
 
     Mode controls latitude and longitude display format:
-        0 = <latitude>,<longitude> format: ddmm.mmmm N/S,dddmm.mmmm E/W
-        1 = <latitude>,<longitude> format: ddmm.mmmmmm N/S,dddmm.mmmmmm E/W
-        2 = <latitude>,<longitude> format: (-)dd.ddddd,(-)ddd.ddddd
+      - '0' = ddmm.mmmm N/S,dddmm.mmmm E/W
+      - '1' = ddmm.mmmmmm N/S,dddmm.mmmmmm E/W
+      - '2' = (-)dd.ddddd,(-)ddd.ddddd
     """
 
     res = query("AT+QGPSLOC={:d}".format(mode))
@@ -773,10 +787,10 @@ def gnss_assist_data_reset(type=1):
     command, cold start of GNSS can be enforced via AT+QGPS. Hot/warm start can also be performed
     if the corresponding conditions are satisfied.
 
-    0 = Delete all assistance data except gpsOneXTRA data. Enforce cold start after starting GNSS.
-    1 = Do not delete any data. Perform hot start if the conditions are permitted after starting GNSS.
-    2 = Delete some related data. Perform warm start if the conditions are permitted after starting GNSS.
-    3 = Delete the gpsOneXTRA assistance data injected into GNSS engine.
+      - '0' = Delete all assistance data except gpsOneXTRA data. Enforce cold start after starting GNSS.
+      - '1' = Do not delete any data. Perform hot start if the conditions are permitted after starting GNSS.
+      - '2' = Delete some related data. Perform warm start if the conditions are permitted after starting GNSS.
+      - '3' = Delete the gpsOneXTRA assistance data injected into GNSS engine.
     """
 
     return query('AT+QGPSDEL={:d}'.format(type))
@@ -815,7 +829,6 @@ def list_files(pattern="*", storage="ufs"):
 
 def upload_file(path, storage="ufs", timeout=5):
     """
-    TODO
     """
 
     name = os.path.basename(path)
@@ -836,7 +849,6 @@ def upload_file(path, storage="ufs", timeout=5):
 
 def download_file(name, dest, storage="ufs"):
     """
-    TODO
     """
 
     # First we need to get file size

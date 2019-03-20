@@ -15,7 +15,7 @@ def __init__(opts):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"]("audio")
@@ -25,11 +25,13 @@ def play(audio_file, force=False, loops=0, volume=None):
     """
     Plays a specific audio file. 
 
-    Args:
-        audio_file (str): 
-        force (bool): 
-        loops (int): 
-        volume (int): 
+    Arguments:
+      - audio_file (str): Local path of audio file to play.
+
+    Optional arguments:
+      - force (bool): Default is 'False'.
+      - loops (int): Default is '0'.
+      - volume (int):
     """
 
     return client.send_sync(_msg_pack(audio_file, force=force, loops=loops, volume=volume, _handler="play"))
@@ -39,8 +41,8 @@ def queue(audio_file):
     """
     Queues an audio file.
 
-    Args:
-        audio_file (str): 
+    Arguments:
+      - audio_file (str): Local path of audio file to play.
     """
 
     return client.send_sync(_msg_pack(audio_file, _handler="queue"))
@@ -58,8 +60,8 @@ def volume(value=None):
     """
     Set volumen of the playback.
 
-    Args: 
-        value (int): 
+    Optional arguments:
+      - value (int):
     """
 
     return client.send_sync(_msg_pack(value=value, _handler="volume"))
@@ -69,8 +71,8 @@ def speak(text, **kwargs):
     """
     Speak given text.
 
-    Args:
-        text (str): 
+    Arguments:
+      - text (str): Text to speak out.
     """
 
     return client.send_sync(_msg_pack(text, _handler="speak", **kwargs))

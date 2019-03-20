@@ -15,7 +15,7 @@ def __init__(opts):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"]("spm")
@@ -24,6 +24,9 @@ def help():
 def query(cmd, *args, **kwargs):
     """
     Queries a given SPM command.
+
+    Arguments:
+      - cmd (str): The SPM command to query.
     """
 
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))

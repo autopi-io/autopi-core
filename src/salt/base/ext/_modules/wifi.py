@@ -16,7 +16,7 @@ def __virtual__():
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"](__virtualname__)
@@ -25,6 +25,9 @@ def help():
 def status(interface="wlan0"):
     """
     Get current WPA/EAPOL/EAP status.
+
+    Optional arguments:
+      - interface (str): Default is 'wlan0'.
     """
 
     res = __salt__["cmd.run"]("wpa_cli -i {:} status".format(interface))
@@ -36,6 +39,9 @@ def status(interface="wlan0"):
 def scan(interface="wlan0"):
     """
     Give the list of Access Points and Ad-Hoc cells in range.
+
+    Optional arguments:
+      - interface (str): Default is 'wlan0'.
     """
 
     return get_interfaces(interface=interface)

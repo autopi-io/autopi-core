@@ -38,7 +38,7 @@ def _parse_rule(value, pattern):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"](__virtualname__)

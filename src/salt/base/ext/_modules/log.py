@@ -6,15 +6,29 @@ log = logging.getLogger(__name__)
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
-    return __salt__["sys.doc"]("log.*")
+    return __salt__["sys.doc"]("log")
 
 
 def query(file, begin="^", end="$", match=".*", count=0, reverse=False, before=0, after=0, first=0, last=100):
     """
-    Query a log file or any file.
+    Query a log file or any text file.
+
+    Arguments:
+      - file (str): Path of log file.
+
+    Optional arguments:
+      - begin (str): Default is '^'.
+      - end (str): Default is '$'.
+      - match (str): Default is '.*'.
+      - count (int): Default is '0'.
+      - reverse (bool): Default is 'False'.
+      - before (int): Default is '0'.
+      - after (int): Default is '0'.
+      - first (int): Default is '0'.
+      - last (int): Default is '100'.
     """
 
     pipeline = []

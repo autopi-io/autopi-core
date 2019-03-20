@@ -9,6 +9,14 @@ import time
 log = logging.getLogger(__name__)
 
 
+def help():
+    """
+    Shows this help information.
+    """
+    
+    return __salt__["sys.doc"]("minionutil")
+
+
 def run_job(name, *args, **kwargs):
     """
     Run a job by passing it to the minion process.
@@ -61,6 +69,9 @@ def run_job(name, *args, **kwargs):
 def restart(reason="unknown"):
     """
     Restart the minion service immediately.
+
+    Optional arguments:
+      - reason (str): Reason code that tells why we decided to restart. Default is 'unknown'.
     """
 
     return request_restart(immediately=True, reason=reason)
@@ -69,6 +80,13 @@ def restart(reason="unknown"):
 def request_restart(pending=True, immediately=False, delay=10, expiration=1200, reason="unknown"):
     """
     Request for a future restart of the minion service.
+
+    Optional arguments:
+      - pending (bool): Default is 'True'.
+      - immediately (bool): Default is 'False'.
+      - delay (int): Default is '10'.
+      - expiration (int): Default is '1200'.
+      - reason (str): Reason code that tells why we decided to restart. Default is 'unknown'.
     """
 
     if pending or __context__.get("minionutil.request_restart", False):
@@ -118,6 +136,11 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
 def update_release(force=False, dry_run=False, only_retry=False):
     """
     Update a minion to newest release by running a highstate if not already up-to-date.
+
+    Optional arguments:
+      - force (bool): Default is 'False'.
+      - dry_run (bool): Default is 'False'.
+      - only_retry (bool): Default is 'False'.
     """
 
     old = __salt__["grains.get"]("release", default={"id": None, "state": None})
@@ -242,6 +265,12 @@ def update_release(force=False, dry_run=False, only_retry=False):
 def change_master(host, confirm=False):
     """
     Change to different master host.
+
+    Arguments:
+      - host (str): Hostname of the new master to change to.
+
+    Optional arguments:
+      - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
     """
 
     if not confirm:
@@ -271,8 +300,14 @@ def last_logs(file="minion", until="$", match=".*", count=0, before=0, after=0, 
     """
     Get last log lines from minion log.
 
-    Uses params:
-        (file="minion", until="$", match=".*", count=50, before=0, after=0, limit=100)
+    Optional arguments:
+      - file (str): Default is 'minion'.
+      - until (str): Default is '$'.
+      - match (str): Default is '.*'.
+      - count (int): Default is '0'.
+      - before (int): Default is '0'.
+      - after (int): Default is '0'.
+      - limit (int): Default is '100'.
     """
 
     return __salt__["log.query"]("/var/log/salt/{:s}".format(file),
@@ -289,8 +324,14 @@ def last_errors(file="minion", until="$", level="error", count=0, before=0, afte
     """
     Get last errors from minion log.
 
-    Uses params:
-        (file="minion", until="$", level="error", count=50, before=0, after=0, limit=100)
+    Optional arguments:
+      - file (str): Default is 'minion'.
+      - until (str): Default is '$'.
+      - level (str): Default is 'error'.
+      - count (int): Default is '0'.
+      - before (int): Default is '0'.
+      - after (int): Default is '0'.
+      - limit (int): Default is '100'.
     """
 
     return last_logs(
@@ -307,8 +348,11 @@ def last_startup(file="minion", until="$", match="Setting up the Salt Minion", l
     """
     Get log lines for last startup sequence.
 
-    Uses params:
-        (file="minion", until="$", match="Setting up the Salt Minion", limit=100)
+    Optional arguments:
+      - file (str): Default is 'minion'.
+      - until (str): Default is '$'.
+      - match (str): Default is 'Setting up the Salt Minion'.
+      - limit (int): Default is '100'.
     """
 
     return last_logs(

@@ -20,7 +20,7 @@ def __init__(opts):
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"](__virtualname__)

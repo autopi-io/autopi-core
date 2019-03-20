@@ -10,7 +10,7 @@ log = logging.getLogger(__name__)
 
 def help():
     """
-    This command.
+    Shows this help information.
     """
 
     return __salt__["sys.doc"]("power")
@@ -69,13 +69,13 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     """
     Power down system and put device into sleep state.
 
-    Args:
-        interval (int): Sleep interval in seconds.
-        delay (str): Delay in seconds before powering down.
-        modem_off (bool): Power off 3V3 supply to modem on mPCIe slot.
-        acc_off (bool): Put accelerometer into standby.
-        confirm (bool): Acknowledge the execution of this command.
-        reason (str): Reason code that tells why we decided to sleep.
+    Optional arguments:
+      - interval (int): Sleep interval in seconds. Default is '60'.
+      - delay (str): Delay in seconds before powering down. Default is '10'.
+      - modem_off (bool): Power off 3V3 supply to modem on mPCIe slot. Default is 'False'.
+      - acc_off (bool): Put accelerometer into standby. Default is 'False'.
+      - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
+      - reason (str): Reason code that tells why we decided to sleep. Default is 'unknown'.
     """
 
     if __salt__["saltutil.is_running"]("power.sleep"):
@@ -160,10 +160,10 @@ def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True)
     """
     Power down system and put device into hibernate state.
 
-    Args:
-        delay (str): Delay in seconds before powering down.
-        confirm (bool): Acknowledge the execution of this command.
-        reason (str): Reason code that tells why we decided to hibernate.
+    Optional arguments:
+      - delay (str): Delay in seconds before powering down. Default is '10'.
+      - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
+      - reason (str): Reason code that tells why we decided to hibernate. Default is 'unknown'.
     """
 
     return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_auto_update=allow_auto_update)
@@ -175,10 +175,10 @@ def sleep_timer(enable=None, period=1800, **kwargs):
 
     NOTE: Do not access pillar data in this function as they will not be available when called from engines (separate processes).
 
-    Args:
-        enable (bool): Enable or disable timer.
-        period (int): Timer period in seconds before performing sleep.
-        reason (str): Reason code that tells why we decided to sleep.
+    Optional arguments:
+      - enable (bool): Enable or disable timer.
+      - period (int): Timer period in seconds before performing sleep. Default is '1800'.
+      - reason (str): Reason code that tells why we decided to sleep. Default is 'unknown'.
     """
 
     # Helper function to get all sleep timers
@@ -225,6 +225,9 @@ def sleep_timer(enable=None, period=1800, **kwargs):
 def reboot(reason="unknown"):
     """
     Reboot system immediately.
+
+    Optional arguments:
+      - reason (str): Reason code that tells why we decided to reboot. Default is 'unknown'.
     """
 
     return request_reboot(immediately=True, reason=reason)
@@ -233,6 +236,11 @@ def reboot(reason="unknown"):
 def request_reboot(pending=True, immediately=False, reason="unknown"):
     """
     Request for a future system reboot.
+
+    Optional arguments:
+      - pending (bool): Default is 'True'.
+      - immediately (bool): Default is 'False'.
+      - reason (str): Reason code that tells why we decided to reboot. Default is 'unknown'.
     """
 
     if pending or __context__.get("power.request_reboot", False):
