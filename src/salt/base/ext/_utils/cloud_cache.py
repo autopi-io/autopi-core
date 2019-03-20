@@ -1,12 +1,13 @@
 import datetime
+import gzip
 import json
 import logging
 import random
 import re
 import redis
 import requests
+import StringIO
 import time
-import zlib
 
 from requests.exceptions import RequestException
 from timeit import default_timer as timer
@@ -128,7 +129,12 @@ class CloudCache(object):
         if "compression" in self.options:
             if self.options["compression"]["algorithm"] == "gzip":
                 start = timer()
-                compressed_payload = zlib.compress(payload, self.options["compression"].get("level", -1))
+
+                buffer = StringIO.StringIO()
+                with gzip.GzipFile(fileobj=buffer, mode="wt", compresslevel=self.options["compression"].get("level", 9)) as gf:
+                   gf.write(payload)
+
+                compressed_payload = buffer.getvalue()
                 
                 log.info("Compressed payload with size {:} to {:} in {:} second(s)".format(len(payload), len(compressed_payload), timer() - start))
 
