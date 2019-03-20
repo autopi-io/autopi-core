@@ -36,9 +36,9 @@ def query(cmd, *args, **kwargs):
       - 'acc.query status'
       - 'acc.query xyz'
       - 'acc.query active value=False'
-      - 'acc.range value=4'
-      - 'acc.data_rate value=12.5'
-      - 'acc.offset x=0.1 y=-0.1 z=0'
+      - 'acc.query range value=4'
+      - 'acc.query data_rate value=12.5'
+      - 'acc.query offset x=0.1 y=-0.1 z=0'
     """
 
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
