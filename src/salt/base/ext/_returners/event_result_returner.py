@@ -14,7 +14,7 @@ def __virtual__():
 
 def returner(res):
     """
-    Publishes an entire job result on the minion event bus.
+    Publishes an entire job result on the minion's local event bus.
     """
 
     event_bus = salt.utils.event.get_event("minion",

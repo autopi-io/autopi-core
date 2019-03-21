@@ -22,7 +22,7 @@ context = {
 @edmp.register_hook(synchronize=False)
 def cache_handler(cmd, *args, **kwargs):
     """
-    Query/call a cache function.
+    Queries/calls a given cache function.
     """
 
     ret = {
@@ -51,7 +51,7 @@ def cache_handler(cmd, *args, **kwargs):
 @edmp.register_hook()
 def upload_handler():
     """
-    Upload data to cloud.
+    Uploads cached data to cloud.
     """
 
     ret = {}
@@ -106,7 +106,7 @@ def upload_handler():
 @edmp.register_hook(synchronize=False)
 def status_handler():
     """
-    Get current upload status.
+    Gets current status.
     """
 
     return context

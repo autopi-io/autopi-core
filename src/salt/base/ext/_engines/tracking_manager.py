@@ -28,7 +28,7 @@ context = {
 @edmp.register_hook(synchronize=False)
 def status_handler():
     """
-    Get current connection status and more.
+    Gets current status.
     """
 
     ret = {

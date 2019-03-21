@@ -62,11 +62,28 @@ def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
 
 @edmp.register_hook()
 def exec_handler(cmd, **kwargs):
+    """
+    Runs an AT command against the EC2X device.
+
+    Arguments:
+      - cmd (str): AT command to execute.
+    """
+
     return _exec(cmd, **kwargs)
 
 
 @edmp.register_hook()
 def power_handler(cmd, reason="unknown"):
+    """
+    Powers down the EC2X device.
+
+    Arguments:
+      - cmd (str): AT command to perform the power down.
+
+    Optional arguments:
+      - reason (str): Reason code that tells why we decided to power down. Default is 'unknown'.
+    """
+
     # We need to give the module a cooldown period of 30 secs to power off completely and prevent
     # new requests when not ready. If an open serial connection exists during power off it will block
     # everything when using an USB hub connected to the RPi's built-in USB - yup, go figure!
@@ -91,6 +108,13 @@ def power_handler(cmd, reason="unknown"):
 
 @edmp.register_hook()
 def upload_handler(cmd, src):
+    """
+    Uploads a file to the EC2X device.
+
+    Arguments:
+      - cmd (str): AT command to perform the actual upload.
+      - src (str): Destination path to the file to be uploaded.
+    """
 
     content = None
     with open(src, mode="rb") as f:
@@ -111,6 +135,14 @@ def upload_handler(cmd, src):
 
 @edmp.register_hook()
 def download_handler(cmd, size, dest):
+    """
+    Downloads a file from the EC2X device.
+
+    Arguments:
+      - cmd (str): AT command to perform the actual download.
+      - size (int): Size of the file to download.
+      - dest (str): Destination path to which the downloaded file is to be written.
+    """
 
     conn.write_line(cmd)
     res = conn.read("CONNECT", error_regex)
@@ -130,6 +162,12 @@ def download_handler(cmd, size, dest):
 
 @edmp.register_hook()
 def sync_time_handler(force=False):
+    """
+    Synchronizes the system clock with the EC2X device.
+
+    Optional arguments:
+      - force (bool): Default is 'False'.
+    """
 
     ret = {}
 

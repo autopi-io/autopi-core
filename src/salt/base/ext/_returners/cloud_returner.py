@@ -120,12 +120,16 @@ def _prepare_recursively(result, kind, timestamp=None):
 
 
 def returner(ret):
+    """
+    Return a result to cloud cache.
+    """
+
     returner_job(ret)
 
 
 def returner_job(job):
     """
-    Return a Salt job.
+    Return a Salt job result to cloud cache.
     """
 
     if not job or not job.get("jid", None):
@@ -153,7 +157,7 @@ def returner_job(job):
 
 def returner_event(event):
     """
-    Return an event.
+    Return an event to cloud cache.
     """
 
     if not event:
@@ -172,7 +176,7 @@ def returner_event(event):
 
 def returner_data(data, kind, **kwargs):
     """
-    Return any arbitrary data structure.
+    Return any arbitrary data structure to cloud cache.
     """
 
     if not data:

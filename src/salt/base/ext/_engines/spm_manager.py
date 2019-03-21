@@ -25,7 +25,10 @@ context = {
 @edmp.register_hook()
 def query_handler(cmd, **kwargs):
     """
-    Query/call a SPM function.
+    Queries a given SPM command.
+
+    Arguments:
+      - cmd (str): The SPM command to query.
     """
 
     ret = {
@@ -51,7 +54,7 @@ def query_handler(cmd, **kwargs):
 @edmp.register_hook()
 def heartbeat_handler():
     """
-    Trigger heartbeat and fire power on event when booting.
+    Triggers SPM heartbeat and fires power on event when booting.
     """
 
     try:
@@ -105,7 +108,7 @@ def heartbeat_handler():
 @edmp.register_hook()
 def flash_firmware_handler(hex_file, no_write=True):
     """
-    Flash new SPM firmware to ATtiny.
+    Flashes new SPM firmware to ATtiny.
     """
 
     ret = {}

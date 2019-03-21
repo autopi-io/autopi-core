@@ -51,6 +51,18 @@ def _ensure_mixer():
 
 @edmp.register_hook()
 def play_handler(audio_file, force=False, loops=0, volume=None):
+    """
+    Plays a specific audio file. 
+
+    Arguments:
+      - audio_file (str): Local path of audio file to play.
+
+    Optional arguments:
+      - force (bool): Default is 'False'.
+      - loops (int): Default is '0'.
+      - volume (int):
+    """
+
     _ensure_mixer()
 
     if pygame.mixer.music.get_busy():
@@ -80,6 +92,13 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
 
 @edmp.register_hook()
 def queue_handler(audio_file):
+    """
+    Queues an audio file.
+
+    Arguments:
+      - audio_file (str): Local path of audio file to play.
+    """
+
     _ensure_mixer()
 
     #if not pygame.mixer.music.get_busy():
@@ -96,6 +115,10 @@ def queue_handler(audio_file):
 
 @edmp.register_hook()
 def stop_handler():
+    """
+    Stops playback of the current audio.
+    """
+
     _ensure_mixer()
 
     busy = pygame.mixer.music.get_busy()
@@ -110,6 +133,13 @@ def stop_handler():
 
 @edmp.register_hook()
 def volume_handler(value=None):
+    """
+    Set volumen of the playback.
+
+    Optional arguments:
+      - value (int):
+    """
+
     _ensure_mixer()
 
     if value != None:
@@ -124,7 +154,12 @@ def volume_handler(value=None):
 @edmp.register_hook()
 def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10, timeout=10):
     """
-    Unfortunately 'espeak' command is not always reliable - sometimes it fails for uncertain reasons.
+    Speak given text.
+
+    NOTE: Unfortunately 'espeak' command is not always reliable - sometimes it fails for uncertain reasons.
+
+    Arguments:
+      - text (str): Text to speak out.
     """
 
     ret = {}

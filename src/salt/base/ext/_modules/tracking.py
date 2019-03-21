@@ -28,7 +28,7 @@ def help():
 
 def status(**kwargs):
     """
-    Get current status.
+    Gets current status.
     """
 
     return client.send_sync(_msg_pack(_handler="status", **kwargs))

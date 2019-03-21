@@ -32,7 +32,7 @@ def cache(cmd, *args, **kwargs):
 
 def upload(**kwargs):
     """
-    Upload cached data to cloud.
+    Uploads cached data to cloud.
     """
 
     return client.send_sync(_msg_pack(_handler="upload", **kwargs))
@@ -43,7 +43,7 @@ def upload_batch():
     """
     DEPRECATED: This will no longer upload anything.
 
-    Upload next batch of logged data to the cloud server.
+    Uploads next batch of logged data to the cloud server.
     """
 
     return 0
@@ -51,7 +51,7 @@ def upload_batch():
 
 def status(**kwargs):
     """
-    Get current status.
+    Gets current status.
     """
 
     return client.send_sync(_msg_pack(_handler="status", **kwargs))

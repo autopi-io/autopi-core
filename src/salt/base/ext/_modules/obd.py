@@ -28,9 +28,23 @@ def help():
 
 def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwargs):
     """
-    Queries a given OBD command.
+    Queries a given OBD command. To see supported OBD commands for your vehicle run: 'obd.commands'
 
-    To see supported OBD commands for your vehicle run: obd.commands
+    Arguments:
+      - name (str): Name of the command.
+
+    Optional arguments:
+      - mode (str): Service section of the PID.
+      - pid (str): Code section of the PID.
+      - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
+      - bytes (int): Default value is '0'.
+      - decoder (str): Specific decoder to be used to process the response.
+      - formula (str): Formula written in Python to convert the response.
+      - unit (str): Unit of the result.
+      - protocol (str): ID of specific protocol to be used to receive the data. Default value is 'auto'.
+      - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+      - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - force (bool): Force query of unknown command. Default is 'False'.
 
     Examples:
       - 'obd.query RPM'

@@ -34,7 +34,7 @@ def query(cmd, *args, **kwargs):
 
 def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
     """
-    Flash new SPM firmware to ATtiny.
+    Flashes new SPM firmware to ATtiny.
     """
 
     ret = {}
