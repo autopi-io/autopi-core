@@ -20,7 +20,7 @@ def dict_get(dic, *args, **kwargs):
     return ret
 
 
-def dict_find(dic, path, value, default=None)
+def dict_find(dic, path, value, default=None):
     ret = default
 
     p = path.split(":")
@@ -28,7 +28,7 @@ def dict_find(dic, path, value, default=None)
         res = dict_get(d, *p)
 
         if res != None and res == value:
-            ret = res
+            ret = d
 
             break
 
