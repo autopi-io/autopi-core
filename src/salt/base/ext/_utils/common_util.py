@@ -5,7 +5,10 @@ import os
 log = logging.getLogger(__name__)
 
 
-def dict_find(dic, *args, **kwargs):
+def dict_get(dic, *args, **kwargs):
+    if not isinstance(dic, dict):
+        return kwargs.get("default", None)
+
     ret = dic
 
     for arg in args:
@@ -13,6 +16,21 @@ def dict_find(dic, *args, **kwargs):
             return kwargs.get("default", None)
 
         ret = ret[arg]
+
+    return ret
+
+
+def dict_find(dic, path, value, default=None)
+    ret = default
+
+    p = path.split(":")
+    for d in dic if isinstance(dic, list) else [dic]:
+        res = dict_get(d, *p)
+
+        if res != None and res == value:
+            ret = res
+
+            break
 
     return ret
 

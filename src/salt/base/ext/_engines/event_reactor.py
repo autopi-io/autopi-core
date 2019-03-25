@@ -2,7 +2,7 @@ import copy
 import logging
 import salt.loader
 
-from common_util import dict_find, dict_filter
+from common_util import dict_get, dict_find, dict_filter
 from messaging import EventDrivenMessageProcessor, keyword_resolve
 
 
@@ -12,7 +12,8 @@ log = logging.getLogger(__name__)
 edmp = EventDrivenMessageProcessor("reactor")
 
 context = {
-    "cache.get": lambda *args, **kwargs: dict_find(context, "cache", *args, **kwargs),
+    "cache.get": lambda *args, **kwargs: dict_get(context.get("cache", None), *args, **kwargs),
+    "cache.find": lambda *args, **kwargs: dict_find(context.get("cache", {}).values(), *args, **kwargs)
 }
 
 @edmp.register_hook()
