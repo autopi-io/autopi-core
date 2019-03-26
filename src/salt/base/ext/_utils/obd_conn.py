@@ -292,9 +292,9 @@ class OBDConn(object):
     def monitor(self, **kwargs):
         res = self._obd.interface.monitor(**kwargs)
 
-        # TODO: Format response
-        #if kwargs.pop("format_response", False):
-        #    return [r.replace(" ", "#", 1).replace(" ", "") for r in res]
+        # Format response
+        if kwargs.pop("format_response", False):
+            return [r.replace(" ", "#", 1).replace(" ", "") for r in res]
 
         return res
 
@@ -322,7 +322,9 @@ class OBDConn(object):
         if res in self._obd.interface.ERRORS:
             ret["error"] = self.ERRORS[res]
         else:
-            ret["value"] = res.replace(" ", "#", 1).replace(" ", "")
+            # No formatting
+            #ret["value"] = res.replace(" ", "#", 1).replace(" ", "")
+            ret["value"] = res
 
         return ret
 
