@@ -290,10 +290,12 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def monitor(self, **kwargs):
+        format_response = kwargs.pop("format_response", True)
+
         res = self._obd.interface.monitor(**kwargs)
 
         # Format response
-        if kwargs.pop("format_response", False):
+        if format_response:
             return [r.replace(" ", "#", 1).replace(" ", "") for r in res]
 
         return res
