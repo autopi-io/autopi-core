@@ -104,6 +104,9 @@ class OBDConn(object):
                 fast=False
             )
 
+            # Always soft reset interface to avoid any continuing protocol detection/verification problems
+            self._obd.reset(mode="warm")
+
             return self
 
         except Exception:
