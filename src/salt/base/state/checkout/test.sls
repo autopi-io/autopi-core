@@ -4,9 +4,6 @@ audio-test:
     - audio_file: /usr/share/sounds/alsa/Front_Center.wav
 
 {%- if salt['pillar.get']('setup:mpcie:module') == 'ec2x' %}
-modem-device-found:
-  cmd.run:
-    - name: "lsusb | grep -q \"2c7c:0121\""
 
 assert-modem-ttyusb:
   cmd.run:
