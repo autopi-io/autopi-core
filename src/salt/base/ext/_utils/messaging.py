@@ -494,20 +494,21 @@ class MessageProcessor(object):
             raise Exception("No function found for hook '{:}'".format(name))
 
     def _call_listeners_for(self, message, result):
-        if result == None:
+        if not result:
             return
 
-        for listener in self._listeners:
-            try:
-                # Use matcher function if specified
-                matcher = listener["matcher"]
-                if matcher != None and not matcher(message, result):
-                    continue
+        for res in result if isinstance(result, list) else [result]:
+            for listener in self._listeners:
+                try:
+                    # Use matcher function if specified
+                    matcher = listener["matcher"]
+                    if matcher != None and not matcher(message, res):
+                        continue
 
-                # Call listener
-                listener["func"](result)
-            except Exception:
-                log.exception("Failed executing listener: {:}".format(listener))
+                    # Call listener
+                    listener["func"](res)
+                except Exception:
+                    log.exception("Failed executing listener: {:}".format(listener))
 
     def _synchronize_wrapper(self, lock, func):
         def synchronizer(*args, **kwargs):

@@ -11,6 +11,7 @@ import os
 import psutil
 import salt.loader
 
+from binascii import unhexlify
 from common_util import abs_file_path
 from obd.utils import OBDError
 from obd_conn import OBDConn
@@ -25,6 +26,9 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 
 # OBD connection
 conn = OBDConn()
+
+# CAN database
+can_db = None
 
 context = {
     "engine": {
@@ -691,6 +695,52 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
 
 @edmp.register_hook(synchronize=False)
+def can_converter(result):
+    """
+    Converts raw CAN data using the CAN database if available.
+    """
+    
+    # Skip failed results
+    if "error" in result:
+        return
+
+    # Skip if not CAN database is initialized
+    if can_db == None:
+        log.warning("Skipping CAN conversion because no CAN database is present")
+
+        return
+
+    if not "values" in result:
+        log.warning("Skipping CAN conversion because no values found in result: {:}".format(result))
+
+        return
+
+    ret = []
+
+    # Try to decode CAN messages and add to values list
+    for res in result["values"]:
+        try:
+            header, data = res["value"].split(" ", 1)
+
+            # Find message by header
+            try:
+                 msg = can_db.get_message_by_frame_id(int(header, 16))
+            except KeyError:
+
+                # Skip unknown message
+                continue
+
+            # Decode data using found message
+            for key, val in msg.decode(unhexlify(data.replace(" ", "")), True, True).iteritems():
+                ret.append(dict(res, _type=key.lower(), value=val))
+
+        except:
+            log.exception("Failed to decode value as CAN message: {:}".format(res))
+
+    return ret
+
+
+@edmp.register_hook(synchronize=False)
 def battery_converter(result):
     """
     Enriches a voltage reading result with battery charge state and level.
@@ -728,7 +778,18 @@ def alternating_readout_filter(result):
     Filter that only returns alternating/changed values.
     """
 
-    # TODO: Move this function to 'messaging.py' and make it reusable?
+    # TODO HN: Move this function to 'messaging.py' and make it reusable? Or move to returner? 
+
+    # Handle multiple results when used together with 'can_converter'
+    if isinstance(result, list):
+        ret = []
+
+        for res in result:
+            r = alternating_readout_filter(res)
+            if r != None:
+                ret.append(r)
+
+        return ret
 
     # Skip failed results
     if "error" in result:
@@ -812,7 +873,7 @@ def _battery_listener(result):
 
 
 # TODO: Rename 'serial_conn' to 'obd_conn'?
-def start(serial_conn, returners, workers, battery_critical_limit=None, measure_stats=False, **kwargs):
+def start(serial_conn, returners, workers, can_db_file=None, battery_critical_limit=None, measure_stats=False, **kwargs):
     try:
 
         if log.isEnabledFor(logging.DEBUG):
@@ -825,6 +886,16 @@ def start(serial_conn, returners, workers, battery_critical_limit=None, measure_
         context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
+
+        # Initialize CAN database if file is given
+        if can_db_file != None:
+            try:
+                import cantools
+
+                global can_db
+                can_db = cantools.db.load_file(can_db_file)
+            except:
+                log.exception("Failed to initialize CAN database from file '{:}'".format(can_db_file))
 
         # Configure connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
