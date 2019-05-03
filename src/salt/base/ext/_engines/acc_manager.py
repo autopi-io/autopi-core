@@ -3,6 +3,7 @@ import gpio_pin
 import inspect
 import json
 import logging
+import math
 import os
 import RPi.GPIO as gpio
 import salt.loader
@@ -17,8 +18,7 @@ from timeit import default_timer as timer
 log = logging.getLogger(__name__)
 
 # Message processor
-edmp = EventDrivenMessageProcessor("acc",
-    default_hooks={"handler": "query"})
+edmp = EventDrivenMessageProcessor("acc", default_hooks={"workflow": "extended", "handler": "query"})
 
 # MMA8X5X I2C connection
 conn = MMA8X5XConn()
@@ -197,6 +197,31 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
         ret["data"] = data
 
     return ret
+
+
+@edmp.register_hook(synchronize=False)
+def roll_pitch_converter(result):
+    """
+    Calculates roll and pitch for a XYZ reading and appends it to the result.
+
+    TODO HN: Ideally this should be done after filtering
+    """
+
+    # Skip failed results
+    if "error" in result:
+        return
+
+    # Check for supported type
+    if result.get("_type", None) != "xyz":
+        log.warning("Unable to calculate roll and pitch for result of type '{:}'".format(result.get("_type", None)))
+
+        return result
+
+    # Perform calculations
+    result["roll"] = math.atan2(result["y"], result["z"]) * 57.3
+    result["pitch"] = math.atan2(-result["x"], math.sqrt(result["y"] * result["y"] + result["z"] * result["z"])) * 57.3
+
+    return result
 
 
 @edmp.register_hook(synchronize=False)
