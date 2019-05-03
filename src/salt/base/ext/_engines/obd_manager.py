@@ -887,6 +887,15 @@ def start(serial_conn, returners, workers, can_db_file=None, battery_critical_li
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
+        # Initialize message processor
+        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
+        edmp.measure_stats = measure_stats
+
+        # Configure OBD connection
+        conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
+        conn.on_closing = lambda: edmp.close()  # Will kill active workers
+        conn.setup(serial_conn)
+
         # Initialize CAN database if file is given
         if can_db_file != None:
             try:
@@ -894,17 +903,22 @@ def start(serial_conn, returners, workers, can_db_file=None, battery_critical_li
 
                 global can_db
                 can_db = cantools.db.load_file(can_db_file)
+
+                # Ensure all filters are cleared
+                conn.clear_filters()
+
+                # Add pass filter for each message ID
+                for msg in can_db.messages:
+                    try:
+                        # TODO HN: How to handle 29 bit headers here?
+                        conn.add_filter("PASS", "{:X}".format(msg.frame_id), "7FF")
+                    except:
+                        log.exception("Failed to add pass filter for CAN message: {:}".format(msg))
+
             except:
                 log.exception("Failed to initialize CAN database from file '{:}'".format(can_db_file))
 
-        # Configure connection
-        conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
-        conn.on_closing = lambda: edmp.close()  # Will kill active workers
-        conn.setup(serial_conn)
-
-        # Initialize and run message processor
-        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
-        edmp.measure_stats = measure_stats
+        # Run message processor
         edmp.run()
 
     except Exception:
