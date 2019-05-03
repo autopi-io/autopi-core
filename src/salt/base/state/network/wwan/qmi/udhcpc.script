@@ -10,7 +10,7 @@ RESOLV_CONF="/etc/resolv.conf"
 
 # Load override config params if available
 OVERRIDE_CONF="/etc/udhcpc/qmi.override"
-[ -e $OVERRIDE_CONF ] && . OVERRIDE_CONF
+[ -e $OVERRIDE_CONF ] && . $OVERRIDE_CONF
 
 log() {
     logger -t "uchcpc[$PPID]" -p daemon.$1 "$interface: $2"
