@@ -911,7 +911,7 @@ def start(serial_conn, returners, workers, can_db_file=None, battery_critical_li
                 for msg in can_db.messages:
                     try:
                         # TODO HN: How to handle 29 bit headers here?
-                        conn.add_filter("PASS", "{:X}".format(msg.frame_id), "7FF")
+                        conn.add_filter("PASS", "{:03X}".format(msg.frame_id), "7FF")
                     except:
                         log.exception("Failed to add pass filter for CAN message: {:}".format(msg))
 
