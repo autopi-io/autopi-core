@@ -12,7 +12,7 @@ import psutil
 import salt.loader
 
 from binascii import unhexlify
-from common_util import abs_file_path
+from common_util import abs_file_path, factory_support
 from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
@@ -872,10 +872,9 @@ def _battery_listener(result):
         )
 
 
-# TODO: Rename 'serial_conn' to 'obd_conn'?
-def start(serial_conn, returners, workers, can_db_file=None, battery_critical_limit=None, measure_stats=False, **kwargs):
+@factory_rendering
+def start(**settings):
     try:
-
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager")
 
@@ -883,30 +882,31 @@ def start(serial_conn, returners, workers, can_db_file=None, battery_critical_li
         psutil.Process(os.getpid()).nice(-2)
 
         # Determine critical limit of battery voltage 
-        context["battery"]["critical_limit"] = battery_critical_limit or battery_util.DEFAULT_CRITICAL_LIMIT
+        context["battery"]["critical_limit"] = settings.get("battery_critical_limit", battery_util.DEFAULT_CRITICAL_LIMIT)
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Initialize message processor
-        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
-        edmp.measure_stats = measure_stats
+        edmp.init(__salt__, __opts__, returners=settings["returners"], workers=settings["workers"])
+        edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
-        conn.setup(serial_conn)
+        conn.setup(settings["serial_conn"])  # TODO: Rename 'serial_conn' to 'obd_conn'?
 
         # Initialize CAN database if file is given
-        if can_db_file != None:
+        if "can_db_file" in settings:
             try:
                 import cantools
 
                 global can_db
-                can_db = cantools.db.load_file(can_db_file)
+                can_db = cantools.db.load_file(settings["can_db_file"])
 
                 # Ensure all filters are cleared
                 conn.clear_filters()
 
+                # TODO HN: Can only be added when protocol is set and verified!
                 # Add pass filter for each message ID
                 for msg in can_db.messages:
                     try:
@@ -916,7 +916,7 @@ def start(serial_conn, returners, workers, can_db_file=None, battery_critical_li
                         log.exception("Failed to add pass filter for CAN message: {:}".format(msg))
 
             except:
-                log.exception("Failed to initialize CAN database from file '{:}'".format(can_db_file))
+                log.exception("Failed to initialize CAN database from file '{:}'".format(settings["can_db_file"]))
 
         # Run message processor
         edmp.run()

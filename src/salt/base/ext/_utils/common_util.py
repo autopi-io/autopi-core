@@ -1,3 +1,4 @@
+import importlib
 import logging
 import os
 
@@ -62,3 +63,21 @@ def abs_file_path(name, fallback_folder, ext=None):
             ret += ".{:}".format(ext)
 
         return ret
+
+
+def load_func(qname):
+    mod_name, func_name = qname.rsplit(".", 1)
+    mod = importlib.import_module(mod_name)
+    func = getattr(mod, func_name)
+
+    return func
+
+
+def factory_rendering(func):
+    def decorator(*args, **kwargs):
+        if "_factory" in kwargs:
+            args, kwargs =load_func(kwargs.pop("_factory"))(*args, **kwargs)
+
+        return func(*args, **kwargs)
+
+    return decorator
