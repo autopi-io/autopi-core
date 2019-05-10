@@ -513,7 +513,7 @@ def recordings_handler(path=None):
 
 
 @edmp.register_hook()
-def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, verify=False, test=False, experimental=False):
+def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol=None, baudrate=None, verify=False, auto_format=False, test=False, experimental=False):
     """
     Plays all messages from a file on the bus.
 
@@ -538,6 +538,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
       - protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - test (bool): Run command in test-only? (dry-run) mode. No data will be sent on CAN bus. Default value is 'False'.
     """
 
@@ -676,9 +677,9 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         if experimental:
 
             # For some reason this runs much faster when profiling - go firgure!
-            profile.runctx("conn.send_all(lines, delay=delay)", globals(), locals())
+            profile.runctx("conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)", globals(), locals())
         else:
-            conn.send_all(lines, delay=delay)
+            conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)
 
         ret["count"]["sent"] = len(lines)
         ret["duration"] = timer() - start

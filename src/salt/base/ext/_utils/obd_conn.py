@@ -267,9 +267,9 @@ class OBDConn(object):
         return res
 
     @Decorators.ensure_open
-    def send_all(self, msgs, delay=None):
+    def send_all(self, msgs, delay=None, **kwargs):
         for msg in msgs:
-            self.send.undecorated(self, msg, auto_format=False)  # No need to call the 'ensure_open' decorator each time
+            self.send.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator each time
 
             if delay:
                 time.sleep(delay / 1000.0)
