@@ -168,6 +168,9 @@ def battery(**kwargs):
 def dtc(clear=False, **kwargs):
     """
     Reads and clears Diagnostics Trouble Codes (DTCs).
+
+    Optional arguments:
+     - clear (bool): clear DTC codes
     """
 
     if clear:
