@@ -9,9 +9,10 @@ assert-modem-ttyusb:
   cmd.run:
     - name: "ls /dev/ | grep -e \"ttyUSB0\" && ls /dev/ | grep -e \"ttyUSB1\" && ls /dev/ | grep -e \"ttyUSB2\" && ls /dev/ | grep -e \"ttyUSB3\""
 
-sim-card-present:
-  cmd.run:
-    - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
+#Used for the hw test that is executed in china
+#sim-card-present:
+#  cmd.run:
+#    - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
 
 modem-test:
   module.run:
