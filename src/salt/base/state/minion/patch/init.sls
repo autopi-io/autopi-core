@@ -6,6 +6,12 @@ minion-restart-requested-after-patching:
     - name: minionutil.request_restart
     - reason: minion_patched
 
+minion-restart-requested-immediately-after-patching:
+  module.wait:
+    - name: minionutil.request_restart
+    - immediately: true  # Restart minion service immediately because patch changes are crucial
+    - reason: minion_patched
+
 minion-script-001-backed-up:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/minion.py.{{ _timestamp }}
@@ -133,7 +139,7 @@ utils-files-script-patched:
     - source: salt://minion/patch/utils/files.py.patch
     - hash: 6de59a409eb74cbff965f7b5961c88f2825fada9
     - watch_in:
-      - module: minion-restart-requested-after-patching
+      - module: minion-restart-requested-immediately-after-patching
 utils-files-script-rolled-back:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/utils/files.py
