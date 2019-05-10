@@ -1,0 +1,4 @@
+27c27
+< REMOTE_PROTOS = ('http', 'https', 'ftp', 'swift', 's3')
+---
+> REMOTE_PROTOS = ('http', 'https', 'https+token', 'https+bearer', 'ftp', 'swift', 's3')
