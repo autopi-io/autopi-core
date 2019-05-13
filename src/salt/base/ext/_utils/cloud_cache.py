@@ -251,11 +251,17 @@ class CloudCache(object):
         except RequestException as rex:
             ret.setdefault("errors", []).append(str(rex))
 
-            # Create retry queue for batch
-            retry_queue = self.RETRY_QUEUE.format(datetime.datetime.utcnow(), 0)
-            log.warning("Failed to upload pending batch - transferring to new dedicated retry queue '{:}': {:}".format(retry_queue, rex))
+            work_queue = self.WORK_QUEUE.format(self.PENDING_QUEUE)
+            if self.options.get("max_retry", 10) > 0:
 
-            self.client.renamenx(self.WORK_QUEUE.format(self.PENDING_QUEUE), retry_queue)
+                # Create retry queue for batch
+                retry_queue = self.RETRY_QUEUE.format(datetime.datetime.utcnow(), 0)
+                log.warning("Failed to upload pending batch - transferring to new dedicated retry queue '{:}': {:}".format(retry_queue, rex))
+
+                self.client.renamenx(work_queue, retry_queue)
+
+            else:
+                log.warning("Failed to upload pending batch - leaving batch in queue '{:}': {:}".format(work_queue, rex))
 
         return ret
 
