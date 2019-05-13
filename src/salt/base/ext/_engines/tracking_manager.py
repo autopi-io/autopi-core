@@ -220,15 +220,16 @@ def _position_listener(result):
             "vehicle/position/{:s}".format(ctx["state"]))
 
 
-def start(serial_conn, returners, workers, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting tracking manager")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting tracking manager with settings: {:}".format(settings))
 
         # Initialize serial connection
-        conn.init(serial_conn)
+        conn.init(settings["serial_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
+        edmp.init(__salt__, __opts__, returners=settings.get("returners", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
