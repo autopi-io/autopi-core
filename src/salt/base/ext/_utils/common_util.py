@@ -76,7 +76,7 @@ def load_func(qname):
 def factory_rendering(func):
     def decorator(*args, **kwargs):
         if "_factory" in kwargs:
-            args, kwargs =load_func(kwargs.pop("_factory"))(*args, **kwargs)
+            args, kwargs = load_func(kwargs.pop("_factory"))(*kwargs.pop("args", args), **kwargs.pop("kwargs", kwargs))
 
         return func(*args, **kwargs)
 

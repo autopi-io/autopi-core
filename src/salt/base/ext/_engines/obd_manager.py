@@ -12,7 +12,7 @@ import psutil
 import salt.loader
 
 from binascii import unhexlify
-from common_util import abs_file_path, factory_support
+from common_util import abs_file_path, factory_rendering
 from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor
@@ -700,7 +700,7 @@ def can_converter(result):
     """
     Converts raw CAN data using the CAN database if available.
     """
-    
+
     # Skip failed results
     if "error" in result:
         return
@@ -779,7 +779,7 @@ def alternating_readout_filter(result):
     Filter that only returns alternating/changed values.
     """
 
-    # TODO HN: Move this function to 'messaging.py' and make it reusable? Or move to returner? 
+    # TODO HN: Move this function to 'messaging.py' and make it reusable? Or move to returner?
 
     # Handle multiple results when used together with 'can_converter'
     if isinstance(result, list):
@@ -877,7 +877,7 @@ def _battery_listener(result):
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Starting OBD manager")
+            log.debug("Starting OBD manager with settings: {:}".format(settings))
 
         # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
         psutil.Process(os.getpid()).nice(-2)
