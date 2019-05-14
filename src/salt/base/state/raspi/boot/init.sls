@@ -68,7 +68,7 @@ minimal-memory-split:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?gpu_mem=.*$"
-    - repl: "gpu_mem=16"
+    - repl: "gpu_mem={{ salt['pillar.get']('rpi:boot:gpu_mem', '16') }}"
     - append_if_not_found: true
 
 bluetooth-disabled:
