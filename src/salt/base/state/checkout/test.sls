@@ -3,16 +3,19 @@ audio-test:
     - name: audio.play
     - audio_file: /usr/share/sounds/alsa/Front_Center.wav
 
-{%- if salt['pillar.get']('setup:mpcie:module') == 'ec2x' %}
+# Test modem as default unless none is specified in pillar
+{%- if salt['pillar.get']('setup:mpcie:module', 'ec2x') %}
 
 assert-modem-ttyusb:
   cmd.run:
     - name: "ls /dev/ | grep -e \"ttyUSB0\" && ls /dev/ | grep -e \"ttyUSB1\" && ls /dev/ | grep -e \"ttyUSB2\" && ls /dev/ | grep -e \"ttyUSB3\""
 
-#Used for the hw test that is executed in china
-#sim-card-present:
-#  cmd.run:
-#    - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
+# Only required when testing HW
+{%- if not salt['pillar.get']('setup:mpcie:module', '') %}
+sim-card-present:
+  cmd.run:
+    - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
+{%- endif %}
 
 modem-test:
   module.run:
