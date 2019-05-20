@@ -25,17 +25,31 @@ class CloudCache(object):
 
     local cnt = tonumber(ARGV[1])
 
+    -- Check if destination already exists
     if redis.call('EXISTS', KEYS[2]) == 1 then
-        cnt = cnt - redis.call('LLEN', KEYS[2])
-        ret = redis.call('LRANGE', KEYS[2], 0, -1)
+
+        -- Retrieve all entries from destination
+        for _, key in ipairs(redis.call('LRANGE', KEYS[2], 0, -1)) do
+
+            -- Add to return table and ensure chronological/ascending order
+            table.insert(ret, 1, key)
+
+            -- Decrement count
+            cnt = cnt - 1
+        end
     end
 
+    -- Check if count is still greater than zero and source exists
     if cnt > 0 and redis.call('EXISTS', KEYS[1]) == 1 then
+
+        -- Transfer amount of entries from source to destination matching remaining count
         for i = 1, cnt do
             local val = redis.call('RPOPLPUSH', KEYS[1], KEYS[2])
             if not val then
                 break
             end
+
+            -- Also add to return table
             table.insert(ret, val)
         end
 
