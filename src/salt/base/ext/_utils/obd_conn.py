@@ -325,7 +325,7 @@ class OBDConn(object):
         }
 
         if res in self._obd.interface.ERRORS:
-            ret["error"] = self.ERRORS[res]
+            ret["error"] = self._obd.interface.ERRORS[res]
         else:
             # No formatting
             #ret["value"] = res.replace(" ", "#", 1).replace(" ", "")
