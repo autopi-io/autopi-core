@@ -319,6 +319,30 @@ class OBDConn(object):
     def clear_filters(self, *args, **kwargs):
         return self._obd.interface.clear_filters(*args, **kwargs)
 
+    @Decorators.ensure_open
+    def sync_filters(self, can_db, continue_on_error=False):
+
+        # First ensure any existing filters are cleared
+        try:
+            self.clear_filters.undecorated(self)  # No need to call the 'ensure_open' decorator again
+        except Exception as ex:
+            log.exception("Failed to clear filters".format(msg))
+
+            if not continue_on_error:
+                raise Exception("Failed clear filters: {:}".format(ex))
+
+        # Add pass filter for each message ID
+        # NOTE: Can only be added when protocol is set and active/verified
+        for msg in can_db.messages:
+            try:
+                # TODO HN: How to handle 29 bit headers here?
+                self.add_filter.undecorated(self, "PASS", "{:03X}".format(msg.frame_id), "7FF")  # No need to call the 'ensure_open' decorator again
+            except Exception as ex:
+                log.exception("Failed to add pass filter for CAN message '{:}'".format(msg))
+
+                if not continue_on_error:
+                    raise Exception("Failed to add pass filter for CAN message '{:}': {:}".format(msg, ex))
+
     def _enrich_monitor_entry(self, res):
         ret = {
             "_stamp": datetime.datetime.utcnow().isoformat()
