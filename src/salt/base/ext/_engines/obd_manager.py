@@ -398,21 +398,26 @@ def filter_handler(action, **kwargs):
 
     ret = {}
 
-    if action.lower() == "list":
+    action = action.lower()
+    if action == "list":
         ret["values"] = conn.list_filters(type=kwargs.get("type", None))
 
-    elif action.lower() == "add":
+    elif action == "add":
         conn.add_filter(kwargs.get("type", None), kwargs.get("pattern", ""), kwargs.get("mask", ""))
 
         ret["values"] = conn.list_filters(type=kwargs.get("type", None))
 
-    elif action.lower() == "clear":
+    elif action == "clear":
         conn.clear_filters(type=kwargs.get("type", None))
 
         ret["values"] = []
 
+    elif action == "sync":
+        import cantools
+        conn.sync_filters(cantools.db.load_file(kwargs.pop("can_db_file")), **kwargs)
+
     else:
-        raise ValueError("Unsupported action - allowed options are: 'list', 'add', 'clear'")
+        raise ValueError("Unsupported action - allowed options are: 'list', 'add', 'clear', 'sync'")
 
     return ret
 
@@ -904,17 +909,8 @@ def start(**settings):
                 global can_db
                 can_db = cantools.db.load_file(settings["can_db_file"])
 
-                # Ensure all filters are cleared
-                conn.clear_filters()
-
-                # TODO HN: Can only be added when protocol is set and verified!
-                # Add pass filter for each message ID
-                for msg in can_db.messages:
-                    try:
-                        # TODO HN: How to handle 29 bit headers here?
-                        conn.add_filter("PASS", "{:03X}".format(msg.frame_id), "7FF")
-                    except:
-                        log.exception("Failed to add pass filter for CAN message: {:}".format(msg))
+                # TODO HN: Sync filters by default?
+                #conn.sync_filters(can_db)
 
             except:
                 log.exception("Failed to initialize CAN database from file '{:}'".format(settings["can_db_file"]))
