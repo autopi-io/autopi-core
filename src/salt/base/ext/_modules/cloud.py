@@ -60,8 +60,8 @@ def status(**kwargs):
 def manage(*args, **kwargs):
     """
     Examples:
-      - 'spm.manage handler'        Lists all available handlers.
-      - 'spm.manage worker list *'  Lists all existing worker threads.
+      - 'cloud.manage handler'        Lists all available handlers.
+      - 'cloud.manage worker list *'  Lists all existing worker threads.
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
