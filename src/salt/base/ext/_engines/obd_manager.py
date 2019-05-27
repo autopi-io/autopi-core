@@ -885,7 +885,7 @@ def start(**settings):
             log.debug("Starting OBD manager with settings: {:}".format(settings))
 
         # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
-        psutil.Process(os.getpid()).nice(-2)
+        psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
 
         # Determine critical limit of battery voltage 
         context["battery"]["critical_limit"] = settings.get("battery_critical_limit", battery_util.DEFAULT_CRITICAL_LIMIT)
@@ -920,6 +920,7 @@ def start(**settings):
 
     except Exception:
         log.exception("Failed to start OBD manager")
+
         raise
     finally:
         log.info("Stopping OBD manager")

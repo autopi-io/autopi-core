@@ -179,3 +179,23 @@ class ThreadRegistry(object):
 
             return threads
 
+
+class TimedEvent(threading._Event):
+    """
+    Records exact timestamp of when event was set.
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.timestamp = None
+
+        super(TimedEvent, self).__init__(*args, **kwargs)
+
+    def set(self):
+        self.timestamp = datetime.datetime.utcnow()
+
+        super(TimedEvent, self).set()
+
+    def clear(self):
+        self.timestamp = None
+        
+        super(TimedEvent, self).clear()

@@ -1,5 +1,6 @@
 from __future__ import division
 
+import datetime
 import logging
 
 from common_util import dict_key_by_value
@@ -8,6 +9,9 @@ from retrying import retry
 
 
 log = logging.getLogger(__name__)
+
+# TODO HN: Use this everywhere
+DEBUG = log.isEnabledFor(logging.DEBUG)
 
 
 # See: https://github.com/intel-iot-devkit/upm/blob/1a0bdf00cf892fd7090d28d8937aea8969efcdf9/src/mma8x5x/mma8x5x.hpp
@@ -67,6 +71,15 @@ STATUS_XOW   = (1 << 4)  # X-axis data overwrite
 STATUS_YOW   = (1 << 5)  # Y-axis data overwrite
 STATUS_ZOW   = (1 << 6)  # Z-axis data overwrite
 STATUS_ZYXOW = (1 << 7)  # X, Y, Z-axis data overwrite
+
+# FIFO status register
+F_STATUS_CNT_MASK  = 0x3F
+F_STATUS_WMRK_FLAG = (1 << 6)
+F_STATUS_OVF       = (1 << 7)
+
+# FIFO setup register
+F_SETUP_MODE_MASK = 0xC0
+F_SETUP_WMRK_MASK = 0x3F
 
 # Data configuration register
 XYZ_DATA_CFG_FS_MASK = 0x3
@@ -234,6 +247,25 @@ INTERRUPT_PINS = {
     INT2: "int2",
 }
 
+# Available FIFO modes and more
+FIFO_MODE_DISABLED = (0 << 6)
+FIFO_MODE_CIRCULAR = (1 << 6)
+FIFO_MODE_FILL     = (2 << 6)
+FIFO_MODE_TRIGGER  = (3 << 6)
+
+FIFO_MODE_DEFAULT = FIFO_MODE_DISABLED
+
+FIFO_MODES = {
+    FIFO_MODE_DISABLED: "disabled",
+    FIFO_MODE_CIRCULAR: "circular",
+    FIFO_MODE_FILL:     "fill",
+    FIFO_MODE_TRIGGER:  "trigger"
+}
+
+FIFO_WATERMARK_DEFAULT = 0
+
+FIFO_EMPTY_XYZ = [0x80, 0x80, 0x80, 0x80, 0x80, 0x80]
+
 
 class MMA8X5XConn(I2CConn):
 
@@ -244,6 +276,8 @@ class MMA8X5XConn(I2CConn):
         self._data_bits = 10
         self._range = RANGES[RANGE_DEFAULT]
         self._data_rate = DATA_RATES[DATA_RATE_DEFAULT]
+        self._fifo_mode = FIFO_MODES[FIFO_MODE_DEFAULT]
+        self._fifo_watermark = FIFO_WATERMARK_DEFAULT
 
     def setup(self, settings):
         super(MMA8X5XConn, self).setup(settings)
@@ -254,6 +288,8 @@ class MMA8X5XConn(I2CConn):
 
     def config(self, settings):
         try:
+
+            # Ensure in standby mode
             self.active(value=False)
 
             # Setup specified range or use default
@@ -261,6 +297,15 @@ class MMA8X5XConn(I2CConn):
 
             # Setup specified data rate or use default
             self.data_rate(value=settings.get("data_rate", self._data_rate))
+
+            # Setup FIFO mode or use default
+            # NOTE: Must be disabled before able to change between two enabled modes
+            self.fifo_mode(value=self._fifo_mode)  # Always disable
+            if "fifo_mode" in settings and settings["fifo_mode"] != self._fifo_mode:
+                self.fifo_mode(value=settings["fifo_mode"])
+
+            # Setup FIFO watermark or use default
+            self.fifo_watermark(value=settings.get("fifo_watermark", self._fifo_watermark))
 
             # Setup interrupts if defined
             for name, pin in settings.get("interrupts", {}).iteritems():
@@ -284,6 +329,9 @@ class MMA8X5XConn(I2CConn):
         Check for new set of measurement data.
         """
 
+        if self._fifo_mode != FIFO_MODES[FIFO_MODE_DISABLED]:
+            raise Exception("FIFO mode is enabled - only FIFO status is available")
+
         ret = {}
 
         res = self.read(STATUS)
@@ -302,17 +350,41 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def xyz(self, decimals=4):
+    def fifo_status(self):
         """
-        Read and calculate accelerometer data.
+        Information about the current FIFO status if enabled.
+        """
+
+        if self._fifo_mode == FIFO_MODES[FIFO_MODE_DISABLED]:
+            raise Exception("FIFO mode is disabled - only real time status is available")
+
+        ret = {}
+
+        res = self.read(STATUS)
+        ret["overflowed"] = bool(res & F_STATUS_OVF),
+        ret["watermark_reached"] = bool(res & F_STATUS_WMRK_FLAG),
+        ret["sample_count"] = int(res & F_STATUS_CNT_MASK)
+
+        return ret
+
+    def xyz(self, decimals=4, empty_readout=None):
+        """
+        Read out and calculate real time accelerometer data.
         """
 
         ret = {}
 
         bytes = self.read(OUT_X_MSB, length=6)
-        words = self._concat_bytes(bytes, bits=self._data_bits)
 
-        if log.isEnabledFor(logging.DEBUG):
+        # Check if empty readout
+        if empty_readout and bytes == empty_readout:
+            if DEBUG:
+                log.debug("Skipping empty XYZ readout")
+
+            return
+
+        words = self._concat_bytes(bytes, bits=self._data_bits)
+        if DEBUG:
             for word in words:
                 log.debug("Calculating G for block: {:016b}".format(word))
 
@@ -321,6 +393,63 @@ class MMA8X5XConn(I2CConn):
         ret["x"] = res[0]
         ret["y"] = res[1]
         ret["z"] = res[2]
+
+        return ret
+
+    def xyz_buffer(self, decimals=4, limit=128, interrupt_timestamp=None, stats={}):
+        """
+        Read out and calculate accelerometer data from FIFO buffer until empty or limit reached.
+        """
+
+        ret = []
+
+        # Get FIFO status in order to reset interrupt
+        status = self.fifo_status()
+        stats["await_readout"] = status["sample_count"]
+        if status["overflowed"]:
+            stats["overflow"] = stats.get("overflow", 0) + 1
+
+            # TODO HN: This happens every time on interrupt
+            #log.warning("Overflow in FIFO buffer detected")
+        if status["watermark_reached"]:
+            stats["watermark"] = stats.get("watermark", 0) + 1
+
+        # Ensure that we have a reference timestamp
+        if interrupt_timestamp == None:
+            log.warning("No interrupt timestamp given as reference - uses current timestamp which can give an inaccurate offset")
+
+            interrupt_timestamp = datetime.datetime.utcnow().isoformat()
+
+        # Read from buffer until empty
+        count = 0
+        while True:
+            res = self.xyz(decimals=decimals, empty_readout=FIFO_EMPTY_XYZ)
+
+            # Stop when buffer returns empty readout
+            if not res:
+                if DEBUG:
+                    log.debug("FIFO buffer is empty after {:} XYZ readout(s)".format(count))
+
+                break
+
+            # Increment counter
+            count += 1
+
+            # Calculate and set timestamp
+            timestamp = interrupt_timestamp - datetime.timedelta(
+                milliseconds=((self._fifo_watermark or 32) - count) * (1000 / self._data_rate))
+            res["_stamp"] = timestamp.isoformat()
+
+            ret.append(res)
+
+            # Check if limit has been reached
+            if limit and count >= limit:
+                log.warning("FIFO buffer readout limit of {:} reached - this may indicate that more data is being produced than can be handled".format(limit))
+
+                break
+
+        stats["last_readout"] = count
+        stats["total_readout"] = stats.get("total_readout", 0) + count
 
         return ret
 
@@ -540,6 +669,43 @@ class MMA8X5XConn(I2CConn):
         ret = res == CTRL_REG3_IPOL
 
         return ret
+
+    def fifo_mode(self, value=None):
+        """
+        Setup FIFO buffer overflow mode.
+        """
+
+        if value == None:
+            res = self.read(F_SETUP) & F_SETUP_MODE_MASK
+        else:
+            if value != FIFO_MODES[FIFO_MODE_DISABLED] and self._fifo_mode != FIFO_MODES[FIFO_MODE_DISABLED]:
+                raise Exception("Must be disabled first before changing to different mode")
+
+            val = dict_key_by_value(FIFO_MODES, value)
+            res = self.read_write(F_SETUP, F_SETUP_MODE_MASK, val) & F_SETUP_MODE_MASK
+ 
+        # Always update FIFO mode instance variable
+        self._fifo_mode = FIFO_MODES.get(res)
+
+        return self._fifo_mode
+
+    def fifo_watermark(self, value=None):
+        """
+        Setup FIFO event sample count watermark.
+        """
+
+        if value == None:
+            res = self.read(F_SETUP) & F_SETUP_WMRK_MASK
+        else:
+            self._require_standby_mode()
+
+            val = int(value)
+            res = self.read_write(F_SETUP, F_SETUP_WMRK_MASK, val) & F_SETUP_WMRK_MASK
+ 
+        # Always update FIFO watermark instance variable
+        self._fifo_watermark = res
+
+        return res
 
     def wake(self, source, value=None):
         """

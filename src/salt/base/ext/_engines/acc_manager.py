@@ -5,13 +5,15 @@ import json
 import logging
 import math
 import os
+import psutil
 import RPi.GPIO as gpio
 import salt.loader
 import threading
 
-from common_util import abs_file_path
+from common_util import abs_file_path, factory_rendering
 from messaging import EventDrivenMessageProcessor
 from mma8x5x_conn import MMA8X5XConn
+from threading_more import TimedEvent
 from timeit import default_timer as timer
 
 
@@ -23,13 +25,14 @@ edmp = EventDrivenMessageProcessor("acc", default_hooks={"workflow": "extended",
 # MMA8X5X I2C connection
 conn = MMA8X5XConn()
 
-interrupt_event = threading.Event()
+interrupt_event = TimedEvent()
 
 context = {
     "interrupt": {
         "total": 0,
         "timeout": 0,
     },
+    "buffer": {},
     "readout": {},
 }
 
@@ -70,6 +73,8 @@ def query_handler(cmd, *args, **kwargs):
     if res != None:
         if isinstance(res, dict):
             ret.update(res)
+        elif isinstance(res, list):
+            ret["values"] = res
         else:
             ret["value"] = res
 
@@ -79,15 +84,24 @@ def query_handler(cmd, *args, **kwargs):
 @edmp.register_hook(synchronize=False)  # Prevents lockup while waiting on data ready interrupt
 def interrupt_query_handler(cmd, *args, **kwargs):
 
-    # TODO: Improve performance by using internal FIFO data buffer
-
     # Wait for data ready interrupt if not already set
-    if not interrupt_event.wait(timeout=2/conn._data_rate):
+    # TODO HN: Low timeout when real time mode and long when FIFO mode
+    timeout = kwargs.pop("interrupt_timeout", 2/conn._data_rate)
+    if not interrupt_event.wait(timeout=timeout):
         context["interrupt"]["timeout"] += 1
 
+        if timeout >= 1:
+            log.warning("Timed out waiting for interrupt")
+
+    # TODO HN: Fix this
+    kwargs["interrupt_timestamp"] = interrupt_event.timestamp
+    
     interrupt_event.clear()
     context["interrupt"]["total"] += 1
 
+    # TODO HN: Fix this
+    kwargs["stats"] = context.setdefault("buffer", {})
+    
     # Perform a normal data read
     return query_handler(cmd, *args, **kwargs)
 
@@ -212,14 +226,27 @@ def roll_pitch_converter(result):
         return
 
     # Check for supported type
-    if result.get("_type", None) != "xyz":
+    if not result.get("_type", "").startswith("xyz"):
         log.warning("Unable to calculate roll and pitch for result of type '{:}'".format(result.get("_type", None)))
 
         return result
 
-    # Perform calculations
-    result["roll"] = math.atan2(result["y"], result["z"]) * 57.3
-    result["pitch"] = math.atan2(-result["x"], math.sqrt(result["y"] * result["y"] + result["z"] * result["z"])) * 57.3
+    # TODO HN: Figure out how to do this better when multiple values in same result
+    if "values" in result:
+
+        # TODO HN: Enforce type
+        result["_type"] = "xyz"
+
+        for res in result["values"]:
+
+            # Perform calculations
+            res["roll"] = math.atan2(res["y"], res["z"]) * 57.3
+            res["pitch"] = math.atan2(-res["x"], math.sqrt(res["y"] * res["y"] + res["z"] * res["z"])) * 57.3
+    else:
+
+        # Perform calculations
+        result["roll"] = math.atan2(result["y"], result["z"]) * 57.3
+        result["pitch"] = math.atan2(-result["x"], math.sqrt(result["y"] * result["y"] + result["z"] * result["z"])) * 57.3
 
     return result
 
@@ -241,6 +268,19 @@ def alternating_readout_filter(result):
 
         return
 
+    # TODO HN: Make this better when multiple values in same result
+    # Handle multiple results when used together with FIFO buffer
+    if "values" in result:
+        ret = []
+
+        for res in result["values"]:
+            res["_type"] = result["_type"]
+            r = alternating_readout_filter(res)
+            if r != None:
+                ret.append(r)
+
+        return ret
+
     ctx = context["readout"]
 
     old_read = ctx.get(result["_type"], None)
@@ -257,10 +297,14 @@ def alternating_readout_filter(result):
     return new_read
 
 
-def start(mma8x5x_conn, returners, workers, **kwargs):
+@factory_rendering
+def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Starting accelerometer manager")
+            log.debug("Starting accelerometer manager with settings: {:}".format(settings))
+
+        # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
+        psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
 
         # Setup interrupt GPIO pin
         gpio.setmode(gpio.BOARD)
@@ -268,10 +312,10 @@ def start(mma8x5x_conn, returners, workers, **kwargs):
         gpio.add_event_detect(gpio_pin.ACC_INT1, gpio.FALLING, callback=lambda ch: interrupt_event.set())
 
         # Configure connection
-        conn.setup(mma8x5x_conn)
+        conn.setup(settings["mma8x5x_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, returners=returners, workers=workers)
+        edmp.init(__salt__, __opts__, returners=settings.get("returners", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
