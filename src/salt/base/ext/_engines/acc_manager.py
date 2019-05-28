@@ -19,22 +19,22 @@ from timeit import default_timer as timer
 
 log = logging.getLogger(__name__)
 
-# Message processor
-edmp = EventDrivenMessageProcessor("acc", default_hooks={"workflow": "extended", "handler": "query"})
-
-# MMA8X5X I2C connection
-conn = MMA8X5XConn()
-
-interrupt_event = TimedEvent()
-
 context = {
     "interrupt": {
         "total": 0,
         "timeout": 0,
     },
-    "buffer": {},
+    "buffer": {},  # Updated by MMA8X5X connection
     "readout": {},
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("acc", default_hooks={"workflow": "extended", "handler": "query"})
+
+# MMA8X5X I2C connection
+conn = MMA8X5XConn(stats=context)
+
+interrupt_event = TimedEvent()
 
 
 @edmp.register_hook(synchronize=False)
@@ -85,22 +85,20 @@ def query_handler(cmd, *args, **kwargs):
 def interrupt_query_handler(cmd, *args, **kwargs):
 
     # Wait for data ready interrupt if not already set
-    # TODO HN: Low timeout when real time mode and long when FIFO mode
+    # NOTE: Use short timeout when real time mode and long when FIFO mode
     timeout = kwargs.pop("interrupt_timeout", 2/conn._data_rate)
     if not interrupt_event.wait(timeout=timeout):
         context["interrupt"]["timeout"] += 1
 
         if timeout >= 1:
-            log.warning("Timed out waiting for interrupt")
+            log.warning("Timeout after {:} second(s) waiting for interrupt".format(timeout))
 
-    # TODO HN: Fix this
-    kwargs["interrupt_timestamp"] = interrupt_event.timestamp
+    # Pass on interrupt timestamp if requested
+    if kwargs.get("interrupt_timestamp", False):
+        kwargs["interrupt_timestamp"] = interrupt_event.timestamp
     
     interrupt_event.clear()
     context["interrupt"]["total"] += 1
-
-    # TODO HN: Fix this
-    kwargs["stats"] = context.setdefault("buffer", {})
     
     # Perform a normal data read
     return query_handler(cmd, *args, **kwargs)

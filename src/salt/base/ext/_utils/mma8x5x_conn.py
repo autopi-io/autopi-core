@@ -10,7 +10,6 @@ from retrying import retry
 
 log = logging.getLogger(__name__)
 
-# TODO HN: Use this everywhere
 DEBUG = log.isEnabledFor(logging.DEBUG)
 
 
@@ -269,8 +268,10 @@ FIFO_EMPTY_XYZ = [0x80, 0x80, 0x80, 0x80, 0x80, 0x80]
 
 class MMA8X5XConn(I2CConn):
 
-    def __init__(self):
+    def __init__(self, stats={}):
         super(MMA8X5XConn, self).__init__()
+
+        self.stats = stats
 
         # Default values
         self._data_bits = 10
@@ -396,7 +397,7 @@ class MMA8X5XConn(I2CConn):
 
         return ret
 
-    def xyz_buffer(self, decimals=4, limit=128, interrupt_timestamp=None, stats={}):
+    def xyz_buffer(self, decimals=4, limit=128, interrupt_timestamp=None):
         """
         Read out and calculate accelerometer data from FIFO buffer until empty or limit reached.
         """
@@ -405,12 +406,16 @@ class MMA8X5XConn(I2CConn):
 
         # Get FIFO status in order to reset interrupt
         status = self.fifo_status()
+
+        # Update buffer statistics
+        stats = self.stats.setdefault("buffer", {})
         stats["await_readout"] = status["sample_count"]
         if status["overflowed"]:
             stats["overflow"] = stats.get("overflow", 0) + 1
 
             # TODO HN: This happens every time on interrupt
             #log.warning("Overflow in FIFO buffer detected")
+
         if status["watermark_reached"]:
             stats["watermark"] = stats.get("watermark", 0) + 1
 
