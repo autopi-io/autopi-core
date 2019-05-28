@@ -196,6 +196,25 @@ def update_release(force=False, dry_run=False, only_retry=False):
             if not res.get("result", False):
                 log.error("Unable to disable schedule: {:}".format(res))
 
+            # Kill worker threads in order to release resources during update
+            if __salt__["pillar.get"]("update_release:kill_workers", default=False):
+
+                # Kill all OBD workers
+                try:
+                    res = __salt__["obd.manage"]("worker", "kill", "*")
+
+                    log.info("Killed OBD workers before update release: {:}".format(res))
+                except:
+                    log.exception("Failed to kill all OBD workers before update")
+
+                # Kill all accelerometer workers
+                try:
+                    res = __salt__["acc.manage"]("worker", "kill", "*")
+
+                    log.info("Killed accelerometer workers before update release: {:}".format(res))
+                except:
+                    log.exception("Failed to kill all accelerometer workers before update")
+
             # Log what is going to happen
             if new["state"] == "pending":
                 log.info("Updating release '{:}' => '{:}'".format(old["id"], new["id"]))
