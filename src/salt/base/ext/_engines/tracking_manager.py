@@ -19,6 +19,7 @@ conn = SerialConn()
 context = {
     "position": {
         "state": None,  # Available states: unknown|standstill|moving
+        "error": None,
         "last_recorded": None,
         "last_reported": None,
     }
@@ -135,7 +136,7 @@ def gnss_location_to_position_converter(result):
 
         # Return empty position when no fix (to be used by listener to trigger position unknown state)
         if result["error"] == "no_fix":
-            return {"_type": "pos"}
+            return {"_type": "pos", "error": result["error"]}
 
         log.warn("Unable to determine GNSS location: {:}".format(result["error"]))
         return
@@ -203,20 +204,26 @@ def _position_listener(result):
     old_state = ctx["state"]
     new_state = None
 
+    old_error = ctx["error"]
+    new_error = None
+
     # Determine new state
     if not "loc" in result:
         new_state = "unknown"
+        new_error = result.get("error", None)
     elif result.get("sog", 0) > 0:
         new_state = "moving"
     else:
         new_state = "standstill"
 
     # Check if state has chaged since last known state
-    if old_state != new_state:
+    if old_state != new_state or old_error != new_error:
         ctx["state"] = new_state
+        ctx["error"] = new_error
 
         # Trigger event
-        edmp.trigger_event({},
+        edmp.trigger_event(
+            {"reason": ctx["error"]} if ctx["error"] else {},
             "vehicle/position/{:s}".format(ctx["state"]))
 
 
