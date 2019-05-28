@@ -16,15 +16,19 @@ uart-sleep-trigger:
 voltage-level-wake-trigger:
   stn.power_trigger:
     - name: volt_level_wake
-    - enable: False  # Not used
-    - rule: ">13.20V FOR 1 s"
+    {%- if salt['pillar.get']('power:wake_trigger:voltage_level', default='') %}
+    - enable: True
+    {%- else %}
+    - enable: False
+    {%- endif %}
+    - rule: "{{ salt['pillar.get']('power:wake_trigger:voltage_level', default='>13.20') }}V FOR {{ salt['pillar.get']('power:wake_trigger:voltage_level_duration', default='1') }} s"
 
 # Wake upon engine started (battery charging)
 voltage-change-wake-trigger:
   stn.power_trigger:
     - name: volt_change_wake
     - enable: True
-    - rule: "{{ salt['pillar.get']('power:wake_trigger:voltage_change', default='+0.20') }}V IN {{ salt['pillar.get']('power:wake_trigger:duration', default='1000') }} ms"
+    - rule: "{{ salt['pillar.get']('power:wake_trigger:voltage_change', default='+0.20') }}V IN {{ salt['pillar.get']('power:wake_trigger:voltage_change_duration', default='1000') }} ms"
 
 # Power off on low battery
 voltage-level-sleep-trigger:
