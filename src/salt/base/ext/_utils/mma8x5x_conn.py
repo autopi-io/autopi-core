@@ -423,7 +423,7 @@ class MMA8X5XConn(I2CConn):
         if interrupt_timestamp == None:
             log.warning("No interrupt timestamp given as reference - uses current timestamp which can give an inaccurate offset")
 
-            interrupt_timestamp = datetime.datetime.utcnow().isoformat()
+            interrupt_timestamp = datetime.datetime.utcnow()
 
         # Read from buffer until empty
         count = 0
