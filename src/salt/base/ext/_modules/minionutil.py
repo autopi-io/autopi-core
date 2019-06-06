@@ -176,7 +176,8 @@ def update_release(force=False, dry_run=False, only_retry=False):
         return ret
 
     if only_retry and new["state"] != "retrying":
-        log.info("No failed update is pending for retry")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("No failed update is pending for retry")
 
         return ret
 

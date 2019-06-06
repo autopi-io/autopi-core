@@ -15,7 +15,7 @@ from binascii import unhexlify
 from common_util import abs_file_path, factory_rendering
 from obd.utils import OBDError
 from obd_conn import OBDConn
-from messaging import EventDrivenMessageProcessor
+from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
 from timeit import default_timer as timer
 
 
@@ -40,6 +40,7 @@ context = {
         "timer": 0.0,
         "event_thresholds": {
             "*": 3,  # Default is three seconds
+            "unknown": 0,
             battery_util.CRITICAL_LEVEL_STATE: 180
         },
         "critical_limit": 0
@@ -113,20 +114,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
 
     # Only ensure protocol if given
     if protocol and protocol not in [str(None), "null"]:  # Workaround: Also support empty value from pillar
-
-        # We do not want to break workflow upon failure because then listeners will not get called
-        try:
-            conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
-        except OBDError as err:
-
-            if log.isEnabledFor(logging.DEBUG):
-                log.debug("Failed to ensure protocol: %s", str(err))
-
-            # IMPORTANT: By returning error result the RPM listener function will still get called for RPM results
-            #            and thus always trigger appropriate engine event
-            ret["error"] = str(err)
-
-            return ret
+        conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
@@ -700,15 +688,39 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     return ret
 
 
+def _decode_can_frame(res):
+    """
+    Helper function to decode a raw CAN frame result. Note that one single CAN frame can output multiple results.
+    """
+
+    ret = []
+
+    try:
+        header, data = res["value"].split(" ", 1)
+
+        # Find message by header
+        try:
+             msg = can_db.get_message_by_frame_id(int(header, 16))
+        except KeyError:  # Unknown message
+
+            return ret
+
+        # Decode data using found message
+        for key, val in msg.decode(unhexlify(data.replace(" ", "")), True, True).iteritems():
+            ret.append(dict(res, _type=key.lower(), value=val))
+
+    except:
+        log.exception("Failed to decode raw CAN frame result as CAN message: {:}".format(res))
+
+    return ret
+
+
 @edmp.register_hook(synchronize=False)
 def can_converter(result):
     """
-    Converts raw CAN data using the CAN database if available.
+    Converts raw CAN data using the available CAN database.
+    This converter supports both single value results as well as multiple values results.
     """
-
-    # Skip failed results
-    if "error" in result:
-        return
 
     # Skip if not CAN database is initialized
     if can_db == None:
@@ -716,40 +728,62 @@ def can_converter(result):
 
         return
 
-    if not "values" in result:
-        log.warning("Skipping CAN conversion because no values found in result: {:}".format(result))
+    # Check for multiple values in result
+    if "values" in result:
+
+        # Try to decode CAN messages and add to list
+        res = []
+        for val in result["values"]:
+            res.extend(_decode_can_frame(
+                val if isinstance(val, dict) else {"value": val}))
+
+        # Skip if none decoded
+        if not res:
+            log.warning("No CAN frames in result was decoded: {:}".format(result))
+
+            return
+
+        result["values"] = res
+
+        # Clear parent type if raw
+        if result.get("_type", None) == "raw":
+            result.pop("_type")
+
+    # Check for single value in result
+    elif "value" in result:
+
+        # Try to decode CAN messages
+        res = _decode_can_frame(result)
+
+        # Skip if none decoded
+        if not res:
+            log.warning("No CAN frames in result was decoded: {:}".format(result))
+
+            return
+
+        if len(res) == 1:
+            result.update(res[0])
+        else:
+            result.pop("value")
+            result["values"] = res
+
+            # Clear parent type if raw
+            if result.get("_type", None) == "raw":
+                result.pop("_type")
+
+    # No value(s) found
+    else:
+        log.warning("Skipping CAN conversion because no value(s) found in result: {:}".format(result))
 
         return
 
-    ret = []
-
-    # Try to decode CAN messages and add to values list
-    for res in result["values"]:
-        try:
-            header, data = res["value"].split(" ", 1)
-
-            # Find message by header
-            try:
-                 msg = can_db.get_message_by_frame_id(int(header, 16))
-            except KeyError:
-
-                # Skip unknown message
-                continue
-
-            # Decode data using found message
-            for key, val in msg.decode(unhexlify(data.replace(" ", "")), True, True).iteritems():
-                ret.append(dict(res, _type=key.lower(), value=val))
-
-        except:
-            log.exception("Failed to decode value as CAN message: {:}".format(res))
-
-    return ret
+    return result
 
 
 @edmp.register_hook(synchronize=False)
 def battery_converter(result):
     """
-    Enriches a voltage reading result with battery charge state and level.
+    Converts a voltage reading result with battery charge state and level.
     """
 
     voltage = result.get("value", None)
@@ -781,99 +815,116 @@ def dtc_converter(result):
 @edmp.register_hook(synchronize=False)
 def alternating_readout_filter(result):
     """
-    Filter that only returns alternating/changed values.
+    Filter that only returns alternating/changed results.
     """
 
-    # TODO HN: Move this function to 'messaging.py' and make it reusable? Or move to returner?
-
-    # Handle multiple results when used together with 'can_converter'
-    if isinstance(result, list):
-        ret = []
-
-        for res in result:
-            r = alternating_readout_filter(res)
-            if r != None:
-                ret.append(r)
-
-        return ret
-
-    # Skip failed results
-    if "error" in result:
-        return
-
-    if not "_type" in result:
-        log.warn("Skipping result without any type: {:}".format(result))
-
-        return
-
-    ctx = context["readout"]
-
-    old_read = ctx.get(result["_type"], None)
-    new_read = result
-
-    # Update context with new read result
-    ctx[result["_type"]] = result
-
-    # Check if value is unchanged
-    if old_read != None and old_read == new_read:
-        return
-
-    # Return changed value
-    return new_read
+    return filter_out_unchanged(result, context=context["readout"])
 
 
-@edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "rpm")
-def _rpm_listener(result):
+@edmp.register_hook(synchronize=False)
+def rpm_engine_event_trigger(result, kind="rpm"):
     """
     Listens for RPM results and triggers engine running/stopped events.
+    This trigger supports single value results as well as multiple values results.
     """
 
-    if log.isEnabledFor(logging.DEBUG):
-        log.debug("Listener got RPM result: {:}".format(result))
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+            
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("RPM engine event trigger got error result: {:}".format(result))
 
-    ctx = context["engine"]
+        # Do not return/break flow because this will trigger negative engine event
+
+    else:  # No error found
+
+        # Check for single value in result
+        if "value" in result:
+
+            # Skip if not a RPM result
+            if result.get("_type", None) != kind:
+                log.error("RPM engine event trigger got unsupported RPM type result: {:}".format(result))
+
+                return
+
+            # Log RPM result when debugging
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("RPM engine event trigger got RPM result: {:}".format(result))
+
+        # Check for multiple values in result
+        elif "values" in result:
+            for res in result["values"]:
+
+                # Only interested in RPM results
+                if res.get("_type", None) != kind:
+                    continue
+
+                rpm_engine_event_trigger(res)
+
+            return
+
+        # Skip if no value(s) found
+        else:
+            log.error("RPM engine event trigger could not find any value(s)")
+
+            return
 
     # Check if state has chaged since last known state
+    ctx = context["engine"]
     old_state = ctx["state"]
-    new_state = "running" if result.get("value", 0) > 0 else \
+    new_state = "running" if not error and result.get("value", 0) > 0 else \
                     ("stopped" if old_state in ["stopped", "running"] else "not_running")
     if old_state != new_state:
         ctx["state"] = new_state
 
         # Trigger event
-        edmp.trigger_event({},
+        edmp.trigger_event({"reason": str(error)} if error else {},
             "vehicle/engine/{:s}".format(ctx["state"]))
 
 
-@edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "bat")
-def _battery_listener(result):
+@edmp.register_hook(synchronize=False)
+def battery_event_trigger(result):
     """
     Listens for battery results and triggers battery events when voltage changes.
     """
 
-    if log.isEnabledFor(logging.DEBUG):
-        log.debug("Listener got battery result: {:}".format(result))
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+        log.error("Battery event trigger got error result: {:}".format(result))
 
-    ctx = context["battery"]
+        state = "unknown"
+    else:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Battery event trigger got battery result: {:}".format(result))
+
+        state = result["state"]
 
     # Check if state has chaged since last time
-    if ctx["state"] != result["state"]:
-        ctx["state"] = result["state"]
+    ctx = context["battery"]
+    if ctx["state"] != state:
+        ctx["state"] = state
         ctx["timer"] = timer()
         ctx["count"] = 1
     else:
         ctx["count"] += 1
 
     # Proceed only when battery state is repeated at least once and timer threshold is reached
-    if ctx["count"] > 1 and timer() - ctx["timer"] >= ctx["event_thresholds"].get(result["state"], ctx["event_thresholds"].get("*", 3)):
+    if ctx["count"] > 1 and timer() - ctx["timer"] >= ctx["event_thresholds"].get(state, ctx["event_thresholds"].get("*", 3)):
 
         # Reset timer
         ctx["timer"] = timer()
 
+        # Prepare event data
+        data = {}
+        if state in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE]:
+            data["level"] = result["level"]
+        elif state == "unknown" and error:
+            data["reason"] = str(error)
+
         # Trigger only event if battery state (in tag) and/or level (in data) has changed
-        edmp.trigger_event(
-            {"level": result["level"]} if result["state"] in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE] else {},
-            "vehicle/battery/{:s}".format(result["state"]),
+        edmp.trigger_event(data, "vehicle/battery/{:s}".format(state),
             skip_duplicates_filter="vehicle/battery/*"
         )
 
@@ -893,7 +944,10 @@ def start(**settings):
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Initialize message processor
-        edmp.init(__salt__, __opts__, returners=settings.get("returners", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__, 
+            workers=settings.get("workers", []),
+            triggers=settings.get("triggers", []),
+            returners=settings.get("returners", []))
         edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection

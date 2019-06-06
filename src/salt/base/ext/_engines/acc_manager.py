@@ -11,7 +11,7 @@ import salt.loader
 import threading
 
 from common_util import abs_file_path, factory_rendering
-from messaging import EventDrivenMessageProcessor
+from messaging import EventDrivenMessageProcessor, filter_out_unchanged
 from mma8x5x_conn import MMA8X5XConn
 from threading_more import TimedEvent
 from timeit import default_timer as timer
@@ -65,7 +65,7 @@ def query_handler(cmd, *args, **kwargs):
         if cmd == "help":
             ret["values"] = [k for k, v in inspect.getmembers(conn, predicate=inspect.ismethod) if not k.startswith("_")]
         else:
-            ret["error"] = "Unsupported command: {:s}".format(cmd)
+            raise ValueError("Unsupported query command: {:s}".format(cmd))
 
         return ret
 
@@ -212,34 +212,37 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
 
 
 @edmp.register_hook(synchronize=False)
-def roll_pitch_converter(result):
+def alternating_readout_filter(result):
+    """
+    Filter that only returns alternating/changed results.
+    """
+
+    return filter_out_unchanged(result, context=context["readout"])
+
+
+@edmp.register_hook(synchronize=False)
+def roll_pitch_enricher(result):
     """
     Calculates roll and pitch for a XYZ reading and appends it to the result.
-
-    TODO HN: Ideally this should be done after filtering
+    This enricher supports both single value results as well as multiple values results.
     """
-
-    # Skip failed results
-    if "error" in result:
-        return
 
     # Check for supported type
     if not result.get("_type", "").startswith("xyz"):
-        log.warning("Unable to calculate roll and pitch for result of type '{:}'".format(result.get("_type", None)))
+        log.error("Unable to calculate roll and pitch for result of type '{:}': ".format(result.get("_type", None), result))
 
         return result
 
-    # TODO HN: Figure out how to do this better when multiple values in same result
+    # Check for multiple values in result
     if "values" in result:
-
-        # TODO HN: Enforce type
-        result["_type"] = "xyz"
 
         for res in result["values"]:
 
             # Perform calculations
             res["roll"] = math.atan2(res["y"], res["z"]) * 57.3
             res["pitch"] = math.atan2(-res["x"], math.sqrt(res["y"] * res["y"] + res["z"] * res["z"])) * 57.3
+
+    # Check for single value in result
     else:
 
         # Perform calculations
@@ -247,52 +250,6 @@ def roll_pitch_converter(result):
         result["pitch"] = math.atan2(-result["x"], math.sqrt(result["y"] * result["y"] + result["z"] * result["z"])) * 57.3
 
     return result
-
-
-@edmp.register_hook(synchronize=False)
-def alternating_readout_filter(result):
-    """
-    Filter that only returns alternating/changed values.
-    """
-
-    # TODO: Move this function to 'messaging.py' and make it reusable?
-
-    # Skip failed results
-    if "error" in result:
-        return
-
-    if not "_type" in result:
-        log.warn("Skipping result without any type: {:}".format(result))
-
-        return
-
-    # TODO HN: Make this better when multiple values in same result
-    # Handle multiple results when used together with FIFO buffer
-    if "values" in result:
-        ret = []
-
-        for res in result["values"]:
-            res["_type"] = result["_type"]
-            r = alternating_readout_filter(res)
-            if r != None:
-                ret.append(r)
-
-        return ret
-
-    ctx = context["readout"]
-
-    old_read = ctx.get(result["_type"], None)
-    new_read = result
-
-    # Update context with new read result
-    ctx[result["_type"]] = result
-
-    # Check if value is unchanged
-    if old_read != None and old_read == new_read:
-        return
-
-    # Return changed value
-    return new_read
 
 
 @factory_rendering

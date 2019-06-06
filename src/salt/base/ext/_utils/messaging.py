@@ -21,15 +21,14 @@ class MessageProcessor(object):
     Native hooks:
         - 'worker':    TODO
         - 'workflow':  TODO
-        - 'listener':  TODO
 
     Built-in workers:
         - 'shared':    Workflow is performed by the current message processor thread.
         - 'dedicated': Workflow is performed by a dedicated thread.
 
     Built-in workflows and their additional hooks:
-        - 'simple':    <handler> --> [filter] --> [returner]
-        - 'extended':  [validator] (--> [returner]) --> <handler> --> [converter] --> [filter] --> [retuner]
+        - 'simple':    <handler> --> [trigger] --> [filter] --> [returner]
+        - 'extended':  [validator] (--> [returner]) --> <handler> --> [converter] --> [trigger] --> [filter] --> [enricher] --> [retuner]
         - 'manage':    Special workflow for management stuff. See implementation for details.
 
     NOTES:
@@ -42,7 +41,6 @@ class MessageProcessor(object):
         self._hook_funcs = {}  # Index of all registered hook functions
         self._hook_lock = threading.RLock()  # Used to synchronize hook function calls
         self._worker_threads = threading_more.ThreadRegistry()  # Keeps track of all active workers
-        self._listeners = []
         self._measure_stats = False
 
         # Set default hooks that will be used if none specified
@@ -102,25 +100,6 @@ class MessageProcessor(object):
             func = self._synchronize_wrapper(self._hook_lock, func)
 
         self._hook_funcs["{:}_{:}".format(name, kind)] = func
-
-    def register_listener(self, matcher=None):
-        """
-        Decorator to register result listener functions.
-        """
-
-        def decorator(func):
-
-            if log.isEnabledFor(logging.DEBUG):
-                log.debug("Registered listener function '%s'", func.__name__)
-
-            self._listeners.append({
-                "func": func,
-                "matcher": matcher,
-            })
-
-            return func
-
-        return decorator
 
     def process(self, message):
         """
@@ -284,25 +263,39 @@ class MessageProcessor(object):
         """
         Simlpe message processing flow and available hooks:
 
-            <handler> --> [returner]
+            <handler> --> [trigger] --> [filter] --> [returner]
         """
 
         args = message.get("args", [])
         kwargs = message.get("kwargs", {})
 
-        # Call handler hook
-        found, result = self._call_hook_for(message, "handler", *args, **kwargs)
+        try:
 
-        # Call result listeners
-        self._call_listeners_for(message, result)
+            # Call handler hook
+            _, result = self._call_hook_for(message, "handler", *args, **kwargs)
 
-        # Call filter hook
-        found, filtered_result = self._call_hook_for(message, "filter", result)
-        if found:
-            result = filtered_result
+        except Exception as ex:
+            result = ex
 
-        # Call returner hook
-        self._call_hook_for(message, "returner", message, result)
+            raise
+
+        finally:
+
+            # Always call trigger, also on error or empty result
+            try:
+                self._call_hook_for(message, "trigger", result)
+            except:
+                log.exception("Error in simple workflow when calling trigger for message: {:}".format(message))
+
+        # Call filter hook if there is a result
+        if result:
+            found, filtered_result = self._call_hook_for(message, "filter", result)
+            if found:
+                result = filtered_result
+
+        # Call returner hook if there is a result
+        if result:
+            self._call_hook_for(message, "returner", message, result)
 
         return result
 
@@ -310,7 +303,7 @@ class MessageProcessor(object):
         """
         Extended message processing flow and available hooks:
 
-            [validator] --> <handler> --> [converter] --> [retuner]
+            [validator] --> <handler> --> [converter] --> [trigger] --> [filter] --> [enricher] --> [retuner]
         """
 
         args = message.get("args", [])
@@ -321,24 +314,45 @@ class MessageProcessor(object):
         if found and error:
             raise Exception(error)
 
-        # Call handler hook
-        found, result = self._call_hook_for(message, "handler", *args, **kwargs)
+        try:
 
-        # Call converter hook
-        found, converted_result = self._call_hook_for(message, "converter", result)
-        if found:
-            result = converted_result
+            # Call handler hook
+            _, result = self._call_hook_for(message, "handler", *args, **kwargs)
 
-        # Call result listeners
-        self._call_listeners_for(message, result)
+            # Call converter hook if there is a result
+            if result:
+                found, converted_result = self._call_hook_for(message, "converter", result)
+                if found:
+                    result = converted_result
 
-        # Call filter hook
-        found, filtered_result = self._call_hook_for(message, "filter", result)
-        if found:
-            result = filtered_result
+        except Exception as ex:
+            result = ex
 
-        # Call returner hook
-        self._call_hook_for(message, "returner", message, result)
+            raise
+
+        finally:
+
+            # Always call trigger, also on error or empty result
+            try:
+                self._call_hook_for(message, "trigger", result)
+            except:
+                log.exception("Error in extended workflow when calling trigger for message: {:}".format(message))
+
+        # Call filter hook if there is a result
+        if result:
+            found, filtered_result = self._call_hook_for(message, "filter", result)
+            if found:
+                result = filtered_result
+
+        # Call enricher hook if there is a result
+        if result:
+            found, enriched_result = self._call_hook_for(message, "enricher", result)
+            if found:
+                result = enriched_result
+
+        # Call returner hook if there is a result
+        if result:
+            self._call_hook_for(message, "returner", message, result)
 
         return result
 
@@ -493,23 +507,6 @@ class MessageProcessor(object):
         else:
             raise Exception("No function found for hook '{:}'".format(name))
 
-    def _call_listeners_for(self, message, result):
-        if not result:
-            return
-
-        for res in result if isinstance(result, list) else [result]:
-            for listener in self._listeners:
-                try:
-                    # Use matcher function if specified
-                    matcher = listener["matcher"]
-                    if matcher != None and not matcher(message, res):
-                        continue
-
-                    # Call listener
-                    listener["func"](res)
-                except Exception:
-                    log.exception("Failed executing listener: {:}".format(listener))
-
     def _synchronize_wrapper(self, lock, func):
         def synchronizer(*args, **kwargs):
             with lock:
@@ -530,7 +527,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
 
-    def init(self, __salt__, __opts__, workers=[], returners=[]):
+    def init(self, __salt__, __opts__, workers=[], triggers=[], returners=[]):
         """
         Initialize this instance.
         """
@@ -578,6 +575,19 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
             # Add returner as unsynchronized hook
             self.add_hook(returner["name"], "returner", returner_wrapper, synchronize=False)
+
+        # Add specified triggers as workflow hooks
+        for trigger in triggers:
+
+            if "module" in trigger:
+                func = __salt__[trigger["module"]]
+            else:
+                log.error("Unsupported trigger type cannot be added as workflow hook: {:}".format(trigger))
+
+                continue
+
+            # Add trigger as unsynchronized hook
+            self.add_hook(trigger["name"], "trigger", func, synchronize=False)
 
         # Add specified workers
         for worker in workers:
@@ -854,4 +864,75 @@ def keyword_resolve(data, keywords={}, symbol="$"):
         return eval(data, {"__{:s}__".format(key): val for key, val in keywords.iteritems()})
 
     return data
+
+
+def extract_error_from(result):
+    """
+    Helper function to extract error from a result.
+    """
+
+    if not result:
+        log.error("Cannot attempt to extract error from an empty result: {:}".format(result))
+
+        return
+
+    return result if isinstance(result, Exception) else result.get("error", None) if isinstance(result, dict) else result
+
+
+def filter_out_unchanged(result, context={}, kind=None):
+    """
+    Helper function to filter out unchanged results recursively based on their specified types.
+    """
+
+    # Build qualified type string for the result
+    kind = ".".join(filter(None, [kind, result.get("_type", None)]))
+
+    # Loop through all keys in the result and build entry with the significant alternating values
+    entry = {}
+    for key, val in result.iteritems():
+
+        # Skip all meta/hidden
+        if key.startswith("_"):
+            continue
+
+        # Dive into list in an attempt to filter it
+        if isinstance(val, list):
+
+            vals = []
+            for res in val:
+
+                # Recursive handling of dictionary values
+                if isinstance(res, dict):
+                    sub_res = filter_out_unchanged(res, context=context, kind=kind)
+                    if sub_res:
+                        vals.append(sub_res)
+
+                # Special handling of primitive values - they are always added
+                else:
+                    vals.append(res)
+
+                    # Ensure primitive values are also added to entry
+                    entry[key] = vals
+
+            # Set filtered values on result
+            result[key] = vals
+
+        # Ordinary primitive or dictionary value
+        else:
+            entry[key] = val
+
+    # Do we have a type and an entry with one or more significant alternating values?
+    if kind and entry:
+
+        # Compare if entry equals content cached in context
+        if context.get(kind, None) == entry:
+
+            # Skip entry when equal to cached
+            return
+
+        # Otherwise update cache with recent content
+        else:
+            context[kind] = entry
+
+    return result
 

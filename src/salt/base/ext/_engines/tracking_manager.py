@@ -3,7 +3,7 @@ import logging
 import pynmea2
 import salt.loader
 
-from messaging import EventDrivenMessageProcessor
+from messaging import EventDrivenMessageProcessor, extract_error_from
 from salt_more import SuperiorCommandExecutionError
 from serial_conn import SerialConn
 
@@ -120,10 +120,10 @@ def gnss_query_handler(cmd, *args, **kwargs):
     except SuperiorCommandExecutionError as scee:
         if scee.data.get("type", None) == "CME" and \
             scee.data.get("reason", None) in ["516", "Not fixed now"]:
-            return {"error": "no_fix"}
-        return {"error": str(scee)}
-    except Exception as e:
-        return {"error": str(e)}
+
+            raise Warning("no_fix")
+        else:
+            raise
 
 
 @edmp.register_hook()
@@ -131,15 +131,6 @@ def gnss_location_to_position_converter(result):
     """
     Converts a GNSS location result into position type.
     """
-
-    if "error" in result:
-
-        # Return empty position when no fix (to be used by listener to trigger position unknown state)
-        if result["error"] == "no_fix":
-            return {"_type": "pos", "error": result["error"]}
-
-        log.warn("Unable to determine GNSS location: {:}".format(result["error"]))
-        return
 
     ret = {
         "_type": "pos",
@@ -159,14 +150,49 @@ def gnss_location_to_position_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
+def position_event_trigger(result):
+    """
+    Listens for position results and triggers position unknown/standstill/moving events.
+    """
+
+    # Check for error result
+    error = extract_error_from(result)
+    if log.isEnabledFor(logging.DEBUG) and error:
+        log.debug("Position event trigger is unable to determine GNSS location: {:}".format(error))
+
+    ctx = context["position"]
+
+    old_state = ctx["state"]
+    new_state = None
+
+    old_error = ctx["error"]
+    new_error = None
+
+    # Determine new state
+    if error:
+        new_state = "unknown"
+        new_error = str(error)
+    elif result.get("sog", 0) > 0:
+        new_state = "moving"
+    else:
+        new_state = "standstill"
+
+    # Check if state has chaged since last known state
+    if old_state != new_state or old_error != new_error:
+        ctx["state"] = new_state
+        ctx["error"] = new_error
+
+        # Trigger event
+        edmp.trigger_event(
+            {"reason": ctx["error"]} if ctx["error"] else {},
+            "vehicle/position/{:s}".format(ctx["state"]))
+
+
+@edmp.register_hook(synchronize=False)
 def significant_position_filter(result):
     """
     Filter that only returns significant non duplicated positions.
     """
-
-    # First check for position with a location
-    if not result or not "loc" in result:
-        return
 
     ctx = context["position"]
 
@@ -191,40 +217,6 @@ def significant_position_filter(result):
     ctx["last_reported"] = new_pos
 
     return new_pos
-
-
-@edmp.register_listener(matcher=lambda m, r: r.get("_type", None) == "pos")
-def _position_listener(result):
-    """
-    Listens for position results and triggers position unknown/standstill/moving events.
-    """
-
-    ctx = context["position"]
-
-    old_state = ctx["state"]
-    new_state = None
-
-    old_error = ctx["error"]
-    new_error = None
-
-    # Determine new state
-    if not "loc" in result:
-        new_state = "unknown"
-        new_error = result.get("error", None)
-    elif result.get("sog", 0) > 0:
-        new_state = "moving"
-    else:
-        new_state = "standstill"
-
-    # Check if state has chaged since last known state
-    if old_state != new_state or old_error != new_error:
-        ctx["state"] = new_state
-        ctx["error"] = new_error
-
-        # Trigger event
-        edmp.trigger_event(
-            {"reason": ctx["error"]} if ctx["error"] else {},
-            "vehicle/position/{:s}".format(ctx["state"]))
 
 
 def start(**settings):

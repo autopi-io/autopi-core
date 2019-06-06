@@ -445,6 +445,9 @@ class MMA8X5XConn(I2CConn):
                 milliseconds=((self._fifo_watermark or 32) - count) * (1000 / self._data_rate))
             res["_stamp"] = timestamp.isoformat()
 
+            # Enforce type
+            res["_type"] = "xyz"
+
             ret.append(res)
 
             # Check if limit has been reached
