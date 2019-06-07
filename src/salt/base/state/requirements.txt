@@ -6,6 +6,7 @@ croniter==0.3.20
 flask==0.12.2
 flask-cors==3.0.3
 flask-api==1.0
+python-can==3.1.1
 cantools==32.16.0
 git+git://github.com/autopi-io/py-nmea@e257773cee103f16f75dd1ea4f9e2ef64645540a#pynmea2
 git+git://github.com/autopi-io/py-obd@0f374562f13f3264768ff2678714c9dba00c36fa#obd
