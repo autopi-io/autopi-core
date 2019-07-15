@@ -4,11 +4,11 @@
 #
 
 include:
+  - pending  # Will include pending SLS specified in pillar
   {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
   - ec2x.startup
   - ec2x.gnss.update
   {%- endif %}
-  - pending  # Will include pending SLS specified in pillar
 
 # Run startup modules defined in pillar
 {%- for module in salt["pillar.get"]("minion_ext:startup_modules", default=[]) %}
