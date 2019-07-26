@@ -11,5 +11,6 @@ auto-update-release:
 demand-update-release:
   module.run:
     - name: minionutil.update_release
+    - force: true
 {%- endif %}
 {%- endif %}
