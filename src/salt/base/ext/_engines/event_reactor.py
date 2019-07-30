@@ -132,15 +132,16 @@ def alternating_cache_event_filter(result):
     return result["value"]["event"]
 
 
-def start(returners, mappings, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting event reactor")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting event reactor with settings: {:}".format(settings))
 
         # Initialize message processor
-        edmp.init(__salt__, __opts__, returners=returners)
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []))
 
         # Setup event matchers
-        for mapping in mappings:
+        for mapping in settings.get("mappings", []):
 
             # Define function to handle events when matched
             def on_event(event, match=None, mapping=mapping):
@@ -201,8 +202,7 @@ def start(returners, mappings, **kwargs):
 
     except Exception:
         log.exception("Failed to start event reactor")
-        raise
 
+        raise
     finally:
         log.info("Stopping event reactor")
-

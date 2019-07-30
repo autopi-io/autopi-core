@@ -112,21 +112,23 @@ def status_handler():
     return context
 
 
-def start(endpoint, workers, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting cloud manager")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting cloud manager with settings: {:}".format(settings))
 
         # Setup cache
         options = __salt__["config.get"]("cloud_cache")
-        options["endpoint"] = endpoint
+        options["endpoint"] = settings["endpoint"]
         cache.setup(**options)
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, workers=workers)
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
         log.exception("Failed to start cloud manager")
+
         raise
     finally:
         log.info("Stopping cloud manager")

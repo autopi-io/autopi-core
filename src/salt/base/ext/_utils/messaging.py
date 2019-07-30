@@ -527,7 +527,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
 
-    def init(self, __salt__, __opts__, workers=[], triggers=[], returners=[]):
+    def init(self, __salt__, __opts__, hooks=[], workers=[]):
         """
         Initialize this instance.
         """
@@ -550,44 +550,40 @@ class EventDrivenMessageProcessor(MessageProcessor):
             self.process_event,
             match_type="regex")
 
-        # Add specified Salt returners as workflow hooks
-        salt_returners = salt.loader.returners(__opts__, __salt__)
-        for returner in returners:
+        # Add specified workflow hooks
+        for hook in hooks:
+            try:
 
-            # Load Salt returner function
-            returner_func = salt_returners["{:}.{:}".format(returner["name"], returner.get("func", "returner_data"))]
+                # Special handling of returners
+                if hook["kind"] = "returner":
 
-            # Wrap returner function to add defined args and kwargs
-            def returner_wrapper(message, result, returner=returner, returner_func=returner_func):
+                    # Load Salt returner function
+                    returners = salt.loader.returners(__opts__, __salt__)  # TODO: This can be cached
+                    returner_func = returners[hook["returner"]]
 
-                # Skip empty results
-                if not result:
-                    return
+                    # Wrap returner function to add defined args and kwargs
+                    def returner_wrapper(message, result, hook=hook, returner_func=returner_func):
 
-                args = returner.get("args", [])
-                kwargs = returner.get("kwargs", {})
+                        # Skip empty results
+                        if not result:
+                            return
 
-                # Automatically set namespace as kind for data results
-                if not args and returner_func.__name__ == "returner_data":
-                    args.append(self._namespace)
+                        args = hook.get("args", [])
+                        kwargs = hook.get("kwargs", {})
 
-                return returner_func(result, *args, **kwargs)
+                        # Automatically set namespace as kind for data results
+                        if not args and returner_func.__name__ == "returner_data":
+                            args.append(self._namespace)
 
-            # Add returner as unsynchronized hook
-            self.add_hook(returner["name"], "returner", returner_wrapper, synchronize=False)
+                        return returner_func(result, *args, **kwargs)
 
-        # Add specified triggers as workflow hooks
-        for trigger in triggers:
+                    self.add_hook(hook["name"], hook["kind"], returner_wrapper, synchronize=hook.get("lock", False))
 
-            if "module" in trigger:
-                func = __salt__[trigger["module"]]
-            else:
-                log.error("Unsupported trigger type cannot be added as workflow hook: {:}".format(trigger))
+                else:
+                    self.add_hook(hook["name"], hook["kind"], __salt__[hook["func"]], synchronize=hook.get("lock", False))
 
-                continue
-
-            # Add trigger as unsynchronized hook
-            self.add_hook(trigger["name"], "trigger", func, synchronize=False)
+            except Exception:
+                log.exception("Failed to add hook: {:}".format(hook))
 
         # Add specified workers
         for worker in workers:

@@ -947,10 +947,7 @@ def start(**settings):
             log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
 
         # Initialize message processor
-        edmp.init(__salt__, __opts__, 
-            workers=settings.get("workers", []),
-            triggers=settings.get("triggers", []),
-            returners=settings.get("returners", []))
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection

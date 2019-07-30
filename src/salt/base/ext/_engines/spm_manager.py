@@ -150,9 +150,10 @@ def flash_firmware_handler(hex_file, no_write=True):
     return ret
 
 
-def start(workers, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting SPM manager")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting SPM manager with settings: {:}".format(settings))
 
         # Give process higher priority
         psutil.Process(os.getpid()).nice(-1)
@@ -161,11 +162,12 @@ def start(workers, **kwargs):
         conn.setup()
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, workers=workers)
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
         log.exception("Failed to start SPM manager")
+        
         raise
     finally:
         log.info("Stopping SPM manager")

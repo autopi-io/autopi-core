@@ -151,12 +151,13 @@ def apn_settings(unit_id):
         return grains
 
 
-def start(flask, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting API service")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting API service with settings: {:}".format(settings))
 
         global settings
-        settings.update(flask)
+        settings.update(settings["flask"])
 
         _minion_id()
 
@@ -164,6 +165,7 @@ def start(flask, **kwargs):
 
     except Exception:
         log.exception("Failed to start API service")
+        
         raise
     finally:
         log.info("Stopping API service")

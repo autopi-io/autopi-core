@@ -174,12 +174,12 @@ def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_
     return ret
 
 
-def start(mixer, **kwargs):
+def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Starting audio manager")
+            log.debug("Starting audio manager with settings: {:}".format(settings))
 
-        context["mixer"]["settings"] = mixer
+        context["mixer"]["settings"] = settings["mixer"]
 
         gpio.setwarnings(False)
         gpio.setmode(gpio.BOARD)
@@ -196,6 +196,7 @@ def start(mixer, **kwargs):
 
     except Exception:
         log.exception("Failed to start audio manager")
+
         raise
     finally:
         log.info("Stopping audio manager")

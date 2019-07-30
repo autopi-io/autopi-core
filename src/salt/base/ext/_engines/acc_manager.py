@@ -270,7 +270,7 @@ def start(**settings):
         conn.setup(settings["mma8x5x_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, returners=settings.get("returners", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:

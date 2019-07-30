@@ -228,11 +228,12 @@ def start(**settings):
         conn.init(settings["serial_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, returners=settings.get("returners", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
         log.exception("Failed to start tracking manager")
+        
         raise
     finally:
         log.info("Stopping tracking manager")

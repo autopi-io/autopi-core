@@ -280,15 +280,16 @@ def sync_time_handler(force=False):
     return ret
 
 
-def start(serial_conn, **kwargs):
+def start(**settings):
     try:
-        log.debug("Starting EC2X manager")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting EC2X manager with settings: {:}".format(settings))
 
         # Initialize serial connection
-        conn.init(serial_conn)
+        conn.init(settings["serial_conn"])
 
         # TODO: Get workers from pillar data instead of hardcoded here (but wait until all units have engine that accept **kwargs to prevent error)
-        workers = [{
+        default_workers = [{
             "name": "sync_time",
             "interval": 5,  # Run every 5 seconds
             "kill_upon_success": True,  # Kill after first successful run
@@ -303,11 +304,12 @@ def start(serial_conn, **kwargs):
         }]
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, workers=workers)
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", default_workers))
         edmp.run()
 
     except Exception:
         log.exception("Failed to start EC2X manager")
+
         raise
     finally:
         log.info("Stopping EC2X manager")
