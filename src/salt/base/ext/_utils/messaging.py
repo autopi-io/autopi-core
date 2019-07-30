@@ -555,11 +555,11 @@ class EventDrivenMessageProcessor(MessageProcessor):
             try:
 
                 # Special handling of returners
-                if hook["kind"] = "returner":
+                if hook["kind"] == "returner":
 
                     # Load Salt returner function
                     returners = salt.loader.returners(__opts__, __salt__)  # TODO: This can be cached
-                    returner_func = returners[hook["returner"]]
+                    returner_func = returners[hook["func"]]
 
                     # Wrap returner function to add defined args and kwargs
                     def returner_wrapper(message, result, hook=hook, returner_func=returner_func):

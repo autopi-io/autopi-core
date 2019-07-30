@@ -14,8 +14,8 @@ app = FlaskAPI(__name__)
 # Allows OPTIONS requests everywhere.
 cors = CORS(app)
 
-# Default settings
-settings = {
+# Default Flask settings
+flask_settings = {
     "host": "0.0.0.0",
     "port": 9000,
     "threaded": True,
@@ -156,16 +156,16 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting API service with settings: {:}".format(settings))
 
-        global settings
-        settings.update(settings["flask"])
+        global flask_settings
+        flask_settings.update(settings["flask"])
 
         _minion_id()
 
-        app.run(**settings)
+        app.run(**flask_settings)
 
     except Exception:
         log.exception("Failed to start API service")
-        
+
         raise
     finally:
         log.info("Stopping API service")
