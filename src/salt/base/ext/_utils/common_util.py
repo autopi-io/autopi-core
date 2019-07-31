@@ -1,6 +1,7 @@
 import importlib
 import logging
 import os
+import re
 
 
 log = logging.getLogger(__name__)
@@ -21,14 +22,16 @@ def dict_get(dic, *args, **kwargs):
     return ret
 
 
-def dict_find(dic, path, value, default=None):
+def dict_find(dic, path, regex, default=None):
     ret = default
 
     p = path.split(":")
     for d in dic if isinstance(dic, list) else [dic]:
         res = dict_get(d, *p)
+        if res == None:
+            continue
 
-        if res != None and res == value:
+        if re.match(regex, res)
             ret = d
 
             break
