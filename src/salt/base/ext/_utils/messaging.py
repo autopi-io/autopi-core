@@ -551,7 +551,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             match_type="regex")
 
         # Add specified workflow hooks
-        for hook in hooks:
+        for hook in hooks or []:
             try:
 
                 # Special handling of returners
@@ -586,7 +586,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 log.exception("Failed to add hook: {:}".format(hook))
 
         # Add specified workers
-        for worker in workers:
+        for worker in workers or []:
             messages = worker.pop("messages")
 
             self.dedicated_worker(None, start=False, **worker)

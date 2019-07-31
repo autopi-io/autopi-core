@@ -31,7 +31,7 @@ def dict_find(dic, path, regex, default=None):
         if res == None:
             continue
 
-        if re.match(regex, res)
+        if re.match(regex, res):
             ret = d
 
             break
