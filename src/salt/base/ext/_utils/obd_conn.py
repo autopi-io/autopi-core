@@ -50,6 +50,9 @@ class OBDConn(object):
         self.on_closing = None
         self.on_closed = None
 
+        # Keep an up-to-date reference to protocol instance received from interface
+        self.cached_protocol = None
+
     def setup(self, settings):
         log.debug("Configuring OBD connection using settings: %s", settings)
 
@@ -166,6 +169,9 @@ class OBDConn(object):
     def protocol(self, verify=False):
         protocol = self._obd.protocol(verify=verify)
 
+        # Update cached protocol instance
+        self.cached_protocol = protocol
+
         return {
             "id": protocol.ID,
             "name": protocol.NAME,
@@ -194,7 +200,10 @@ class OBDConn(object):
             ident = None
             verify = True  # Force verify when autodetecting protocol
 
-        self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
+        protocol = self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
+
+        # Update cached protocol instance
+        self.cached_protocol = protocol
 
     @Decorators.ensure_open
     def ensure_protocol(self, ident, baudrate=None, verify=True):

@@ -27,8 +27,8 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 # OBD connection
 conn = OBDConn()
 
-# CAN database
-can_db = None
+# Loaded CAN databases indexed by procotol ID
+can_db_cache = {}
 
 context = {
     "engine": {
@@ -691,7 +691,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     return ret
 
 
-def _decode_can_frame(res):
+def _decode_can_frame(can_db, res):
     """
     Helper function to decode a raw CAN frame result. Note that one single CAN frame can output multiple results.
     """
@@ -721,15 +721,25 @@ def _decode_can_frame(res):
 @edmp.register_hook(synchronize=False)
 def can_converter(result):
     """
-    Converts raw CAN data using the available CAN database.
+    Converts raw CAN data using the CAN database available for the current protocol.
     This converter supports both single value results as well as multiple values results.
     """
 
-    # Skip if not CAN database is initialized
-    if can_db == None:
-        log.warning("Skipping CAN conversion because no CAN database is present")
+    # Attempt to find cached CAN database instance or else load it from file
+    protocol_id = conn.cached_protocol.ID
+    can_db = can_db_cache.get(protocol_id, None)
+    if not can_db:
+        try:
+            import cantools
 
-        return
+            can_db = cantools.db.load_file("/opt/autopi/obd/can/db/protocol_{:}.dbc".format(protocol_id))
+
+            can_db_cache[protocol_id] = can_db
+
+        except:
+            log.exception("Skipping CAN conversion because failed to load CAN database for protocol '{:}'".format(protocol_id))
+
+            return
 
     # Check for multiple values in result
     if "values" in result:
@@ -737,7 +747,7 @@ def can_converter(result):
         # Try to decode CAN messages and add to list
         res = []
         for val in result["values"]:
-            res.extend(_decode_can_frame(
+            res.extend(_decode_can_frame(can_db,
                 val if isinstance(val, dict) else {"value": val}))
 
         # Skip if none decoded
@@ -756,7 +766,7 @@ def can_converter(result):
     elif "value" in result:
 
         # Try to decode CAN messages
-        res = _decode_can_frame(result)
+        res = _decode_can_frame(can_db, result)
 
         # Skip if none decoded
         if not res:
@@ -954,20 +964,6 @@ def start(**settings):
         conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
         conn.setup(settings["serial_conn"])  # TODO: Rename 'serial_conn' to 'obd_conn'?
-
-        # Initialize CAN database if file is given
-        if "can_db_file" in settings:
-            try:
-                import cantools
-
-                global can_db
-                can_db = cantools.db.load_file(settings["can_db_file"])
-
-                # TODO HN: Sync filters by default?
-                #conn.sync_filters(can_db)
-
-            except:
-                log.exception("Failed to initialize CAN database from file '{:}'".format(settings["can_db_file"]))
 
         # Run message processor
         edmp.run()
