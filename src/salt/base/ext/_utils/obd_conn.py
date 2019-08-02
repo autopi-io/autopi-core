@@ -169,9 +169,6 @@ class OBDConn(object):
     def protocol(self, verify=False):
         protocol = self._obd.protocol(verify=verify)
 
-        # Update cached protocol instance
-        self.cached_protocol = protocol
-
         return {
             "id": protocol.ID,
             "name": protocol.NAME,
@@ -200,10 +197,7 @@ class OBDConn(object):
             ident = None
             verify = True  # Force verify when autodetecting protocol
 
-        protocol = self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
-
-        # Update cached protocol instance
-        self.cached_protocol = protocol
+        self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
     @Decorators.ensure_open
     def ensure_protocol(self, ident, baudrate=None, verify=True):
@@ -374,6 +368,9 @@ class OBDConn(object):
                 if "protocol" in kwargs:
                     data["protocol"] = kwargs["protocol"].ID
                     data["autodetected"] = kwargs["protocol"].autodetected
+
+                    # Update cached protocol instance
+                    self.cached_protocol = kwargs["protocol"]
 
                 self.on_status(status, data)
             except:
