@@ -951,10 +951,12 @@ def start(**settings):
         # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
         psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
 
-        # Determine critical limit of battery voltage 
-        context["battery"]["critical_limit"] = settings.get("battery_critical_limit", battery_util.DEFAULT_CRITICAL_LIMIT)
+        # Setup battery critical level settings
+        battery_critical_level = settings.get("battery_critical_level", {})
+        context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE] = battery_critical_level.get("duration", 180)
+        context["battery"]["critical_limit"] = battery_critical_level.get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Battery critical limit is %.1fV", context["battery"]["critical_limit"])
+            log.debug("Battery critical limit is %.1fV in {:} sec(s)", context["battery"]["critical_limit"], context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE])
 
         # Initialize message processor
         edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
