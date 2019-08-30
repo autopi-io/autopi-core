@@ -92,7 +92,7 @@ def firmware_rev():
     Revision identification of software release.
     """
 
-    return query("AT+GMR")
+    return query("AT+QGMR")
 
 
 def imei():
