@@ -2,6 +2,7 @@
 include:
   - .patch
   - .config
+  - .ext.sync
 
 minion-id-cron-configured:
   cron.present:
