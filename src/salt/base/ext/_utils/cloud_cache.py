@@ -29,7 +29,7 @@ class CloudCache(object):
     if redis.call('EXISTS', KEYS[2]) == 1 then
 
         -- Retrieve all entries from destination
-        for _, key in ipairs(redis.call('LRANGE', KEYS[2], 0, -1)) do
+        for _, key in ipairs(redis.call('LRANGE', KEYS[2], 0, cnt - 1)) do
 
             -- Add to return table and ensure chronological/ascending order
             table.insert(ret, 1, key)
@@ -95,8 +95,14 @@ class CloudCache(object):
         self.client.lpush(self.PENDING_QUEUE, json.dumps(data, separators=(",", ":")))
 
     def _dequeue_batch(self, source, destination, count):
-        script = self.scripts.get(self.DEQUEUE_BATCH_SCRIPT)
-        return script(keys=[source, destination], args=[count], client=self.client)
+        start = timer()
+        try:
+            script = self.scripts.get(self.DEQUEUE_BATCH_SCRIPT)
+            return script(keys=[source, destination], args=[count], client=self.client)
+        finally:
+            duration = start() - timer
+            if duration > .5:
+                log.warning("Dequeue batch took {:} second(s) to complete - consider reducing batch size".format(duration))
 
     def list_queues(self, pattern="*", reverse=False):
         # We always have a limited amount of keys so it should be safe to use 'keys' instead of 'scan'
