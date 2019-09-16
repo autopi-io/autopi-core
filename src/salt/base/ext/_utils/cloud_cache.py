@@ -164,7 +164,7 @@ class CloudCache(object):
                 log.warning("Unsupported compression algorithm configured - skipping compression")
 
         try:
-            res = requests.post(endpoint.get("url"), data=payload, headers=headers)
+            res = requests.post(endpoint.get("url"), data=payload, headers=headers, timeout=endpoint.get("timeout", 10))
         except Exception as ex:
             return False, str(ex)
         finally:
