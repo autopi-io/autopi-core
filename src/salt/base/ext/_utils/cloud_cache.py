@@ -100,9 +100,9 @@ class CloudCache(object):
             script = self.scripts.get(self.DEQUEUE_BATCH_SCRIPT)
             return script(keys=[source, destination], args=[count], client=self.client)
         finally:
-            duration = start() - timer
+            duration = timer() - start
             if duration > .5:
-                log.warning("Dequeue batch took {:} second(s) to complete - consider reducing batch size".format(duration))
+                log.warning("Dequeue batch of size {:} took {:} second(s) to complete - consider reducing batch size".format(count, duration))
 
     def list_queues(self, pattern="*", reverse=False):
         # We always have a limited amount of keys so it should be safe to use 'keys' instead of 'scan'

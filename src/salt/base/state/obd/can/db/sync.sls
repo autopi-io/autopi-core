@@ -1,6 +1,6 @@
 
 {%- for bus in salt['pillar.get']('obd:buses', default=[]) %}
-{%- if bus.get('has_can_msgs', False) %}
+{%- if bus.get('has_can_db', False) %}
 obd-bus-{{ bus['id'] }}-can-db-synced:
   file.managed:
     - name: /opt/autopi/obd/can/db/protocol_{{ bus['protocol_id'] }}.dbc
