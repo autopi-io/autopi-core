@@ -21,6 +21,8 @@ from timeit import default_timer as timer
 
 log = logging.getLogger(__name__)
 
+home_dir = "/opt/autopi/obd"
+
 # Message processor
 edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended", "handler": "query"})
 
@@ -444,7 +446,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
     # Write result to file if specified
     if file != None:
-        path = abs_file_path(file, "/opt/autopi/obd")
+        path = abs_file_path(file, home_dir)
 
         __salt__["file.mkdir"](os.path.dirname(path))
 
@@ -490,7 +492,7 @@ def recordings_handler(path=None):
 
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
 
-    path = path or "/opt/autopi/obd"
+    path = path or home_dir
     for file in os.listdir(path):
         file_path = os.path.join(path, file)
 
@@ -732,8 +734,15 @@ def can_converter(result):
         try:
             import cantools
 
-            can_db = cantools.db.load_file("/opt/autopi/obd/can/db/protocol_{:}.dbc".format(protocol_id))
+            # Check for override
+            path = os.path.join(home_dir, "obd/can", "_protocol_{:}.dbc".format(protocol_id))
+            if not os.path.isfile(path):
+                path = os.path.join(home_dir, "obd/can", "protocol_{:}.dbc".format(protocol_id))
 
+            # Load file
+            can_db = cantools.db.load_file(path)
+
+            # Put into cache
             can_db_cache[protocol_id] = can_db
 
         except:
