@@ -736,7 +736,9 @@ def can_converter(result):
 
             # Check for override
             path = os.path.join(home_dir, "obd/can", "_protocol_{:}.dbc".format(protocol_id))
-            if not os.path.isfile(path):
+            if os.path.isfile(path):
+                log.warning("Using overridden CAN database file '{:}'".format(path))
+            else:
                 path = os.path.join(home_dir, "obd/can", "protocol_{:}.dbc".format(protocol_id))
 
             # Load file
