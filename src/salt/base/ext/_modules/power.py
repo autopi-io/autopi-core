@@ -125,10 +125,10 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         except:
             log.exception("Failed to put accelerometer into standby mode")
 
-    # Plan a system shutdown after 1 minute in case STN never sleeps
+    # Plan a system shutdown in case STN never sleeps
     # (it could get interrupted by another STN wake trigger)
     try:
-        __salt__["system.shutdown"](1)
+        __salt__["system.shutdown"](int(delay / 60) + 2)
     except:
         log.exception("Failed to plan system shutdown")
 
