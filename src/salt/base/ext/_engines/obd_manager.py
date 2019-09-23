@@ -735,11 +735,11 @@ def can_converter(result):
             import cantools
 
             # Check for override
-            path = os.path.join(home_dir, "obd/can", "_protocol_{:}.dbc".format(protocol_id))
+            path = os.path.join(home_dir, "can/db", "_protocol_{:}.dbc".format(protocol_id))
             if os.path.isfile(path):
                 log.warning("Using overridden CAN database file '{:}'".format(path))
             else:
-                path = os.path.join(home_dir, "obd/can", "protocol_{:}.dbc".format(protocol_id))
+                path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol_id))
 
             # Load file
             can_db = cantools.db.load_file(path)
