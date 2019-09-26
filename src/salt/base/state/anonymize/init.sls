@@ -38,6 +38,17 @@ redis-flushed:
 "truncate -s 0 /var/log/salt/*":  # Salt
   cmd.run
 
+# reset hosts entry
+hosts-file-reset:
+  host.only:
+    - name: 127.0.1.1
+    - hostnames:
+      - autopi-initial
+
+# reset hostname
+"echo 'autopi-initial' > /etc/hostname":
+  cmd.run
+
 set-passphrase-to-default:
   file.replace:
     - name: "/etc/hostapd/hostapd_uap0.conf"
