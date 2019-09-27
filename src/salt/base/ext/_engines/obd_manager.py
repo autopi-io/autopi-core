@@ -725,6 +725,9 @@ def can_converter(result):
     """
     Converts raw CAN data using the CAN database available for the current protocol.
     This converter supports both single value results as well as multiple values results.
+    The CAN database file (.dbc) is found on the local file system by the following path expression:
+
+        /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
 
     # Attempt to find cached CAN database instance or else load it from file
