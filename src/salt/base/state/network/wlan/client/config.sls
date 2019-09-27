@@ -3,7 +3,7 @@
 ensure-default-wlan-networks-removed:
   file.replace:
     - name: /etc/salt/grains
-    - pattern: "^  - priority: [0-9]+\n    psk: .+\n    ssid: AutoPi QC.*\n"
+    - pattern: "^  - priority: [0-9]+\n    psk: [^\n\r]+\n    ssid: AutoPi QC[^\n\r]*\n"
     - repl: ""
 
 refresh-grains-after-ensure-default-wlan-networks-removed:
