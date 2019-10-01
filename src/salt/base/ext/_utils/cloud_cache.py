@@ -123,28 +123,8 @@ class CloudCache(object):
 
         return self.client.flushdb()
 
-    def _upload(self, entries, endpoint=None, splay_factor=1):
-        endpoint = endpoint or self.options.get("endpoint", {})
-        if not endpoint:
-            log.warning("Cannot upload data to cloud because no endpoint is configured")
-
-            return False, "No cloud endpoint configured"
-
-        delay = random.randint(0, self.options.get("upload_splay", 10)) * splay_factor
-        if self.upload_timer != None and timer() - self.upload_timer < delay:
-            if splay_factor > 1:
-                log.warning("Enforcing increased (by factor {:}) repeated upload delay of {:} seconds...".format(splay_factor, delay))
-            else:
-                log.info("Enforcing repeated upload delay of {:} seconds...".format(delay))
-
-            # Take a little break before next upload
-            time.sleep(delay)
-
-        payload = "[{:s}]".format(", ".join(entries))
-        headers = {
-            "authorization": "token {:}".format(endpoint.get("auth_token")),
-            "content-type": "application/json",
-        }
+    def _prepare_payload_for(self, batch):
+        payload = "[{:s}]".format(",".join(batch))
 
         if "compression" in self.options:
             if self.options["compression"]["algorithm"] == "gzip":
@@ -162,6 +142,30 @@ class CloudCache(object):
                 headers["content-encoding"] = "gzip"
             else:
                 log.warning("Unsupported compression algorithm configured - skipping compression")
+
+        return payload
+
+    def _upload(self, payload, endpoint=None, splay_factor=1):
+        endpoint = endpoint or self.options.get("endpoint", {})
+        if not endpoint:
+            log.warning("Cannot upload data to cloud because no endpoint is configured")
+
+            return False, "No cloud endpoint configured"
+
+        delay = random.randint(0, self.options.get("upload_splay", 10)) * splay_factor
+        if self.upload_timer != None and timer() - self.upload_timer < delay:
+            if splay_factor > 1:
+                log.warning("Enforcing increased (by factor {:}) repeated upload delay of {:} seconds...".format(splay_factor, delay))
+            else:
+                log.info("Enforcing repeated upload delay of {:} seconds...".format(delay))
+
+            # Take a little break before next upload
+            time.sleep(delay)
+
+        headers = {
+            "authorization": "token {:}".format(endpoint.get("auth_token")),
+            "content-type": "application/json",
+        }
 
         try:
             res = requests.post(endpoint.get("url"), data=payload, headers=headers, timeout=endpoint.get("timeout", 10))
@@ -192,7 +196,8 @@ class CloudCache(object):
             return ret
 
         # Upload batch
-        ok, msg = self._upload(batch)  # Remember this call will raise exception upon server error
+        payload = self._prepare_payload_for(batch)
+        ok, msg = self._upload(payload)  # Remember this call will raise exception upon server error
         if ok:
             log.info("Uploaded batch with {:} entries from queue '{:}'".format(len(batch), queue))
 
@@ -219,7 +224,7 @@ class CloudCache(object):
             ret["error"] = res["error"]
 
         # Continue to upload if more pending batches present
-        while not "error" in res and res["count"] == self.options.get("max_batch_size", 100):
+        while not "error" in res and (res["count"] == self.options.get("max_batch_size", 100) or res.get("continue", False)):
             res = self._upload_batch(queue)  # Remember this call will raise exception upon server error
 
             ret["count"] += res["count"]
@@ -307,10 +312,11 @@ class CloudCache(object):
 
             attempt = int(match.group("attempt")) + 1
             entries = self.client.lrange(queue, 0, -1)
+            payload = self._prepare_payload_for(entries)
 
             # Retry upload
             try:
-                ok, msg = self._upload(entries, splay_factor=remaining_count)  # Remember this call will raise exception upon server error
+                ok, msg = self._upload(payload, splay_factor=remaining_count)  # Remember this call will raise exception upon server error
                 if ok:
                     log.info("Sucessfully uploaded retry queue '{:}' with {:} entries".format(queue, len(entries)))
 
@@ -352,5 +358,102 @@ class CloudCache(object):
 
         # Signal if we have reached queue limit
         ret["is_overrun"] = remaining_count >= queue_limit
+
+        return ret
+
+
+class NextCloudCache(CloudCache):
+    """
+    To improve performance at large batch sizes, '.work' queues have been phased out.
+    """
+
+    def __init__(self):
+        CloudCache.__init__(self)
+        self.upload_cache = {}
+
+    def _dequeue_batch(self, *args, **kwargs):
+        raise Exception("Not supported")
+
+    def _upload_batch(self, queue):
+        ret = {
+            "count": 0
+        }
+
+        # First check for cached batch
+        batch_reversed, payload = self.upload_cache.pop(queue, (None, None))
+        if batch_reversed:
+            # TODO HN
+            #if log.isEnabledFor(logging.DEBUG):
+            log.info("Found cached batch with {:} entries for queue '{:}'".format(len(batch_reversed), queue))
+
+            # Signal that upload of next batch should continue on success (needed because max batch size might not be met)
+            ret["continue"] = True
+
+        # Otherwise pull new batch from queue
+        else:
+            batch_reversed = self.client.lrange(queue, -self.options.get("max_batch_size", 100), -1)
+            if not batch_reversed:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("No batch found to upload from queue '{:}'".format(queue))
+
+                return ret
+
+            payload = self._prepare_payload_for(reversed(batch_reversed))
+
+        # Try upload batch payload
+        try:
+            ok, msg = self._upload(payload)  # Remember this call will raise exception upon server error
+            if ok:
+                log.info("Uploaded batch with {:} entries from queue '{:}'".format(len(batch_reversed), queue))
+
+                ret["count"] = len(batch_reversed)
+
+                # Batch uploaded means work completed
+                self.client.ltrim(queue, 0, -(len(batch_reversed) + 1))
+            else:
+                log.warning("Temporarily unable to upload batch with {:} entries from queue '{:}': {:}".format(len(batch_reversed), queue, msg))
+
+                # Put batch into upload cache
+                self.upload_cache[queue] = (batch_reversed, payload)
+
+                ret["error"] = msg
+
+        # Only pending queue support retry upon server error
+        except RequestException as rex:
+
+            if queue == self.PENDING_QUEUE and self.options.get("max_retry", 10) > 0:
+
+                # Create retry queue for batch
+                retry_queue = self.RETRY_QUEUE.format(datetime.datetime.utcnow(), 0)
+                log.warning("Failed to upload pending batch - transferring to new dedicated retry queue '{:}': {:}".format(retry_queue, rex))
+
+                self.client.pipeline() \
+                    .lpush(retry_queue, *batch_reversed) \
+                    .ltrim(queue, 0, -(len(batch_reversed) + 1)) \
+                    .execute()
+
+            else:
+                log.warning("Failed to upload batch - leaving batch in queue '{:}': {:}".format(queue, rex))
+
+            raise
+
+        return ret
+
+    def upload_pending(self):
+        ret = {
+            "total": 0,
+        }
+
+        try:
+            res = self._upload_batch_continuing(self.PENDING_QUEUE)  # Remember this call will raise exception upon server error
+            ret["total"] += res["count"]
+
+            if "error" in res:
+                ret.setdefault("errors", []).append(res["error"])
+
+        except RequestException as rex:
+            ret.setdefault("errors", []).append(str(rex))
+
+            # Retry queue logic is moved to '_upload_batch' method
 
         return ret
