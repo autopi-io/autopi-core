@@ -1,6 +1,6 @@
 import logging
 
-from cloud_cache import CloudCache
+from cloud_cache import NextCloudCache
 from messaging import EventDrivenMessageProcessor
 
 
@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 # Message processor
 edmp = EventDrivenMessageProcessor("cloud")
 
-cache = CloudCache()
+cache = NextCloudCache()
 
 context = {
     "upload": {
