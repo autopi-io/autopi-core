@@ -131,7 +131,7 @@ class CloudCache(object):
                 start = timer()
 
                 buffer = StringIO.StringIO()
-                with gzip.GzipFile(fileobj=buffer, mode="wt", compresslevel=self.options["compression"].get("level", 9)) as gf:
+                with gzip.GzipFile(fileobj=buffer, mode="wt", compresslevel=self.options["compression"].get("level", 1)) as gf:
                    gf.write(payload)
 
                 compressed_payload = buffer.getvalue()
@@ -139,7 +139,6 @@ class CloudCache(object):
                 log.info("Compressed payload with size {:} to {:} in {:} second(s)".format(len(payload), len(compressed_payload), timer() - start))
 
                 payload = compressed_payload
-                headers["content-encoding"] = "gzip"
             else:
                 log.warning("Unsupported compression algorithm configured - skipping compression")
 
@@ -166,6 +165,10 @@ class CloudCache(object):
             "authorization": "token {:}".format(endpoint.get("auth_token")),
             "content-type": "application/json",
         }
+
+        # Set correct content encoding when compression is enabled
+        if "compression" in self.options:
+            headers["content-encoding"] = self.options["compression"]["algorithm"]
 
         try:
             res = requests.post(endpoint.get("url"), data=payload, headers=headers, timeout=endpoint.get("timeout", 10))
