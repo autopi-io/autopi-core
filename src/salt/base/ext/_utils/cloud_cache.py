@@ -368,7 +368,7 @@ class CloudCache(object):
 
                     # Update attempt count in queue name
                     self.client.pipeline() \
-                        .renamenx(queue, re.sub("_#\d+$", "_#{:}".format(attempt), queue))
+                        .renamenx(queue, re.sub("_#\d+$", "_#{:}".format(attempt), queue)) \
                         .bgsave() \
                         .execute()
 
