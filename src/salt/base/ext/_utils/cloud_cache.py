@@ -207,7 +207,10 @@ class CloudCache(object):
             ret["count"] = len(batch)
 
             # Batch uploaded equals work completed
-            self.client.delete(work_queue)
+            self.client.pipeline() \
+                .delete(work_queue) \
+                .bgsave() \
+                .execute()
         else:
             log.warning("Temporarily unable to upload batch with {:} entries from queue '{:}': {:}".format(len(batch), queue, msg))
 
@@ -286,7 +289,10 @@ class CloudCache(object):
                 retry_queue = self.RETRY_QUEUE.format(datetime.datetime.utcnow(), 0)
                 log.warning("Failed to upload pending batch - transferring to new dedicated retry queue '{:}': {:}".format(retry_queue, rex))
 
-                self.client.renamenx(work_queue, retry_queue)
+                self.client.pipeline() \
+                    .renamenx(work_queue, retry_queue) \
+                    .bgsave() \
+                    .execute()
 
             else:
                 log.warning("Failed to upload pending batch - leaving batch in queue '{:}': {:}".format(work_queue, rex))
@@ -323,7 +329,10 @@ class CloudCache(object):
                 if ok:
                     log.info("Sucessfully uploaded retry queue '{:}' with {:} entries".format(queue, len(entries)))
 
-                    self.client.delete(queue)
+                    self.client.pipeline() \
+                        .delete(queue) \
+                        .bgsave() \
+                        .execute()
 
                     ret["total"] += len(entries)
 
@@ -352,12 +361,16 @@ class CloudCache(object):
                         .lpush(fail_queue, *entries) \
                         .expire(fail_queue, self.options.get("fail_ttl", 604800)) \
                         .delete(queue) \
+                        .bgsave() \
                         .execute()
 
                 else:
 
                     # Update attempt count in queue name
-                    self.client.renamenx(queue, re.sub("_#\d+$", "_#{:}".format(attempt), queue))
+                    self.client.pipeline() \
+                        .renamenx(queue, re.sub("_#\d+$", "_#{:}".format(attempt), queue))
+                        .bgsave() \
+                        .execute()
 
         # Signal if we have reached queue limit
         ret["is_overrun"] = remaining_count >= queue_limit
@@ -411,8 +424,12 @@ class NextCloudCache(CloudCache):
 
                 ret["count"] = len(batch_reversed)
 
-                # Batch uploaded means work completed
-                self.client.ltrim(queue, 0, -(len(batch_reversed) + 1))
+                # Remove batch entries from queue and persist immediately
+                self.client.pipeline() \
+                    .ltrim(queue, 0, -(len(batch_reversed) + 1)) \
+                    .bgsave() \
+                    .execute()
+
             else:
                 log.warning("Temporarily unable to upload batch with {:} entries from queue '{:}': {:}".format(len(batch_reversed), queue, msg))
 
@@ -433,6 +450,7 @@ class NextCloudCache(CloudCache):
                 self.client.pipeline() \
                     .lpush(retry_queue, *batch_reversed) \
                     .ltrim(queue, 0, -(len(batch_reversed) + 1)) \
+                    .bgsave() \
                     .execute()
 
             else:
