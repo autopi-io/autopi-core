@@ -83,7 +83,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
     Optional arguments:
       - mode (str): Service section of the PID.
       - pid (str): Code section of the PID.
-      - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
+      - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - bytes (int): Default value is '0'.
       - decoder (str): Specific decoder to be used to process the response.
       - formula (str): Formula written in Python to convert the response.
@@ -149,7 +149,7 @@ def send_handler(msg, **kwargs):
       - msg (str): Message to send.
 
     Optional arguments:
-      - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
+      - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.

@@ -41,7 +41,7 @@ class OBDConn(object):
         self._protocol_id = "AUTO"
         self._protocol_baudrate = None
         self._protocol_verify = True
-        
+
         self._obd = None
 
         self.is_permanently_closed = False
@@ -106,9 +106,6 @@ class OBDConn(object):
                 status_callback=self._status_callback,
                 fast=False
             )
-
-            # Always soft reset interface to avoid any continuing protocol detection/verification problems
-            self._obd.reset(mode="warm")
 
             return self
 
