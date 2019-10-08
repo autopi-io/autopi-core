@@ -970,7 +970,7 @@ def start(**settings):
         context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE] = battery_critical_level.get("duration", 180)
         context["battery"]["critical_limit"] = battery_critical_level.get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Battery critical limit is %.1fV in {:} sec(s)", context["battery"]["critical_limit"], context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE])
+            log.debug("Battery critical limit is {:}V in {:} sec(s)".format(context["battery"]["critical_limit"], context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE]))
 
         # Initialize message processor
         edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
