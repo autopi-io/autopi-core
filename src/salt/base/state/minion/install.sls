@@ -10,11 +10,16 @@ minion-id-cron-configured:
     - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' | tee /etc/salt/minion_id | cut -c21- | sed 's/^/autopi-/g' > /etc/hostname"
     - special: "@reboot"
 
-minion-start-before-network:
-  file.replace:
+#minion-start-before-network:
+#  file.replace:
+#    - name: /lib/systemd/system/salt-minion.service
+#    - pattern: "^After=.*$"
+#    - repl: "Before=network-pre.target"
+
+minion-service-configured:
+  file.managed:
     - name: /lib/systemd/system/salt-minion.service
-    - pattern: "^After=.*$"
-    - repl: "Before=network-pre.target"
+    - source: salt://minion/minion.service
 
 minion-api-call-script-installed:
   file.managed:
