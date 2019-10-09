@@ -1,0 +1,3 @@
+{%- for key, val in salt['pillar.get']('minion_ext:host_aliases', default={}).iteritems() %}
+{{ key }} {{ val }}
+{%- endfor %}

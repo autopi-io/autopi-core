@@ -16,6 +16,12 @@ minion-id-cron-configured:
 #    - pattern: "^After=.*$"
 #    - repl: "Before=network-pre.target"
 
+minion-host-aliases-configured:
+  file.managed:
+    - name: /boot/host.aliases
+    - source: salt://minion/host.aliases.jinja
+    - template: jinja
+
 minion-service-configured:
   file.managed:
     - name: /lib/systemd/system/salt-minion.service
