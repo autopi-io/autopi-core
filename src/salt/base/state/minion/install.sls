@@ -21,6 +21,7 @@ minion-host-aliases-configured:
     - name: /boot/host.aliases
     - source: salt://minion/host.aliases.jinja
     - template: jinja
+    - mode: 755
 
 minion-service-configured:
   file.managed:
