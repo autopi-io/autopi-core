@@ -110,7 +110,7 @@ def terminal_execute(unit_id):
     args = cmd_object['arg']
     kwargs = dict(cmd_object['kwarg'])
 
-    if command.startswith('state.'):
+    if command.startswith('state.') or command.startswith('minionutil.update_release'):
         log.debug('executing command via caller')
         response = _caller().cmd(command, *args, **kwargs)
     else:

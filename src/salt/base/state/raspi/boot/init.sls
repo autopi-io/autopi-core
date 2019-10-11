@@ -68,15 +68,35 @@ minimal-memory-split:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?gpu_mem=.*$"
-    - repl: "gpu_mem={{ salt['pillar.get']('rpi:boot:gpu_mem', '16') }}"
+    - repl: "gpu_mem={{ salt['pillar.get']('rpi:boot:gpu_mem', default='16') }}"
     - append_if_not_found: true
 
-bluetooth-disabled:
+bluetooth-configured:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=pi3-disable-bt$"
-    - repl: "dtoverlay=pi3-disable-bt"
+    - pattern: "^#?dtoverlay=pi3-(?:disable|miniuart)-bt$"
+    - repl: "dtoverlay=pi3-{{ salt['pillar.get']('rpi:boot:bt:mode', default='disable') }}-bt"
     - append_if_not_found: true
+
+core-frequency-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?core_freq=.*$"
+    {%- if salt['pillar.get']('rpi:boot:bt:mode', default='disable') == 'miniuart' %}
+    - repl: "core_freq=250"
+    - append_if_not_found: true
+    {%- else %}
+    - repl: ""
+    {%- endif %}
+
+hciuart:
+  {%- if salt['pillar.get']('rpi:boot:bt:mode', default='disable') == 'miniuart' %}
+  service.enabled:
+    - unmask: true
+  {%- else %}
+  service.dead:
+    - enable: false
+  {%- endif %}
 
 reboot-upon-changes-required:
   module.wait:
