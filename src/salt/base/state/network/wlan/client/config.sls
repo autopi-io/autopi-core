@@ -24,6 +24,7 @@ wpa-manager-service-configured:
     - name: /lib/systemd/system/wpa-manager.service
     - source: salt://network/wlan/client/wpa-manager.service
 
+{%- if salt['pillar.get']('wpa_manager:enabled', default=True) %}
 wpa-manager-service-running:
   service.running:
     - name: wpa-manager
@@ -33,3 +34,9 @@ wpa-manager-service-running:
     - watch:
       - file: /lib/systemd/system/wpa-manager.service
       - file: /etc/wpa_supplicant/wpa_supplicant.conf
+{%- else %}
+wpa-manager-service-disabled:
+  service.dead:
+    - name: wpa-manager
+    - enable: false
+{%- endif %}
