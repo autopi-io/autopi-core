@@ -53,7 +53,7 @@ class OBDConn(object):
         # Keep an up-to-date reference to protocol instance received from interface
         self.cached_protocol = None
 
-    def setup(self, settings):
+    def setup(self, **settings):
         log.debug("Configuring OBD connection using settings: %s", settings)
 
         if not "device" in settings:
