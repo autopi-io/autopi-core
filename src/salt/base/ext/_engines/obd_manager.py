@@ -979,7 +979,7 @@ def start(**settings):
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
-        conn.setup(settings["serial_conn"])  # TODO: Rename 'serial_conn' to 'obd_conn'?
+        conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
 
         # Run message processor
         edmp.run()
