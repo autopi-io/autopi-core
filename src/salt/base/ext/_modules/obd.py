@@ -41,7 +41,7 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
       - decoder (str): Specific decoder to be used to process the response.
       - formula (str): Formula written in Python to convert the response.
       - unit (str): Unit of the result.
-      - protocol (str): ID of specific protocol to be used to receive the data. Default value is 'auto'.
+      - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.

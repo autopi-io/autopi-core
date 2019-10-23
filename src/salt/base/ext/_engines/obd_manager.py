@@ -73,7 +73,7 @@ def context_handler(key=None):
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol="auto", baudrate=None, verify=False, force=False):
+def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False):
     """
     Queries an OBD command.
 
@@ -88,7 +88,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
       - decoder (str): Specific decoder to be used to process the response.
       - formula (str): Formula written in Python to convert the response.
       - unit (str): Unit of the result.
-      - protocol (str): ID of specific protocol to be used to receive the data. Default value is 'auto'.
+      - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.
@@ -114,8 +114,10 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
-    # Only ensure protocol if given
-    if protocol and protocol not in [str(None), "null"]:  # Workaround: Also support empty value from pillar
+    # Ensure protocol
+    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for ELM_VOLTAGE
+        pass
+    else:
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Check if command is supported
