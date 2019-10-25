@@ -33,9 +33,6 @@ conn = OBDConn()
 can_db_cache = {}
 
 context = {
-    "engine": {
-        "state": ""
-    },
     "battery": {
         "state": "",
         "count": 0,
@@ -851,18 +848,41 @@ def alternating_readout_filter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def rpm_engine_event_trigger(result, kind="rpm"):
+def communication_event_trigger(result):
     """
-    Listens for RPM results and triggers engine running/stopped events.
+    Looks for error in result and triggers communication inactive/established/disconnected event.
+    """
+
+    # Check for error result
+    error = extract_error_from(result)
+    if error and log.isEnabledFor(logging.DEBUG):
+        log.debug("Communication event trigger got error result: {:}".format(result))
+
+    # Check if state has chaged since last known state
+    ctx = context.setdefault("communication", {})
+    old_state = ctx.get("state", "")
+    new_state = "established" if not error else ("disconnected" if old_state in ["disconnected", "established"] else "inactive")
+    if old_state != new_state:
+        ctx["state"] = new_state
+
+        # Trigger event
+        edmp.trigger_event({"reason": str(error)} if error else {},
+            "vehicle/communication/{:s}".format(ctx["state"]))
+
+
+@edmp.register_hook(synchronize=False)
+def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
+    """
+    Looks for RPM result and triggers engine not_running/running/stopped event based on the value(s) found.
     This trigger supports single value results as well as multiple values results.
     """
 
     # Check for error result
     error = extract_error_from(result)
     if error:
-            
+
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("RPM engine event trigger got error result: {:}".format(result))
+            log.debug("RPM {:} event trigger got error result: {:}".format(key, result))
 
         # Do not return/break flow because this will trigger negative engine event
 
@@ -873,13 +893,13 @@ def rpm_engine_event_trigger(result, kind="rpm"):
 
             # Skip if not a RPM result
             if result.get("_type", None) != kind:
-                log.error("RPM engine event trigger got unsupported RPM type result: {:}".format(result))
+                log.error("RPM {:} event trigger got unsupported RPM type result: {:}".format(key, result))
 
                 return
 
             # Log RPM result when debugging
             if log.isEnabledFor(logging.DEBUG):
-                log.debug("RPM engine event trigger got RPM result: {:}".format(result))
+                log.debug("RPM {:} event trigger got RPM result: {:}".format(key, result))
 
         # Check for multiple values in result
         elif "values" in result:
@@ -895,13 +915,13 @@ def rpm_engine_event_trigger(result, kind="rpm"):
 
         # Skip if no value(s) found
         else:
-            log.error("RPM engine event trigger could not find any value(s)")
+            log.error("RPM {:} event trigger could not find any value(s)".format(key))
 
             return
 
     # Check if state has chaged since last known state
-    ctx = context["engine"]
-    old_state = ctx["state"]
+    ctx = context.setdefault(key, {})
+    old_state = ctx.get("state", "")
     new_state = "running" if not error and result.get("value", 0) > 0 else \
                     ("stopped" if old_state in ["stopped", "running"] else "not_running")
     if old_state != new_state:
@@ -909,13 +929,24 @@ def rpm_engine_event_trigger(result, kind="rpm"):
 
         # Trigger event
         edmp.trigger_event({"reason": str(error)} if error else {},
-            "vehicle/engine/{:s}".format(ctx["state"]))
+            "vehicle/{:s}/{:s}".format(key, ctx["state"]))
+
+
+@edmp.register_hook(synchronize=False)
+def rpm_motor_event_trigger(result):
+    """
+    Looks for RPM result and triggers motor not_running/running/stopped event based on the value(s) found.
+    This trigger supports single value results as well as multiple values results.
+    This trigger is meant to be used for electric vehicles without an engine.
+    """
+
+    rpm_engine_event_trigger(result, key="motor")
 
 
 @edmp.register_hook(synchronize=False)
 def battery_event_trigger(result):
     """
-    Listens for battery results and triggers battery events when voltage changes.
+    Looks for battery results and triggers battery event when voltage changes.
     """
 
     # Check for error result
@@ -979,7 +1010,7 @@ def start(**settings):
         edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection
-        conn.on_status = lambda status, data: edmp.trigger_event(data, "vehicle/obd/{:s}".format(status)) 
+        conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
 
