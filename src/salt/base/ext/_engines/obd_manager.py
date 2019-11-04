@@ -98,21 +98,18 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
 
-    if obd.commands.has_name(name.upper()):
-        cmd = obd.commands[name.upper()]
-    elif pid != None:
+    if pid != None:
         mode = "{:02X}".format(int(str(mode), 16)) if mode != None else "01"
         pid = "{:02X}".format(int(str(pid), 16))
 
-        if obd.commands.has_pid(mode, pid):
-            cmd = obd.commands[mode][pid]
-        else:
-            cmd = obd.OBDCommand(name, None, "{:}{:}".format(mode, pid), bytes, getattr(obd.decoders, decoder or "raw_string"))
+        cmd = obd.OBDCommand(name, None, "{:}{:}".format(mode, pid), bytes, getattr(obd.decoders, decoder or "raw_string"))
+    elif obd.commands.has_name(name.upper()):
+        cmd = obd.commands[name.upper()]
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Ensure protocol
-    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for ELM_VOLTAGE
+    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command
         pass
     else:
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
