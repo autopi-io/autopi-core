@@ -663,7 +663,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
         # Ensure protocol
         conn.ensure_protocol(protocol,
-            baudrate=baudrate,
+            baudrate=(baudrate if supported_protocols().get(str(protocol), {}).get("interface", None) != "ELM327" else None),  # ELM327 protocols does not support custom baudrates
             verify=verify)
 
         start = timer()
