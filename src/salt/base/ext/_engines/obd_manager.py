@@ -659,11 +659,11 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         # Only use protocol settings from header when no protocol is specified
         if protocol == None:
             protocol = header.get("protocol", None)
-            baudrate = baudrate or header.get("baudrate", None)
+            baudrate = baudrate or (header.get("baudrate", None) if conn.supported_protocols().get(str(protocol), {}).get("interface", None) != "ELM327" else None)  # ELM327 protocols does not support custom baudrates
 
         # Ensure protocol
         conn.ensure_protocol(protocol,
-            baudrate=(baudrate if supported_protocols().get(str(protocol), {}).get("interface", None) != "ELM327" else None),  # ELM327 protocols does not support custom baudrates
+            baudrate=baudrate,
             verify=verify)
 
         start = timer()
