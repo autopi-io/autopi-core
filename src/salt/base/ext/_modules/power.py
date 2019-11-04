@@ -239,9 +239,8 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             })
 
         # Fire an added event
-        __salt__["event.fire"]({
-                "reason": reason,
-            },
+        __salt__["event.fire"](
+            {"reason": reason} if not name.endswith("/{:}".format(reason)) else {},
             "system/{:}/added".format(name.lstrip("_"))
         )
 
