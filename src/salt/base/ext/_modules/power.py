@@ -183,7 +183,9 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
       - reason (str): Reason code that tells why we decided to sleep. Default is 'unknown'.
     """
 
-    if enabled != None:
+    reason = kwargs.setdefault("reason", "unknown")
+
+    if enable != None:
         log.warning("Using deprecated argument 'enable' - use 'add' or 'clear' instead")
 
     # Helper function to get all scheduled sleep timers
@@ -195,17 +197,22 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
 
     if clear != None or enable == False:
 
-        # Delete all existing timers
+        # Clear matching timers
         for name in timers():
             if clear not in [None, "*"]:
-                if clear != name:
+                if "_sleep_timer/{:}".format(clear) != name:
                     continue
 
             res = __salt__["schedule.delete"](name)
 
-    if add != None or enable == True:
+            # Fire a cleared event
+            __salt__["event.fire"]({
+                    "reason": reason,
+                },
+                "system/{:}/cleared".format(name.lstrip("_"))
+            )
 
-        reason = kwargs.setdefault("reason", "unknown")
+    if add != None or enable == True:
         name = "_sleep_timer/{:}".format(add or reason)
 
         # Always try to delete existing timer
@@ -230,6 +237,13 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
                 "transient": True,  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
                 "revision": 2
             })
+
+        # Fire an added event
+        __salt__["event.fire"]({
+                "reason": reason,
+            },
+            "system/{:}/added".format(name.lstrip("_"))
+        )
 
     # Return all existing timer(s)
     return timers()
