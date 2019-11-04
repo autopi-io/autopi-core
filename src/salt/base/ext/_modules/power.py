@@ -169,26 +169,44 @@ def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True)
     return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_auto_update=allow_auto_update)
 
 
-def sleep_timer(enable=None, period=1800, **kwargs):
+def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
     """
     Setup sleep timer to schedule power off upon inactivity.
 
     NOTE: Do not access pillar data in this function as they will not be available when called from engines (separate processes).
 
     Optional arguments:
-      - enable (bool): Enable or disable timer.
+      - add (str): Add a timer with the given name.
+      - clear (str): Clear sleep timer(s) matching the given name. Use '*' to clear all.
+      - enable (bool): Enable or disable timer. __DEPRECATED__: Use 'add' or 'clear' instead.
       - period (int): Timer period in seconds before performing sleep. Default is '1800'.
       - reason (str): Reason code that tells why we decided to sleep. Default is 'unknown'.
     """
 
-    # Helper function to get all sleep timers
+    if enabled != None:
+        log.warning("Using deprecated argument 'enable' - use 'add' or 'clear' instead")
+
+    # Helper function to get all scheduled sleep timers
     def timers():
         res = __salt__["schedule.list"](return_yaml=False)
-        return {k: v for k, v in res.iteritems() if k.startswith("_sleep_timer")}
+        ret = {k: v for k, v in res.iteritems() if k.startswith("_sleep_timer")}
 
-    if enable == True:
+        return ret
 
-        name = "_sleep_timer/{:}".format(kwargs.get("reason", "unknown"))
+    if clear != None or enable == False:
+
+        # Delete all existing timers
+        for name in timers():
+            if clear not in [None, "*"]:
+                if clear != name:
+                    continue
+
+            res = __salt__["schedule.delete"](name)
+
+    if add != None or enable == True:
+
+        reason = kwargs.setdefault("reason", "unknown")
+        name = "_sleep_timer/{:}".format(add or reason)
 
         # Always try to delete existing timer
         res = __salt__["schedule.delete"](name)
@@ -209,14 +227,9 @@ def sleep_timer(enable=None, period=1800, **kwargs):
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={
                 "created": now.isoformat(),
-                "transient": True  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
+                "transient": True,  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
+                "revision": 2
             })
-
-    elif enable == False:
-
-        # Delete all existing timers
-        for name in timers():
-            res = __salt__["schedule.delete"](name)
 
     # Return all existing timer(s)
     return timers()
