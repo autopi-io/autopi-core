@@ -103,10 +103,24 @@ def protocol(**kwargs):
       - 'obd.protocol'
       - 'obd.protocol set=auto'
       - 'obd.protocol set=6'
-      - 'obd.connection set=53 baudrate=250000'
+      - 'obd.protocol set=53 baudrate=250000'
     """
 
     return client.send_sync(_msg_pack(_handler="protocol", **kwargs))
+
+
+def setup(**kwargs):
+    """
+    Setup advanced runtime settings.
+
+    Optional arguments:
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+    """
+
+    return client.send_sync(_msg_pack(_handler="setup", **kwargs))
 
 
 def send(msg, **kwargs):
@@ -116,8 +130,8 @@ def send(msg, **kwargs):
     Arguments:
       - msg (str): Message to send.
 
-    Optional arguments:
-      - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
+    Optional arguments, general:
+      - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
@@ -127,6 +141,12 @@ def send(msg, **kwargs):
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - output (str): What data type should the output be returned in? Default is a 'list'.
       - type (str): Specify a name of the type of the result. Default is 'raw'.
+
+    Optional arguments, CAN specific:
+      - can_ext_addr (str): Use CAN extended address.
+      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))

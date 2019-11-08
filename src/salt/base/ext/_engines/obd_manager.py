@@ -144,7 +144,7 @@ def send_handler(msg, **kwargs):
     Arguments:
       - msg (str): Message to send.
 
-    Optional arguments:
+    Optional arguments, general:
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
@@ -155,6 +155,12 @@ def send_handler(msg, **kwargs):
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - output (str): What data type should the output be returned in? Default is a 'list'.
       - type (str): Specify a name of the type of the result. Default is 'raw'.
+
+    Optional arguments, CAN specific:
+      - can_ext_addr (str): Use CAN extended address.
+      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     ret = {
@@ -325,6 +331,32 @@ def protocol_handler(set=None, baudrate=None, verify=False):
         conn.change_protocol(set, baudrate=baudrate, verify=verify)
 
     ret["current"] = conn.protocol(verify=verify)
+
+    return ret
+
+
+@edmp.register_hook()
+def setup_handler(**kwargs):
+    """
+    Setup advanced runtime settings.
+
+    Optional arguments:
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+    """
+
+    ret = {}
+
+    # Ensure all options are applied
+    conn.ensure_runtime_settings(kwargs, filter=True)
+
+    if kwargs:
+        raise Exception("Unsupported argument(s): {:}".format(", ".join(kwargs)))
+
+    # Return all runtime settings
+    ret["runtime_settings"] = conn.runtime_settings()
 
     return ret
 
@@ -847,7 +879,7 @@ def alternating_readout_filter(result):
 @edmp.register_hook(synchronize=False)
 def communication_event_trigger(result):
     """
-    Looks for error in result and triggers communication inactive/established/disconnected event.
+    Looks for error in result and triggers 'vehicle/communication/[inactive|established|disconnected]' event based on the outcome.
     """
 
     # Check for error result
@@ -870,7 +902,7 @@ def communication_event_trigger(result):
 @edmp.register_hook(synchronize=False)
 def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
     """
-    Looks for RPM result and triggers engine not_running/running/stopped event based on the value(s) found.
+    Looks for RPM result and triggers 'vehicle/engine/[not_running|running|stopped]' event based on the value(s) found.
     This trigger supports single value results as well as multiple values results.
     """
 
@@ -932,7 +964,7 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
 @edmp.register_hook(synchronize=False)
 def rpm_motor_event_trigger(result):
     """
-    Looks for RPM result and triggers motor not_running/running/stopped event based on the value(s) found.
+    Looks for RPM result and triggers motor 'vehicle/motor/[not_running|running|stopped]' event based on the value(s) found.
     This trigger supports single value results as well as multiple values results.
     This trigger is meant to be used for electric vehicles without an engine.
     """
@@ -943,7 +975,7 @@ def rpm_motor_event_trigger(result):
 @edmp.register_hook(synchronize=False)
 def battery_event_trigger(result):
     """
-    Looks for battery results and triggers battery event when voltage changes.
+    Looks for battery results and triggers 'vehicle/battery/*' event when voltage changes.
     """
 
     # Check for error result

@@ -44,6 +44,13 @@ class OBDConn(object):
 
         self._obd = None
 
+        self._can_runtime_settings = collections.OrderedDict([  # Maintain order to ensure correct call sequence
+            ("can_flow_control_clear", lambda v: [self._obd.interface.can_flow_control_filters(clear=v), self._obd.interface.can_flow_control_id_pairs(clear=v)]),  # Must be called before adding, if present
+            ("can_flow_control_filter", lambda v: self._obd.interface.can_flow_control_filters(add=v)),
+            ("can_flow_control_id_pair", lambda v: self._obd.interface.can_flow_control_id_pairs(add=v)),
+            ("can_extended_address", lambda v: self._obd.interface.set_can_extended_address(v))
+        ])
+
         self.is_permanently_closed = False
 
         self.on_status = None
@@ -159,8 +166,12 @@ class OBDConn(object):
             "serial": {
                 "port": serial.portstr,
                 "baudrate": serial.baudrate,
-            }
+            },
         }
+
+    @Decorators.ensure_open
+    def runtime_settings(self):
+        return self._obd.interface.runtime_settings()
 
     @Decorators.ensure_open
     def protocol(self, verify=False):
@@ -235,6 +246,14 @@ class OBDConn(object):
         self.change_protocol.undecorated(self, ident, baudrate=baudrate, verify=verify)  # No need to call the 'ensure_open' decorator again
 
     @Decorators.ensure_open
+    def ensure_runtime_settings(self, settings, filter=False):
+
+        # Apply CAN settings in correct order
+        for name, func in self._can_runtime_settings.iteritems():
+            if name in settings:
+                func(settings.pop(name) if filter else settings[name])
+
+    @Decorators.ensure_open
     def query(self, cmd, formula=None, **kwargs):
         res = self._obd.query(cmd, **kwargs)
 
@@ -249,7 +268,10 @@ class OBDConn(object):
         return self._obd.supported_commands
 
     @Decorators.ensure_open
-    def send(self, msg, formula=None, **kwargs):
+    def send(self, msg, **kwargs):
+
+        # Filter out and apply advanced runtime settings if any
+        self.ensure_runtime_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
 
         # Parse out header if found
         hash_pos = msg.find("#")
@@ -258,11 +280,6 @@ class OBDConn(object):
             msg = msg[hash_pos + 1:]
 
         res = self._obd.send(msg, **kwargs)
-
-        # TODO: Find out how to parse raw messages
-        # Calculate formula if given
-        #if formula != None:
-        #    res = self._calc_formula(formula, res)
 
         return res
 
