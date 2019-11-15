@@ -49,7 +49,7 @@ class ELM327Proxy(threading.Thread):
             while True:
 
                 # Wait to accept a connection - blocking call
-                conn, addr = self.sock.accept()
+                conn, addr = self._sock.accept()
                 log.info("Accepted new connection from ELM327 client %s:%s", addr[0], addr[1])
 
                 # Spawn new dedicated client thread
