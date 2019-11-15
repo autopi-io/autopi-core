@@ -143,10 +143,10 @@ def send(msg, **kwargs):
       - type (str): Specify a name of the type of the result. Default is 'raw'.
 
     Optional arguments, CAN specific:
-      - can_ext_addr (str): Use CAN extended address.
-      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))

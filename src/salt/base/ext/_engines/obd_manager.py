@@ -4,6 +4,7 @@ import battery_util
 import ConfigParser
 import cProfile as profile
 import datetime
+import elm327_proxy
 import logging
 import math
 import obd
@@ -12,7 +13,7 @@ import psutil
 import salt.loader
 
 from binascii import unhexlify
-from common_util import abs_file_path, factory_rendering
+from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering
 from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
@@ -28,6 +29,9 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 
 # OBD connection
 conn = OBDConn()
+
+# ELM327 proxy instance
+proxy = elm327_proxy.ELM327Proxy()
 
 # Loaded CAN databases indexed by procotol ID
 can_db_cache = {}
@@ -157,10 +161,10 @@ def send_handler(msg, **kwargs):
       - type (str): Specify a name of the type of the result. Default is 'raw'.
 
     Optional arguments, CAN specific:
-      - can_ext_addr (str): Use CAN extended address.
-      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     ret = {
@@ -721,6 +725,15 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     return ret
 
 
+@edmp.register_hook()
+def _relay_handler(cmd):
+    """
+    System handler to relay commands directly to the ELM327 compatible interface.
+    """
+
+    return conn.execute(cmd, raw_response=True)
+
+
 def _decode_can_frame(can_db, res):
     """
     Helper function to decode a raw CAN frame result. Note that one single CAN frame can output multiple results.
@@ -1042,6 +1055,48 @@ def start(**settings):
         conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status)) 
         conn.on_closing = lambda: edmp.close()  # Will kill active workers
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
+
+        # Start ELM327 proxy if configured
+        if "elm327_proxy" in settings:
+            try:
+
+                # Setup file logging if defined
+                if "logging" in settings["elm327_proxy"]:
+                    try:
+                        file = abs_file_path(settings["elm327_proxy"]["logging"].pop("file", "elm327_proxy.log"), "/var/log/salt")
+                        add_rotating_file_handler_to(elm327_proxy.log, file, **settings["elm327_proxy"]["logging"])
+                    except:
+                        log.exception("Failed to setup dedicated file log handler for ELM327 proxy")
+
+                def on_connect(conn, addr):
+                    edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/connected")
+
+                    if settings["elm327_proxy"].get("pause_workers", True):
+                        res = edmp.process({"workflow": "manage", "args": ["worker", "pause", "*"]})
+                        log.info("Paused {:} worker(s) while ELM327 proxy is in use".format(len(res.get("values", []))))
+
+                def on_disconnect(conn, addr):
+                    edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/disconnected")
+
+                    if settings["elm327_proxy"].get("reset_after_use", True):
+                        connection_handler(reset="warm")
+                        log.info("Performed warm reset after ELM327 proxy has been in use")
+
+                    if settings["elm327_proxy"].get("pause_workers", True):
+                        res = edmp.process({"workflow": "manage", "args": ["worker", "resume", "*"]})
+                        log.info("Resumed {:} worker(s) after ELM327 proxy has been in use".format(len(res.get("values", []))))
+
+                proxy.on_command = _relay_handler
+                proxy.on_connect = on_connect
+                proxy.on_disconnect = on_disconnect
+
+                proxy.start(
+                    host=settings["elm327_proxy"].get("host", "0.0.0.0"),
+                    port=settings["elm327_proxy"].get("port", 35000)
+                )
+
+            except:
+                log.exception("Failed to start ELM327 proxy")
 
         # Run message processor
         edmp.run()

@@ -60,7 +60,7 @@ class MessageProcessor(object):
     def close(self):
 
         # Kill all worker threads if any
-        threads = self._worker_threads.kill_all_for("*", force_wildcard=True)
+        threads = self._worker_threads.do_all_for("*", lambda t: t.kill(), force_wildcard=True)
         if threads:
             log.info("Killing all worker thread(s): {:s}".format(", ".join([t.name for t in threads])))
 
@@ -130,7 +130,7 @@ class MessageProcessor(object):
 
         # Check if we need to dequeue message from an existing worker thread
         if "dequeue" in settings:
-            threads = self._worker_threads.modify_all_for(settings["dequeue"],
+            threads = self._worker_threads.do_all_for(settings["dequeue"],
                 lambda t: t.context["messages"].remove(message))
 
             return {
@@ -139,7 +139,7 @@ class MessageProcessor(object):
 
         # Check if we need to enqueue message to an existing worker thread
         if "enqueue" in settings:
-            threads = self._worker_threads.modify_all_for(settings["enqueue"],
+            threads = self._worker_threads.do_all_for(settings["enqueue"],
                 lambda t: t.context["messages"].append(message))
 
             return {
@@ -397,13 +397,25 @@ class MessageProcessor(object):
                 return self.dedicated_worker(None, **kwargs)
 
             elif args[1] == "start":
-                threads = self._worker_threads.start_all_for(args[2])
+                threads = self._worker_threads.do_all_for(args[2], lambda t: t.start())
+                return {
+                    "values": [t.name for t in threads]
+                }
+
+            elif args[1] == "pause":
+                threads = self._worker_threads.do_all_for(args[2], lambda t: t.pause())
+                return {
+                    "values": [t.name for t in threads]
+                }
+
+            elif args[1] == "resume":
+                threads = self._worker_threads.do_all_for(args[2], lambda t: t.resume())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "kill":
-                threads = self._worker_threads.kill_all_for(args[2])
+                threads = self._worker_threads.do_all_for(args[2], lambda t: t.kill())
                 return {
                     "values": [t.name for t in threads]
                 }
@@ -617,7 +629,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         """
 
         # Ensure all worker threads are started
-        worker_threads = self._worker_threads.start_all_for("*")
+        worker_threads = self._worker_threads.do_all_for("*", lambda t: t.start(), force_wildcard=True)
         if worker_threads:
             log.info("Starting {:d} worker thread(s): {:s}".format(len(worker_threads), ", ".join([t.name for t in worker_threads])))
 

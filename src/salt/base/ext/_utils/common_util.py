@@ -1,5 +1,6 @@
 import importlib
 import logging
+import logging.handlers
 import os
 import re
 
@@ -84,3 +85,20 @@ def factory_rendering(func):
         return func(*args, **kwargs)
 
     return decorator
+
+
+def add_rotating_file_handler_to(
+    logger,
+    file,
+    level=logging.INFO,
+    max_size=10000000,
+    backup_count=3,
+    format="%(asctime)s [%(levelname)s] %(message)s"):
+
+    handler = logging.handlers.RotatingFileHandler(file, maxBytes=max_size, backupCount=backup_count)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(format))
+
+    logger.addHandler(handler)
+    logger.setLevel(level)
+

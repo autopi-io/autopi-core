@@ -9,4 +9,4 @@ flask-api==1.1
 python-can==3.1.1
 cantools==32.16.0
 git+git://github.com/autopi-io/py-nmea@e257773cee103f16f75dd1ea4f9e2ef64645540a#pynmea2
-git+git://github.com/autopi-io/py-obd@a7e50cf30cef22457b1615ee986f77ca434e3253#obd
+git+git://github.com/autopi-io/py-obd@1a31e34a2d992ae949a4e18d8fb129607b376193#obd
