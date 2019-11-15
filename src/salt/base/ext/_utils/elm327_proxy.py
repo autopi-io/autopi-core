@@ -44,7 +44,7 @@ class ELM327Proxy(threading.Thread):
             self._sock.bind((self._host, self._port))
             self._sock.listen(1)  # Only allow one connection
 
-            log.info("ELM327 proxy listening on %s:%s", self.host, self.port)
+            log.info("ELM327 proxy listening on %s:%s", self._host, self._port)
 
             while True:
 
