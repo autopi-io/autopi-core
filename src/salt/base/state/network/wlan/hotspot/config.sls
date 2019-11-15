@@ -1,6 +1,7 @@
 
 include:
   - hostapd
+  - network.firewall.config
 
 {%- set _wpa_service = wpa_service|default("wpa-manager") %}
 active-{{ _wpa_service }}-restarted-after-hostapd-service:

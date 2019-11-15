@@ -54,7 +54,8 @@ iptables-persistent-installed:
 iptables-ipv4-rules-config:
   file.managed:
     - name: /etc/iptables/rules.v4
-    - source: salt://network/wlan/hotspot/iptables-ipv4.rules
+    - source: salt://network/wlan/hotspot/iptables-ipv4.rules.jinja
+    - template: jinja
     - require:
       - pkg: iptables-persistent
 
