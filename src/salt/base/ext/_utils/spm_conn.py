@@ -207,7 +207,6 @@ class SPMConn(GPIOSPIConn):
 
             raise
 
-    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def restart_3v3(self):
         self.stop_3v3()
         self.start_3v3()

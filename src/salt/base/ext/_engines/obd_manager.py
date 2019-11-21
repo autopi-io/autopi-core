@@ -113,7 +113,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Ensure protocol
-    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command
+    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
         pass
     else:
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
