@@ -3,6 +3,7 @@ import logging
 import time
 
 from gpio_spi_conn import GPIOSPIConn
+from retrying import retry
 
 
 log = logging.getLogger(__name__)
@@ -89,95 +90,124 @@ class SPMConn(GPIOSPIConn):
 
         return ret
 
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def status(self):
-        self._begin_message()
+        try:
+            self._begin_message()
 
-        self.send(CMD_GET_STATUS)
+            self.send(CMD_GET_STATUS)
 
-        bytes = []
-        for i in range(4):
-            bytes.append(self.recv())
+            bytes = []
+            for i in range(4):
+                bytes.append(self.recv())
 
-        up_state = bytes[0] & 0x0F
-        down_state = (bytes[0] & 0xF0) >> 4
-        up_trigger = bytes[1] & 0x0F
-        down_trigger = (bytes[1] & 0xF0) >> 4
+            up_state = bytes[0] & 0x0F
+            down_state = (bytes[0] & 0xF0) >> 4
+            up_trigger = bytes[1] & 0x0F
+            down_trigger = (bytes[1] & 0xF0) >> 4
 
-        ret = {
-            "last_state": {
-                "up": STATES.get(up_state, "unknown"),
-                "down": STATES.get(down_state, "unknown"),
-            },
-            "last_trigger": {
-                "up": TRIGGERS.get(up_trigger, "unknown"),
-                "down": TRIGGERS.get(down_trigger, "unknown"),
-            },
-            "port_a": "{:08b}".format(bytes[2]),
-            "port_b": "{:08b}".format(bytes[3]),
-        }
+            ret = {
+                "last_state": {
+                    "up": STATES.get(up_state, "unknown"),
+                    "down": STATES.get(down_state, "unknown"),
+                },
+                "last_trigger": {
+                    "up": TRIGGERS.get(up_trigger, "unknown"),
+                    "down": TRIGGERS.get(down_trigger, "unknown"),
+                },
+                "port_a": "{:08b}".format(bytes[2]),
+                "port_b": "{:08b}".format(bytes[3]),
+            }
 
-        return ret
+            return ret
+        except Exception as ex:
+            log.warning("Unable to get status: {:}".format(ex))
 
+            raise
+
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def heartbeat_timeout(self):
+        try:
+            self._begin_message()
 
-        self._begin_message()
+            self.send(CMD_GET_HEARTBEAT_TIMEOUT)
+            ret = self.recv()
 
-        self.send(CMD_GET_HEARTBEAT_TIMEOUT)
-        ret = self.recv()
+            return ret
+        except Exception as ex:
+            log.warning("Unable to send heartbeat timeout: {:}".format(ex))
 
-        return ret
+            raise
 
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def sleep_interval(self, value=None):
+        try:
+            if value != None:
 
-        if value != None:
+                if not isinstance(value, int):
+                    raise ValueError("Sleep interval must be an integer value")
+                elif value > 86400:
+                    raise ValueError("Max sleep interval is 24 hours (86400 secs)")
 
-            if not isinstance(value, int):
-                raise ValueError("Sleep interval must be an integer value")
-            elif value > 86400:
-                raise ValueError("Max sleep interval is 24 hours (86400 secs)")
+                self._begin_message(length=5)
 
-            self._begin_message(length=5)
+                log.info("Setting sleep interval to %d second(s)", value)
+                self.send(CMD_SET_SLEEP_INTERVAL)
 
-            log.info("Setting sleep interval to %d second(s)", value)
-            self.send(CMD_SET_SLEEP_INTERVAL)
+                bytes = [0 for x in range(4)]
+                bytes[0] = (value >> 24) & 0xFF;
+                bytes[1] = (value >> 16) & 0xFF;
+                bytes[2] = (value >> 8) & 0xFF;
+                bytes[3] = value & 0xFF;
 
-            bytes = [0 for x in range(4)]
-            bytes[0] = (value >> 24) & 0xFF;
-            bytes[1] = (value >> 16) & 0xFF;
-            bytes[2] = (value >> 8) & 0xFF;
-            bytes[3] = value & 0xFF;
+                for byte in bytes:
+                    self.send(byte)
 
-            for byte in bytes:
-                self.send(byte)
+                self.recv(ack=ACK_SET_SLEEP_INTERVAL)
 
-            self.recv(ack=ACK_SET_SLEEP_INTERVAL)
+            self._begin_message()
 
-        self._begin_message()
+            self.send(CMD_GET_SLEEP_INTERVAL)
 
-        self.send(CMD_GET_SLEEP_INTERVAL)
+            bytes = []
+            for i in range(4):
+                bytes.append(self.recv())
 
-        bytes = []
-        for i in range(4):
-            bytes.append(self.recv())
+            ret = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + (bytes[3] << 0)
 
-        ret = (bytes[0] << 24) + (bytes[1] << 16) + (bytes[2] << 8) + (bytes[3] << 0)
+            return ret
+        except Exception as ex:
+            log.warning("Unable to set sleep interval: {:}".format(ex))
 
-        return ret
+            raise
 
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def start_3v3(self):
-        self._begin_message()
+        try:
+            self._begin_message()
 
-        log.info("Starting 3V3")
-        self.send(CMD_START_3V3)
-        self.recv(ack=ACK_START_3V3)
+            log.info("Starting 3V3")
+            self.send(CMD_START_3V3)
+            self.recv(ack=ACK_START_3V3)
+        except Exception as ex:
+            log.warning("Unable to start 3v3: {:}".format(ex))
 
+            raise
+
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def stop_3v3(self):
-        self._begin_message()
+        try:
+            self._begin_message()
 
-        log.warn("Stopping 3V3")
-        self.send(CMD_STOP_3V3)
-        self.recv(ack=ACK_STOP_3V3)
+            log.warn("Stopping 3V3")
+            self.send(CMD_STOP_3V3)
+            self.recv(ack=ACK_STOP_3V3)
+        except Exception as ex:
+            log.warning("Unable to stop 3v3: {:}".format(ex))
 
+            raise
+
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def restart_3v3(self):
         self.stop_3v3()
         self.start_3v3()
