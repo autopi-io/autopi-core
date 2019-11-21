@@ -649,7 +649,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
                 duplicate = True
                 continue
 
-            incl.update([l for l in lines if l.startswith(f)])
+            incl.update([l for l in lines if l.upper().startswith(f)])
         if incl:
             lines = [l for l in lines if l in incl]
 
@@ -663,7 +663,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
                 duplicate = False
                 continue
 
-            excl.update([l for l in lines if l.startswith(f)])
+            excl.update([l for l in lines if l.upper().startswith(f)])
         if excl:
             lines = [l for l in lines if l not in excl]
 
