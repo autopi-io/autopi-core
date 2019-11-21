@@ -40,8 +40,9 @@ class MessageProcessor(object):
         self._default_hooks = default_hooks
         self._hook_funcs = {}  # Index of all registered hook functions
         self._hook_lock = threading.RLock()  # Used to synchronize hook function calls
-        self._worker_threads = threading_more.ThreadRegistry()  # Keeps track of all active workers
         self._measure_stats = False
+
+        self.worker_threads = threading_more.ThreadRegistry()  # Keeps track of all active workers
 
         # Set default hooks that will be used if none specified
         if not "worker" in self._default_hooks:
@@ -56,13 +57,6 @@ class MessageProcessor(object):
     @measure_stats.setter
     def measure_stats(self, value):
         self._measure_stats = value
-
-    def close(self):
-
-        # Kill all worker threads if any
-        threads = self._worker_threads.do_all_for("*", lambda t: t.kill(), force_wildcard=True)
-        if threads:
-            log.info("Killing all worker thread(s): {:s}".format(", ".join([t.name for t in threads])))
 
     def register_hook(self, synchronize=True):
         """
@@ -130,7 +124,7 @@ class MessageProcessor(object):
 
         # Check if we need to dequeue message from an existing worker thread
         if "dequeue" in settings:
-            threads = self._worker_threads.do_all_for(settings["dequeue"],
+            threads = self.worker_threads.do_all_for(settings["dequeue"],
                 lambda t: t.context["messages"].remove(message))
 
             return {
@@ -139,7 +133,7 @@ class MessageProcessor(object):
 
         # Check if we need to enqueue message to an existing worker thread
         if "enqueue" in settings:
-            threads = self._worker_threads.do_all_for(settings["enqueue"],
+            threads = self.worker_threads.do_all_for(settings["enqueue"],
                 lambda t: t.context["messages"].append(message))
 
             return {
@@ -241,7 +235,7 @@ class MessageProcessor(object):
         thread = threading_more.WorkerThread(
             target=self._synchronize_wrapper(self._hook_lock, do_work) if transactional else do_work,
             context={"messages": [message] if message else []},
-            registry=self._worker_threads,  # Registers thread in registry
+            registry=self.worker_threads,  # Registers thread in registry
             **settings)  # Pass additional settings
 
         if auto_start:
@@ -382,13 +376,13 @@ class MessageProcessor(object):
             if args[1] == "list":
                 return {
                     "values": [
-                        t.name for t in self._worker_threads.find_all_by(args[2] \
+                        t.name for t in self.worker_threads.find_all_by(args[2] \
                             if len(args) > 2 else "*")
                     ]
                 }
 
             elif args[1] == "show":
-                threads = self._worker_threads.find_all_by(args[2] if len(args) > 2 else "*")
+                threads = self.worker_threads.find_all_by(args[2] if len(args) > 2 else "*")
                 return {
                     "value": {t.name: t.context for t in threads}
                 }
@@ -397,25 +391,25 @@ class MessageProcessor(object):
                 return self.dedicated_worker(None, **kwargs)
 
             elif args[1] == "start":
-                threads = self._worker_threads.do_all_for(args[2], lambda t: t.start())
+                threads = self.worker_threads.do_all_for(args[2], lambda t: t.start())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "pause":
-                threads = self._worker_threads.do_all_for(args[2], lambda t: t.pause())
+                threads = self.worker_threads.do_all_for(args[2], lambda t: t.pause())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "resume":
-                threads = self._worker_threads.do_all_for(args[2], lambda t: t.resume())
+                threads = self.worker_threads.do_all_for(args[2], lambda t: t.resume())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "kill":
-                threads = self._worker_threads.do_all_for(args[2], lambda t: t.kill())
+                threads = self.worker_threads.do_all_for(args[2], lambda t: t.kill())
                 return {
                     "values": [t.name for t in threads]
                 }
@@ -629,32 +623,39 @@ class EventDrivenMessageProcessor(MessageProcessor):
         """
 
         # Ensure all worker threads are started
-        worker_threads = self._worker_threads.do_all_for("*", lambda t: t.start(), force_wildcard=True)
-        if worker_threads:
-            log.info("Starting {:d} worker thread(s): {:s}".format(len(worker_threads), ", ".join([t.name for t in worker_threads])))
+        threads = self.worker_threads.do_all_for("*", lambda t: t.start(), force_wildcard=True)
+        if threads:
+            log.info("Starting {:d} worker thread(s): {:s}".format(len(threads), ", ".join([t.name for t in threads])))
 
         # Listen for incoming messages
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Listening for incoming events using %d registered event matcher(s)", len(self._event_matchers))
 
-        for event in self._incoming_bus.iter_events(full=True, auto_reconnect=True):
-            if not event:
-                log.warn("Skipping empty event")
-                continue
+        try:
+            for event in self._incoming_bus.iter_events(full=True, auto_reconnect=True):
+                if not event:
+                    log.warn("Skipping empty event")
+                    continue
 
-            try:
-                for matcher in self._event_matchers:
-                    match = matcher["match_func"](event["tag"], matcher["tag"]) 
-                    if not match:
-                        continue
+                try:
+                    for matcher in self._event_matchers:
+                        match = matcher["match_func"](event["tag"], matcher["tag"]) 
+                        if not match:
+                            continue
 
-                    if log.isEnabledFor(logging.DEBUG):
-                        log.debug("Matched event: %s", repr(event))
+                        if log.isEnabledFor(logging.DEBUG):
+                            log.debug("Matched event: %s", repr(event))
 
-                    matcher["func"](event, match=match)
+                        matcher["func"](event, match=match)
 
-            except Exception:
-                log.exception("Failed to process received event: {:}".format(event))
+                except Exception:
+                    log.exception("Failed to process received event: {:}".format(event))
+        finally:
+
+            # Ensure all worker threads are killed
+            threads = self.worker_threads.do_all_for("*", lambda t: t.kill(), force_wildcard=True)
+            if threads:
+                log.info("Killing all worker thread(s): {:s}".format(", ".join([t.name for t in threads])))
 
     def process_event(self, event, **kwargs):
         """

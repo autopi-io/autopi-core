@@ -139,17 +139,19 @@ class OBDConn(object):
             self.open()
 
     def close(self, permanent=False):
+
+        if not self.is_open():
+            raise Exception("Already closed")
+
         if self.on_closing:
             try:
                 self.on_closing()
             except:
                 log.exception("Error in 'on_closing' event handler")
 
-        self.is_permanently_closed = permanent
-        self.on_status = None  # We do not want any more status updates
-
         self._obd.close()
         self._obd = None
+        self.is_permanently_closed = permanent
 
         if self.on_closed:
             try:

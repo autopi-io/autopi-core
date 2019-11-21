@@ -311,5 +311,12 @@ def start(**settings):
         log.exception("Failed to start EC2X manager")
 
         raise
+
     finally:
         log.info("Stopping EC2X manager")
+
+        if conn.is_open():
+            try:
+                conn.close()
+            except:
+                log.exception("Failed to close serial connection")

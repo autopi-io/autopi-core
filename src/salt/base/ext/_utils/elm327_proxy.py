@@ -1,9 +1,6 @@
 import logging
 import socket
-import thread
 import threading
-
-from retrying import retry
 
 
 log = logging.getLogger(__name__)
@@ -17,73 +14,102 @@ class ELM327Proxy(threading.Thread):
         super(ELM327Proxy, self).__init__()
 
         self.name = "elm327_proxy_{:}".format(id(self))
-        self.daemon = False
-
+        #self.daemon = True
+        
         self.on_command = None
         self.on_connect = None
         self.on_disconnect = None
 
-        self.multiple_clients = False
-
-        self._sock = None
         self._host = None
         self._port = None
 
+        self._server = None
+        self._client = None
+
+        self._stop = False
+
     def start(self, host="localhost", port=35000):
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Starting ELM327 proxy")
+
         self._host = host
         self._port = port
 
+        self._stop = False
+
         return super(ELM327Proxy, self).start()
 
-    @retry(wait_fixed=10000)
+    def stop(self):
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Stopping ELM327 proxy")
+
+        # Set stop flag
+        self._stop = True
+
+        # Close and clear any client socket
+        self._close(self._client)
+        self._client = None
+
+        # Close and clear any server socket
+        self._close(self._server)
+        self._server = None
+
+        # Wait until terminated
+        self.join()
+
     def run(self):
         try:
-            if log.isEnabledFor(logging.DEBUG):
-                log.debug("Starting ELM327 proxy")
+            log.info("Started ELM327 proxy")
 
-            self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._sock.bind((self._host, self._port))
-            self._sock.listen(0)
+            self._server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._server.bind((self._host, self._port))
+            self._server.listen(0)
 
-            while True:
-                log.info("ELM327 proxy is ready and listening on %s:%s", self._host, self._port)
+            log.info("ELM327 proxy is listening on %s:%s", self._host, self._port)
 
-                # Wait to accept a connection - blocking call
-                conn, addr = self._sock.accept()
-                log.info("Accepted new connection from ELM327 client %s:%s", addr[0], addr[1])
+            while not self._stop:  # Loop until stop flag is set
+                log.info("Ready to accept connection from client")
 
-                if self.multiple_clients:
+                try:
+                    # Wait to accept a connection - blocking call
+                    # NOTE: Will be interrupted when socket is shut down
+                    self._client, addr = self._server.accept()
+                except socket.error as err:
+                    log.info("Unable to accept client connection: %s", str(err))
 
-                    # Spawn new dedicated client thread
-                    thread.start_new_thread(self._client_thread, (conn, addr))
+                    continue
 
-                else:
+                try:
+                    self._relay(self._client, addr)
+                finally:
 
-                    # Run in current thread
-                    self._client_thread(conn, addr)
+                    # Ensure client socket is closed and cleared
+                    self._close(self._client)
+                    self._client = None
 
         except:
             log.exception("Unhandled error in ELM327 proxy")
 
-            raise
         finally:
-            log.info("Stopping ELM327 proxy")
+            log.info("Stopped ELM327 proxy")
 
-            self._sock.shutdown(socket.SHUT_RDWR)
-            self._sock.close()
+            # Ensure server socket is closed and cleared
+            self._close(self._server)
+            self._server = None
 
-    def _client_thread(self, conn, addr):
+    def _relay(self, conn, addr):
         try:
-            log.info("Connected to ELM327 client %s:%s", addr[0], addr[1])
+            log.info("Connected to client %s:%s", addr[0], addr[1])
 
+            # Trigger connect event
             if self.on_connect:
                 try:
-                    self.on_connect(conn, addr)
+                    self.on_connect(addr)
                 except:
                     log.exception("Error in 'on_connect' event handler")
 
-            #if log.isEnabledFor(logging.DEBUG):
-            log.info("Sending initial ready prompt")
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Sending initial ready prompt")
 
             # Send initial ready prompt
             conn.send(self.PROMPT)
@@ -92,10 +118,10 @@ class ELM327Proxy(threading.Thread):
                 data = self._read(conn)
                 if not data:
 
-                    #if log.isEnabledFor(logging.DEBUG):
-                    log.info("No data received - sending ready prompt")
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("No data received - sending ready prompt")
 
-                    # Send ready prompt again
+                    # NOTE: Will fail after an empty read due to closed connection
                     conn.send(self.PROMPT)
 
                     continue
@@ -110,28 +136,31 @@ class ELM327Proxy(threading.Thread):
                         log.debug("TX: %s", repr(res))
 
                     conn.send(res)
+
         except socket.error as err:
-            log.info("Disconnected ELM327 client connection %s:%s due to socket error: %s", addr[0], addr[1], str(err))
+            log.info("Disconnected connection to client %s:%s: %s", addr[0], addr[1], str(err))
 
         except:
-            log.exception("Unhandled error in ELM327 client connection %s:%s", addr[0], addr[1])
+            log.exception("Unhandled error in connection to client %s:%s", addr[0], addr[1])
 
         finally:
-            log.info("Closing connection to ELM327 client %s:%s", addr[0], addr[1])
 
+            # Trigger disconnect event
             if self.on_disconnect:
                 try:
-                    self.on_disconnect(conn, addr)
+                    self.on_disconnect(addr)
                 except:
                     log.exception("Error in 'on_disconnect' event handler")
-
-            conn.close()
 
     def _read(self, conn):
         buffer = bytearray()
 
         while True:
+
+            # Wait to read - blocking call
             data = conn.recv(1024)
+
+            # Break on no data
             if not data:
                 break
 
@@ -142,3 +171,21 @@ class ELM327Proxy(threading.Thread):
                 break
 
         return buffer.decode()
+
+    def _close(self, sock):
+
+        # If already cleared there is no reason to continue
+        if not sock:
+            return
+
+        # First ensure socket is shut down
+        try:
+            sock.shutdown(socket.SHUT_RDWR)  # Both read and write
+        except Exception as ex:
+            log.warning("Unable to shut down socket: %s", str(ex))
+
+        # Then ensure socket is closed
+        try:
+            sock.close()
+        except Exception as ex:
+            log.warning("Unable to close socket: %s", str(ex))

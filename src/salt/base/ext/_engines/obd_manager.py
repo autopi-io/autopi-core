@@ -1053,7 +1053,7 @@ def start(**settings):
 
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status)) 
-        conn.on_closing = lambda: edmp.close()  # Will kill active workers
+        conn.on_closing = lambda: edmp.worker_threads.do_all_for("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
 
         # Start ELM327 proxy if configured
@@ -1068,23 +1068,25 @@ def start(**settings):
                     except:
                         log.exception("Failed to setup dedicated file log handler for ELM327 proxy")
 
-                def on_connect(conn, addr):
+                def on_connect(addr):
                     edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/connected")
 
                     if settings["elm327_proxy"].get("pause_workers", True):
-                        res = edmp.process({"workflow": "manage", "args": ["worker", "pause", "*"]})
-                        log.info("Paused {:} worker(s) while ELM327 proxy is in use".format(len(res.get("values", []))))
+                        threads = edmp.worker_threads.do_all_for("*", lambda t: t.pause())
+                        log.info("Paused {:} worker(s) while ELM327 proxy is in use".format(len(threads)))
 
-                def on_disconnect(conn, addr):
+                def on_disconnect(addr):
                     edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/disconnected")
 
-                    if settings["elm327_proxy"].get("reset_after_use", True):
-                        connection_handler(reset="warm")
-                        log.info("Performed warm reset after ELM327 proxy has been in use")
+                    if conn.is_open() and not proxy._stop:  # No reason to run when shutting down
 
-                    if settings["elm327_proxy"].get("pause_workers", True):
-                        res = edmp.process({"workflow": "manage", "args": ["worker", "resume", "*"]})
-                        log.info("Resumed {:} worker(s) after ELM327 proxy has been in use".format(len(res.get("values", []))))
+                        if settings["elm327_proxy"].get("reset_after_use", True):
+                            connection_handler(reset="cold")
+                            log.info("Performed cold reset after ELM327 proxy has been in use")
+
+                        if settings["elm327_proxy"].get("pause_workers", True):
+                            threads = edmp.worker_threads.do_all_for("*", lambda t: t.resume())
+                            log.info("Resumed {:} worker(s) after ELM327 proxy has been in use".format(len(threads)))
 
                 proxy.on_command = _relay_handler
                 proxy.on_connect = on_connect
@@ -1105,5 +1107,21 @@ def start(**settings):
         log.exception("Failed to start OBD manager")
 
         raise
+
     finally:
         log.info("Stopping OBD manager")
+
+        # First stop ELM327 proxy if running
+        if proxy.is_alive():
+            try:
+                proxy.stop()
+            except:
+                log.exception("Failed to stop ELM327 proxy")
+
+        # Then close OBD connection if open
+        if conn.is_open():
+            try:
+                conn.close()
+            except:
+                log.exception("Failed to close OBD connection")
+
