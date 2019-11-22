@@ -71,24 +71,36 @@ class SPMConn(GPIOSPIConn):
         self.send(length)
         self.recv(ack=ACK_DATA_LENGTH)
 
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def noop(self):
-        self._begin_message()
+        try:
+            self._begin_message()
 
-        self.send(CMD_NOOP)
-        self.recv(ack=ACK_NOOP)
+            self.send(CMD_NOOP)
+            self.recv(ack=ACK_NOOP)
+        except Exception as ex:
+            log.warning("Unable to send noop: {:}".format(ex))
 
+            raise
+
+    @retry(stop_max_attempt_number=3, wait_fixed=500)
     def version(self):
-        self._begin_message()
+        try:
+            self._begin_message()
 
-        self.send(CMD_GET_VERSION)
+            self.send(CMD_GET_VERSION)
 
-        bytes = []
-        for i in range(4):
-            bytes.append(self.recv())
+            bytes = []
+            for i in range(4):
+                bytes.append(self.recv())
 
-        ret = "{:d}.{:d}.{:d}.{:d}".format(*bytes)
+            ret = "{:d}.{:d}.{:d}.{:d}".format(*bytes)
 
-        return ret
+            return ret
+        except Exception as ex:
+            log.warning("Unable to get version: {:}".format(ex))
+
+            raise
 
     @retry(stop_max_attempt_number=3, wait_fixed=500)
     def status(self):
