@@ -81,11 +81,13 @@ def heartbeat_handler():
                         edmp.trigger_event({
                             "timestamp": boot_time
                         }, "system/power/last_off")
-                except:
-                    log.exception("Failed to trigger last system off event")
+                except Exception as ex:
+                    log.warning("Unable to trigger last system off event: {:}".format(ex))
 
                 # Trigger recover state event
                 if res["last_trigger"]["down"] not in ["none", "rpi"]:
+                    log.warning("Recovery due to SPM trigger '{:}'".format(res["last_trigger"]["down"]))
+
                     edmp.trigger_event({
                         "trigger": res["last_trigger"]["down"]
                     }, "system/power/recover")
