@@ -194,8 +194,6 @@ def send_handler(msg, **kwargs):
                 ret["values"] = {idx: val for idx, val in enumerate(res, 1)}
         else:
             ret["values"] = res
-    elif kwargs.get("expect_response", False):
-        raise Exception("Expected response but got empty")
 
     return ret
 
