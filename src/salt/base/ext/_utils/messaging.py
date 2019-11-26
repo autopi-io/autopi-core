@@ -765,62 +765,46 @@ class EventDrivenMessageClient(object):
     def init(self, opts):
         self._opts = opts
 
-        # Shared event bus handle for sending events
-        self._outgoing_bus = salt.utils.event.get_event("minion",
-            opts=opts,
-            transport=opts["transport"],
-            listen=False)
-
     def send_sync(self, message, timeout=None):
 
         if timeout == None:
             timeout = message.get("timeout", self._default_timeout)
 
         correlation_id = uuid.uuid4()
+        
+        req_tag = "{:s}/req/{:s}".format(self._namespace, correlation_id)
+        res_tag = "{:s}/res/{:s}".format(self._namespace, correlation_id)
 
-        # Spawn separate thread to receive reply
-        recv_thread = threading_more.ReturnThread(target=self.recv_reply, args=(correlation_id, timeout))
-        recv_thread.start()
-
-        # Send the request message
-        self.send_async(correlation_id, message)
-
-        # Wait for reply
-        reply = recv_thread.join()
-        if reply == None:
-
-            # Check for exception
-            if recv_thread.exception:
-                raise recv_thread.exception
-
-        return reply
-
-    def send_async(self, correlation_id, message):
-
-        # Send message on bus
-        tag = "{:s}/req/{:s}".format(self._namespace, correlation_id)
-
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Sending request message with tag '%s': %s", tag, message)
-
-        self._outgoing_bus.fire_event(message, tag)
-
-    def recv_reply(self, correlation_id, timeout=None):
-
-        # Determine timeout
-        timeout = timeout or self._default_timeout
-
-        # Dedicated event bus handle for receiving reply
-        incoming_bus = salt.utils.event.get_event("minion",
+        bus = salt.utils.event.get_event("minion",
             opts=self._opts,
             transport=self._opts["transport"],
             listen=True)
 
-        # Construct event tag to listen on
-        tag = "{:s}/res/{:s}".format(self._namespace, correlation_id)
+        try:
+            bus.subscribe(tag=res_tag, match_type="startswith")
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Sending request message with tag '%s': %s", req_tag, message)
+
+            bus.fire_event(message, req_tag)
+
+            reply = self._recv_reply(bus, timeout=timeout, tag=res_tag, match_type="startswith")
+
+            return reply
+
+        finally:
+            try:
+                bus.destroy()
+            except:
+                log.exception("Unable to destroy event bus")
+
+    def _recv_reply(self, bus, timeout=None, **kwargs):
+
+        # Determine timeout
+        timeout = timeout or self._default_timeout
 
         # Wait for message until timeout
-        message = incoming_bus.get_event(wait=timeout, tag=tag, match_type="startswith")
+        message = bus.get_event(wait=timeout, **kwargs)
         if not message:
             log.warn("No reply message with tag '%s' received within timeout of %d secs", tag, timeout)
 
