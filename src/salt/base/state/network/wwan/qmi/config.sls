@@ -14,6 +14,15 @@
     - source: salt://network/wwan/qmi/qmi-sim.conf.jinja
     - template: jinja
 
+/etc/udhcpc/qmi.override:
+{%- if salt['grains.get']('qmi:mtu') %}
+  file.managed:
+    - source: salt://network/wwan/qmi/udhcpc.override.jinja
+    - template: jinja
+{%- else %}
+  file.absent
+{%- endif %}
+
 qmi-manager:
   service.running:
     - enable: true
@@ -21,3 +30,4 @@ qmi-manager:
       - file: /etc/qmi-network.conf
       - file: /etc/qmi-manager.conf
       - file: /etc/qmi-sim.conf
+      - file: /etc/udhcpc/qmi.override
