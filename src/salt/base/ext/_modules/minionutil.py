@@ -197,24 +197,20 @@ def update_release(force=False, dry_run=False, only_retry=False):
             if not res.get("result", False):
                 log.error("Unable to disable schedule: {:}".format(res))
 
-            # Kill worker threads in order to release resources during update
-            if __salt__["pillar.get"]("update_release:kill_workers", default=False):
+            # Pause worker threads in order to release resources during update
+            if __salt__["pillar.get"]("update_release:pause_workers", default=False):
 
-                # Kill all OBD workers
+                # Pause all OBD workers
                 try:
-                    res = __salt__["obd.manage"]("worker", "kill", "*")
-
-                    log.info("Killed OBD workers before update release: {:}".format(res))
+                    __salt__["obd.manage"]("worker", "pause", "*")
                 except:
-                    log.exception("Failed to kill all OBD workers before update")
+                    log.exception("Failed to pause all OBD workers before update")
 
-                # Kill all accelerometer workers
+                # Pause all accelerometer workers
                 try:
-                    res = __salt__["acc.manage"]("worker", "kill", "*")
-
-                    log.info("Killed accelerometer workers before update release: {:}".format(res))
+                    __salt__["acc.manage"]("worker", "pause", "*")
                 except:
-                    log.exception("Failed to kill all accelerometer workers before update")
+                    log.exception("Failed to pause all accelerometer workers before update")
 
             # Log what is going to happen
             if new["state"] == "pending":
@@ -274,10 +270,25 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
         finally:
 
-            # Always ensure scheduled jobs are re-enabled
+            # Ensure scheduled jobs are re-enabled
             res = __salt__["schedule.enable"]()
             if not res.get("result", False):
                 log.error("Unable to re-enable schedule: {:}".format(res))
+
+            # Resume worker threads again
+            if __salt__["pillar.get"]("update_release:pause_workers", default=False):
+
+                # Resume all OBD workers
+                try:
+                    __salt__["obd.manage"]("worker", "resume", "*")
+                except:
+                    log.exception("Failed to resume all OBD workers after update")
+
+                # Resume all accelerometer workers
+                try:
+                    __salt__["acc.manage"]("worker", "resume", "*")
+                except:
+                    log.exception("Failed to resume all accelerometer workers after update")
 
     return ret
 
