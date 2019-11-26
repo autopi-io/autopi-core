@@ -261,3 +261,27 @@ class TimedEvent(threading._Event):
         self.timestamp = None
         
         super(TimedEvent, self).clear()
+
+
+class ReturnThread(threading.Thread):
+    """
+    Stores the return value from the target function.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(ReturnThread, self).__init__(*args, **kwargs)
+
+        self._return = None
+        self.exception = None
+
+    def run(self):
+        if self._Thread__target is not None:
+            try:
+                self._return = self._Thread__target(*self._Thread__args, **self._Thread__kwargs)
+            except Exception as ex:
+                self.exception = ex
+
+    def join(self):
+        super(ReturnThread, self).join()
+
+        return self._return

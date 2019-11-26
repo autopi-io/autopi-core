@@ -776,23 +776,34 @@ class EventDrivenMessageClient(object):
         if timeout == None:
             timeout = message.get("timeout", self._default_timeout)
 
-        id = self.send_async(message)
-        reply = self.recv_reply(id, timeout)
+        correlation_id = uuid.uuid4()
+
+        # Spawn separate thread to receive reply
+        recv_thread = threading_more.ReturnThread(target=self.recv_reply, args=(correlation_id, timeout))
+        recv_thread.start()
+
+        # Send the request message
+        self.send_async(correlation_id, message)
+
+        # Wait for reply
+        reply = recv_thread.join()
+        if reply == None:
+
+            # Check for exception
+            if recv_thread.exception:
+                raise recv_thread.exception
 
         return reply
 
-    def send_async(self, message):
+    def send_async(self, correlation_id, message):
 
         # Send message on bus
-        correlation_id = uuid.uuid4()
         tag = "{:s}/req/{:s}".format(self._namespace, correlation_id)
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Sending request message with tag '%s': %s", tag, message)
 
         self._outgoing_bus.fire_event(message, tag)
-
-        return correlation_id
 
     def recv_reply(self, correlation_id, timeout=None):
 

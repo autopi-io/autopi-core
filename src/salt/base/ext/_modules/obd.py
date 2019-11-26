@@ -284,6 +284,7 @@ def play(file, **kwargs):
       - protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - test (bool): Run command in test-only? (dry-run) mode. No data will be sent on CAN bus. Default value is 'False'.
     """
 
