@@ -18,8 +18,9 @@ sim-card-present:
 {%- endif %}
 
 modem-test:
-  module.run:
+  test.module:
     - name: ec2x.product_info
+    - validate: '"Quectel" in ret["data"]'
 
 qmi-test:
   module.run:
@@ -28,30 +29,46 @@ qmi-test:
 {%- endif %}
 
 spm-test:
-  module.run:
+  test.module:
     - name: spm.query
-    - cmd: version
+    - args:
+      - version
+    - validate: ret["value"] == "1.1.1.0"
 
 obd-test:
-  module.run:
+  test.module:
     - name: obd.query
-    - cmd: elm_voltage
+    - args:
+      - elm_voltage
     - kwargs:
         protocol: None
+    - validate: ret["value"] > 12.0
 
 acc-test:
-  module.run:
+  test.module:
     - name: acc.query
-    - cmd: xyz
+    - args:
+      - xyz
+    - validate:
+      - round(ret["x"], 1) == 0.0
+      - round(ret["y"], 1) == 0.0
+      - round(ret["z"], 1) == -1.0
 
 rpi-test:
-  module.run:
+  test.module:
     - name: rpi.temp
+    - validate:
+      - ret["cpu"]["value"] > 30.0
+      - ret["gpu"]["value"] > 30.0
 
 stn-test:
-  module.run:
+  test.module:
     - name: stn.power_config
+    - validate: ret["ctrl_mode"] == "NATIVE"
 
 power-test:
-  module.run:
+  test.module:
     - name: power.status
+    - validate: '"rpi" in ret'
+    - validate: '"spm" in ret'
+    - validate: '"stn" in ret'
