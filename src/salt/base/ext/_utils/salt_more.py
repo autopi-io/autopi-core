@@ -13,7 +13,7 @@ def clean_kwargs(kwargs):
     Filter out funny Salt params (__pub_*).
     """
 
-    return {k: v for k, v in kwargs.iteritems() if not k.startswith("__")}
+    return {k: v for k, v in list(kwargs.items()) if not k.startswith("__")}
 
 
 def call_error_safe(module_func, *args, **kwargs):

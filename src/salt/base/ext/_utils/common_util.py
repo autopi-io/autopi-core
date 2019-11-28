@@ -42,7 +42,7 @@ def dict_find(dic, path, regex, default=None):
 def dict_filter(items, key_func=None):
     ret = {}
 
-    for key, val in items.iteritems():
+    for key, val in list(items.items()):
         if key_func == None or key_func(key):
             if isinstance(val, dict):
                 ret[key] = dict_filter(val, key_func=key_func)
@@ -53,9 +53,9 @@ def dict_filter(items, key_func=None):
 
 
 def dict_key_by_value(dic, val):
-    kv = { k: v for k, v in dic.items() if v == val }
+    kv = { k: v for k, v in list(dic.items()) if v == val }
     if not kv:
-        raise ValueError("Value {:} is not available - valid options are: {:}".format(val, ", ".join(str(v) for v in dic.values())))
+        raise ValueError("Value {:} is not available - valid options are: {:}".format(val, ", ".join(str(v) for v in list(dic.values()))))
 
     return next(iter(kv))
 

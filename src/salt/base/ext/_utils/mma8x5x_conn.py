@@ -1,4 +1,4 @@
-from __future__ import division
+
 
 import datetime
 import logging
@@ -309,7 +309,7 @@ class MMA8X5XConn(I2CConn):
             self.fifo_watermark(value=settings.get("fifo_watermark", self._fifo_watermark))
 
             # Setup interrupts if defined
-            for name, pin in settings.get("interrupts", {}).iteritems():
+            for name, pin in list(settings.get("interrupts", {}).items()):
                 self.intr_pin(name, value=pin)
                 self.intr(name, value=True)
 
@@ -618,7 +618,7 @@ class MMA8X5XConn(I2CConn):
         ret = {}
 
         res = self.read(INT_SOURCE)
-        for mask, src in INTERRUPT_SOURCES.iteritems():
+        for mask, src in list(INTERRUPT_SOURCES.items()):
             ret[src] = bool(res & mask)
 
         return ret

@@ -1,7 +1,7 @@
-from __future__ import division
+
 
 import battery_util
-import ConfigParser
+import configparser
 import cProfile as profile
 import datetime
 import logging
@@ -453,7 +453,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
         protocol = conn.protocol(verify=verify)
 
         # Use config parser to write file
-        config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+        config_parser = configparser.RawConfigParser(allow_no_value=True)
 
         # Add header section
         config_parser.add_section("header")
@@ -490,7 +490,7 @@ def recordings_handler(path=None):
         "values": []
     }
 
-    config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+    config_parser = configparser.RawConfigParser(allow_no_value=True)
 
     path = path or home_dir
     for file in os.listdir(path):
@@ -502,7 +502,7 @@ def recordings_handler(path=None):
             header = {k: v for k, v in config_parser.items("header")}
 
             ret["values"].append({file_path: header})
-        except ConfigParser.Error as cpe:
+        except configparser.Error as cpe:
             log.exception("Failed to parse recording in file: {:}".format(file_path))
 
             ret["values"].append({file_path: {"error": str(cpe)}})
@@ -544,7 +544,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         "count": {}
     }
 
-    config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
+    config_parser = configparser.RawConfigParser(allow_no_value=True)
     config_parser.read(file)
 
     header = {k: v for k, v in config_parser.items("header")}
@@ -639,20 +639,20 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         if mutate != None:
             groups = group_by("id", set(lines))
             if mutate:
-                ids = set(g[0] for g in groups.items() if g[1] > 1)
+                ids = set(g[0] for g in list(groups.items()) if g[1] > 1)
                 lines = [l for l in lines if l[:l.find("#")] in ids]
             else:
-                ids = set(g[0] for g in groups.items() if g[1] == 1)
+                ids = set(g[0] for g in list(groups.items()) if g[1] == 1)
                 lines = [l for l in lines if l[:l.find("#")] in ids]
 
         # Filter duplicates
         if duplicate != None:
             groups = group_by("msg", lines)
             if duplicate:
-                msgs = set(g[0] for g in groups.items() if g[1] > 1)
+                msgs = set(g[0] for g in list(groups.items()) if g[1] > 1)
                 lines = [l for l in lines if l in msgs]
             else:
-                msgs = set(g[0] for g in groups.items() if g[1] == 1)
+                msgs = set(g[0] for g in list(groups.items()) if g[1] == 1)
                 lines = [l for l in lines if l in msgs]
 
         ret["count"]["filtered"] = len(lines)
@@ -686,7 +686,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
     if group:
         groups = group_by(group, lines)
-        ret["output"] = [{i[1]: i[0]} for i in sorted(groups.items(), key=lambda i: (i[1], i[0]), reverse=True)]
+        ret["output"] = [{i[1]: i[0]} for i in sorted(list(groups.items()), key=lambda i: (i[1], i[0]), reverse=True)]
     else:
         ret["output"] = lines
 
@@ -711,7 +711,7 @@ def _decode_can_frame(can_db, res):
             return ret
 
         # Decode data using found message
-        for key, val in msg.decode(unhexlify(data.replace(" ", "")), True, True).iteritems():
+        for key, val in list(msg.decode(unhexlify(data.replace(" ", "")), True, True).items()):
             ret.append(dict(res, _type=key.lower(), value=val))
 
     except:

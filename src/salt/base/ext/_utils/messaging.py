@@ -6,7 +6,7 @@ import salt.utils.event
 import threading
 import threading_more
 import time
-import urlparse
+import urllib.parse
 import uuid
 
 from salt_more import SuperiorCommandExecutionError
@@ -476,15 +476,15 @@ class MessageProcessor(object):
         return stats_wrapper
 
     def _parse_hook_url(self, url):
-        u = urlparse.urlparse(url)
+        u = urllib.parse.urlparse(url)
 
         name = u.path
         settings = {}
 
         if u.query:
-            qs = urlparse.parse_qs(u.query, strict_parsing=True)
+            qs = urllib.parse.parse_qs(u.query, strict_parsing=True)
 
-            for k, v in qs.iteritems():
+            for k, v in list(qs.items()):
 
                 # Convert into appropriate types using eval (integers, decimals and booleans)
                 v = [eval(e) if re.match("^(?:[-+]?\d*\.?\d*|True|False)$", e) else e for e in v]
@@ -821,7 +821,7 @@ def msg_pack(*args, **kwargs):
     if args:
         msg["args"] = args
     if kwargs:
-        for k, v in kwargs.iteritems():
+        for k, v in list(kwargs.items()):
             if k.startswith("__"):  # Filter out Salt params (__pub_*)
                 continue
 
@@ -847,17 +847,17 @@ def keyword_resolve(data, keywords={}, symbol="$"):
 
     if isinstance(data, dict):
         res = {}
-        for key, val in data.iteritems():
+        for key, val in list(data.items()):
             res[keyword_resolve(key, keywords)] = keyword_resolve(val, keywords)
         data = res
 
-    elif isinstance(data, basestring) and symbol in data:
+    elif isinstance(data, str) and symbol in data:
 
         # Replace keywords in data
         for key in keywords:
             data = data.replace("{:s}{:s}".format(symbol, key), "__{:s}__".format(key))
 
-        return eval(data, {"__{:s}__".format(key): val for key, val in keywords.iteritems()})
+        return eval(data, {"__{:s}__".format(key): val for key, val in list(keywords.items())})
 
     return data
 
@@ -881,11 +881,11 @@ def filter_out_unchanged(result, context={}, kind=None):
     """
 
     # Build qualified type string for the result
-    kind = ".".join(filter(None, [kind, result.get("_type", None)]))
+    kind = ".".join([_f for _f in [kind, result.get("_type", None)] if _f])
 
     # Loop through all keys in the result and build entry with the significant alternating values
     entry = {}
-    for key, val in result.iteritems():
+    for key, val in list(result.items()):
 
         # Skip all meta/hidden
         if key.startswith("_"):

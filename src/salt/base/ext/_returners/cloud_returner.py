@@ -84,7 +84,7 @@ def _prepare_recursively(result, kind, timestamp=None):
 
         # Look for override values in result
         timestamp = result.pop("_stamp", timestamp) or datetime.datetime.utcnow().isoformat()
-        kind = ".".join(filter(None, [kind, result.pop("_type", None)]))
+        kind = ".".join([_f for _f in [kind, result.pop("_type", None)] if _f])
 
         # Check if only one single list exists
         lone_key = next(iter(result)) if len(result) == 1 else None

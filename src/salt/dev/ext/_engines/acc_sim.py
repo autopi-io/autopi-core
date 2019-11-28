@@ -1,6 +1,6 @@
 import logging
 import socket
-import thread
+import _thread
 import random
 
 

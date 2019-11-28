@@ -1,4 +1,4 @@
-from signal_rater import rate
+from .signal_rater import rate
 
 
 # High rating mean good signal quality

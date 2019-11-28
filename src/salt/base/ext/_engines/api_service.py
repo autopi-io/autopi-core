@@ -140,7 +140,7 @@ def apn_settings(unit_id):
         validated_settings = {"apn": obj.get("apn", ""), "pass": obj.get(
             "pass", ""), "user": obj.get("user", ""), "pin": obj.get("pin", "")}
 
-        if not all(key in allowed_keys for key in obj.keys()):
+        if not all(key in allowed_keys for key in list(obj.keys())):
             invalid_keys = list(set(obj.keys()) - set(allowed_keys))
             return ('Invalid keys found. %s' % invalid_keys), 400
 

@@ -6,7 +6,7 @@ import random
 import re
 import redis
 import requests
-import StringIO
+import io
 import time
 
 from requests.exceptions import RequestException
@@ -79,7 +79,7 @@ class CloudCache(object):
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Creating Redis connection pool")
-        self.conn_pool = redis.ConnectionPool(**options.get("redis", {k.replace("redis_", "", 1): v for k, v in options.iteritems() if k.startswith("redis_")}))
+        self.conn_pool = redis.ConnectionPool(**options.get("redis", {k.replace("redis_", "", 1): v for k, v in list(options.items()) if k.startswith("redis_")}))
 
         self.client = redis.StrictRedis(connection_pool=self.conn_pool)
 
@@ -150,7 +150,7 @@ class CloudCache(object):
             if self.options["compression"]["algorithm"] == "gzip":
                 start = timer()
 
-                buffer = StringIO.StringIO()
+                buffer = io.StringIO()
                 with gzip.GzipFile(fileobj=buffer, mode="wt", compresslevel=self.options["compression"].get("level", 9)) as gf:
                    gf.write(payload)
 
