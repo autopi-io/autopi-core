@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from __future__ import print_function
+
 
 import json
 import re
 import sys
 import time
-import urllib2  # 'requests' is slow to load so we use 'urllib2'
+import urllib.request, urllib.error, urllib.parse  # 'requests' is slow to load so we use 'urllib2'
 import uuid
 import yaml
 
@@ -36,22 +36,28 @@ def get_minion_id():
 
 def retry_if_url_error(ex):
     print("API not ready, retrying. Please wait...")
-    if not isinstance(ex, urllib2.HTTPError):
-        return isinstance(ex, urllib2.URLError)
+    if not isinstance(ex, urllib.error.HTTPError):
+        return isinstance(ex, urllib.error.URLError)
     return False
 
 @retry(retry_on_exception=retry_if_url_error, stop_max_attempt_number=30, wait_fixed=2000)
 def execute(cmd, *args, **kwargs):
     url = "http://localhost:9000/dongle/{:}/execute/".format(get_minion_id())
-    data = json.dumps({"command": cmd, "arg": args, "kwarg": kwargs})
-    req = urllib2.Request(url, data, {"Content-Type": "application/json", "Content-Length": len(data) })
-    with closing(urllib2.urlopen(req)) as res:
+    data = {"command": cmd, "arg": args, "kwarg": kwargs}
+    f = urllib.parse.urlencode(data)
+    f = f.encode('utf-8')
+    #fix was some 400 response errors from localhost:9000, also minion didnt want to run when /usb/bin/python was symlinked to /usb/bin/python3
+    print(url, f, {"Content-Type": "application/json", "Content-Length": len(data) })
+    req = urllib.request.Request(url, f, {"Content-Type": "application/json", "Content-Length": len(data) })
+
+
+    with closing(urllib.request.urlopen(req)) as res:
         return json.loads(res.read())
 
 def state_output(res):
     errors = []
 
-    for key in res.keys():
+    for key in list(res.keys()):
         if res[key]["result"]:
             print("{:} [ OK   ] {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
             print("")
@@ -67,8 +73,8 @@ def state_output(res):
     else:
         print (Colors.OKGREEN + "Success" + Colors.ENDC)
 
-    succeded = len(res.keys()) - len(errors)
-    print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(res.keys()), succeded, len(errors)))
+    succeded = len(list(res.keys())) - len(errors)
+    print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(list(res.keys())), succeded, len(errors)))
 
 def try_eval(val):
     if val.lower() in ["true", "false", "yes", "no"]:
@@ -107,7 +113,7 @@ def main():
 
     try:
         res = execute(cmd, *cmd_args, **cmd_kwargs)
-    except urllib2.HTTPError as e:
+    except urllib.error.HTTPError as e:
         response_text = e.read()
         code = e.code if e.code != 500 else ''
         try:
@@ -116,7 +122,7 @@ def main():
         except Exception:
             pass
 
-        print(Colors.FAIL + code + response_text + Colors.ENDC, file=sys.stderr)
+        print("{} {} {}".format(code, response_text,sys.stderr))
         return
 
     if cmd.startswith("state.") and isinstance(res,dict):
