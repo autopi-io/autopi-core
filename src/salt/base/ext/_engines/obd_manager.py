@@ -571,7 +571,11 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     """
 
     ret = {
-        "count": {}
+        "count": {
+            "total": 0,
+            "success": 0,
+            "failed": 0
+        }
     }
 
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -693,7 +697,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         # Only use protocol settings from header when no protocol is specified
         if protocol == None:
             protocol = header.get("protocol", None)
-            baudrate = baudrate or (header.get("baudrate", None) if conn.supported_protocols().get(str(protocol), {}).get("interface", None) != "ELM327" else None)  # ELM327 protocols does not support custom baudrates
+            baudrate = baudrate or header.get("baudrate", None)
 
         # Ensure protocol
         conn.ensure_protocol(protocol,
@@ -702,17 +706,25 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
         start = timer()
 
+        res = []
         if experimental:
 
             # For some reason this runs much faster when profiling - go firgure!
-            profile.runctx("conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)", globals(), locals())
+            profile.runctx("res.extend(conn.send_all(lines, delay=delay, expect_response=False, raw_response=True, auto_format=auto_format))", globals(), locals())
         else:
-            conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)
+            res = conn.send_all(lines, delay=delay, expect_response=False, raw_response=True, auto_format=auto_format)
 
-        ret["count"]["sent"] = len(lines)
+        # Only failed lines can have responses here
+        if res:
+            ret["count"]["failed"] = len(res)
+
+            # Append error(s) to corresponding line
+            for msg, errs in res:
+                idx = lines.index(msg)
+                lines[idx] = "{:} -> {:}".format(msg, ", ".join(errs))
+
+        ret["count"]["success"] = len(lines) - ret["count"]["failed"]
         ret["duration"] = timer() - start
-    else:
-        ret["count"]["sent"] = 0
 
     if group:
         groups = group_by(group, lines)
