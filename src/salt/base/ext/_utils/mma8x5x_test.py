@@ -8,7 +8,7 @@ def signed_int_alt(word, bits=10):
 
 def g(word, bits=10, g_range=2):
     res = mma8x5x.calc_g(word, bits=bits, g_range=g_range, decimals=4)
-    print "{:d}g, {:d}bit; {:010b} = {:f}g".format(g_range, bits, word, res)
+    print(("{:d}g, {:d}bit; {:010b} = {:f}g".format(g_range, bits, word, res)))
     return res
 
 

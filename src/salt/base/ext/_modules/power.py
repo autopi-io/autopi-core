@@ -29,7 +29,7 @@ def status():
 
     # SPM status
     res = __salt__["spm.query"]("status")
-    ret["spm"].update({k: v for k, v in res.iteritems() if not k.startswith("_")})
+    ret["spm"].update({k: v for k, v in list(res.items()) if not k.startswith("_")})
 
     # SPM sleep interval
     res = __salt__["spm.query"]("sleep_interval")
@@ -42,20 +42,20 @@ def status():
     # STN config
     res = __salt__["stn.power_config"]()
     ret["stn"]["trigger_config"] = {
-        k: v.split(",")[1] for k, v in res.iteritems() \
+        k: v.split(",")[1] for k, v in list(res.items()) \
             if (k.endswith("_wake") or k.endswith("_sleep")) and v.startswith("ON")
     }
 
     # STN trigger
     res = __salt__["stn.power_trigger_status"]()
     ret["stn"]["last_trigger"] = {
-        k: v for k, v in res.iteritems() if not k.startswith("_")
+        k: v for k, v in list(res.items()) if not k.startswith("_")
     }
 
     # STN battery
     res = __salt__["obd.battery"]()
     ret["stn"]["battery"] = {
-        k: v for k, v in res.iteritems() if not k.startswith("_")
+        k: v for k, v in list(res.items()) if not k.startswith("_")
     }
 
     # RPI uptime
@@ -184,7 +184,7 @@ def sleep_timer(enable=None, period=1800, **kwargs):
     # Helper function to get all sleep timers
     def timers():
         res = __salt__["schedule.list"](return_yaml=False)
-        return {k: v for k, v in res.iteritems() if k.startswith("_sleep_timer")}
+        return {k: v for k, v in list(res.items()) if k.startswith("_sleep_timer")}
 
     if enable == True:
 

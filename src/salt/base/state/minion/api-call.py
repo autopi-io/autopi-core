@@ -47,7 +47,7 @@ def execute(cmd, *args, **kwargs):
     f = urllib.parse.urlencode(data)
     f = f.encode('utf-8')
     #fix was some 400 response errors from localhost:9000, also minion didnt want to run when /usb/bin/python was symlinked to /usb/bin/python3
-    print(url, f, {"Content-Type": "application/json", "Content-Length": len(data) })
+    print((url, f, {"Content-Type": "application/json", "Content-Length": len(data) }))
     req = urllib.request.Request(url, f, {"Content-Type": "application/json", "Content-Length": len(data) })
 
 
@@ -59,22 +59,22 @@ def state_output(res):
 
     for key in list(res.keys()):
         if res[key]["result"]:
-            print("{:} [ OK   ] {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print(("{:} [ OK   ] {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC)))
             print("")
         else:
-            print("{:} [ FAIL ] {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
+            print(("{:} [ FAIL ] {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC)))
             errors.append(res[key])
             print("")
 
     print("")
 
     if errors:
-        print(Colors.FAIL + "Errors found" + Colors.ENDC)
+        print((Colors.FAIL + "Errors found" + Colors.ENDC))
     else:
-        print (Colors.OKGREEN + "Success" + Colors.ENDC)
+        print((Colors.OKGREEN + "Success" + Colors.ENDC))
 
     succeded = len(list(res.keys())) - len(errors)
-    print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(list(res.keys())), succeded, len(errors)))
+    print(("Finished running {:} states, succeded: {:}, failed: {:}".format(len(list(res.keys())), succeded, len(errors))))
 
 def try_eval(val):
     if val.lower() in ["true", "false", "yes", "no"]:
@@ -88,7 +88,7 @@ def try_eval(val):
 def main():
 
     if len(sys.argv) < 2:
-        print("Usage: {:} [options] <command> [arguments]".format(sys.argv[0]))
+        print(("Usage: {:} [options] <command> [arguments]".format(sys.argv[0])))
         return
 
     args = list(sys.argv)
@@ -122,13 +122,13 @@ def main():
         except Exception:
             pass
 
-        print("{} {} {}".format(code, response_text,sys.stderr))
+        print(("{} {} {}".format(code, response_text,sys.stderr)))
         return
 
     if cmd.startswith("state.") and isinstance(res,dict):
         state_output(res)
     else:
-        print(yaml.safe_dump(res, default_flow_style=False))
+        print((yaml.safe_dump(res, default_flow_style=False)))
 
 if __name__ == "__main__":
     main()

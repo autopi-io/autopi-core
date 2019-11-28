@@ -24,7 +24,7 @@ def configured(name, args=[], kwargs={}):
         ret["comment"] = "Failed to get current configuration: {:}".format(res["error"])
         return ret
 
-    old = {k: v for k, v in res.iteritems() if not k.startswith("_")}
+    old = {k: v for k, v in list(res.items()) if not k.startswith("_")}
     new = kwargs
 
     if cmp(old, new) == 0:

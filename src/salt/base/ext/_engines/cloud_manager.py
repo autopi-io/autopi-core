@@ -96,7 +96,7 @@ def upload_handler():
         # TODO: Update this status for each batch upload!
         # Update context
         ctx["count"] += 1
-        for key, val in ret.iteritems():
+        for key, val in list(ret.items()):
             ctx["complete"][key] = ctx["complete"].get(key, 0) + val.get("total", 0)
             ctx.setdefault("errors", {})[key] = val.get("errors", [])
 

@@ -1,7 +1,7 @@
 import os
 import salt.ext.six as six
 import salt_more
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 
 def gnss_on(name):
@@ -218,7 +218,7 @@ def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, ke
     cache_dir = os.path.join(__opts__["cachedir"], "extrn_files", __env__, "ec2x")
     __salt__["file.mkdir"](cache_dir)
 
-    cached_file = os.path.join(cache_dir, urllib.quote_plus(name))
+    cached_file = os.path.join(cache_dir, urllib.parse.quote_plus(name))
     res = __salt__["cmd.run_all"]("wget -O {:} {:}".format(cached_file, name))
     if res["retcode"] != 0:
         ret["result"] = False

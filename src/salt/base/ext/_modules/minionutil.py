@@ -250,7 +250,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
             # TODO: If above highstate chooses to restart below code will not run
             # (another update/highstate will run afterwards that will set release id)
-            if all(v.get("result", False) for k, v in ret["highstate"].iteritems()):
+            if all(v.get("result", False) for k, v in list(ret["highstate"].items())):
                 log.info("Completed highstate for release '{:}'".format(new["id"]))
 
                 new["state"] = "updated"

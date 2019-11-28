@@ -1,6 +1,6 @@
 import logging
 import socket
-import thread
+import _thread
 import random
 
 
@@ -57,7 +57,7 @@ def start(host, port):
             log.info("Accepted connection from %s:%s", addr[0], addr[1])
               
             # Spawn new dedicated client thread
-            thread.start_new_thread(client_thread, (conn, addr))
+            _thread.start_new_thread(client_thread, (conn, addr))
     finally:
         log.info("Stopping OBD simulator")
         sock.close()

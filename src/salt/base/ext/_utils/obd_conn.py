@@ -173,14 +173,14 @@ class OBDConn(object):
             "id": protocol.ID,
             "name": protocol.NAME,
             "autodetected": protocol.autodetected,
-            "ecus": protocol.ecu_map.values(),
+            "ecus": list(protocol.ecu_map.values()),
             "baudrate": getattr(protocol, "baudrate", None),  # Only available for 'STN11XX' interface
         }
 
     @Decorators.ensure_open
     def supported_protocols(self):
         ret = collections.OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
-        ret.update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in self._obd.supported_protocols().iteritems()})
+        ret.update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in list(self._obd.supported_protocols().items())})
 
         return ret
 

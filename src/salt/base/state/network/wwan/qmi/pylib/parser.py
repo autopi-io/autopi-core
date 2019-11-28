@@ -1,6 +1,6 @@
 import re
 
-import signal_rater
+from . import signal_rater
 
 
 signal_strength_regex = re.compile(r"(?P<key>\w+)(?: \(\w+\))?:(?:\s+Network '(?P<net>\w+)':)? '(?P<val>-?[0-9]*\.?[0-9]*) (?P<unit>\w+)'", re.MULTILINE)

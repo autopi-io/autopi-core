@@ -13,7 +13,7 @@ edmp = EventDrivenMessageProcessor("reactor")
 
 context = {
     "cache.get": lambda *args, **kwargs: dict_get(context.get("cache", None), *args, **kwargs),
-    "cache.find": lambda *args, **kwargs: dict_find(context.get("cache", {}).values(), *args, **kwargs)
+    "cache.find": lambda *args, **kwargs: dict_find(list(context.get("cache", {}).values()), *args, **kwargs)
 }
 
 @edmp.register_hook()
@@ -52,12 +52,12 @@ def context_handler(key=None, **kwargs):
         ctx = context.setdefault(key, {})
 
         # Set new values if given
-        for k, v in kwargs.iteritems():
+        for k, v in list(kwargs.items()):
             ctx[k.replace("__", ".")] = v
 
         ret["value"] = ctx
     else:
-        ret["values"] = {k: v for k, v in context.iteritems() if not "." in k}
+        ret["values"] = {k: v for k, v in list(context.items()) if not "." in k}
 
     return ret
 

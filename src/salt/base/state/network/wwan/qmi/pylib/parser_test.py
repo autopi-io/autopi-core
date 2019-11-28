@@ -1,6 +1,6 @@
 import json
 
-import parser
+from . import parser
 
 
 s = """
@@ -21,4 +21,4 @@ RSRP:
     Network 'lte': '-96 dBm'
 """
 r = parser.parse_signal_strength(s)
-print json.dumps(r, indent=4)
+print((json.dumps(r, indent=4)))
