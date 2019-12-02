@@ -267,7 +267,7 @@ def play(file, **kwargs):
       - file (str): Path to file recorded with the 'obd.dump' command.
 
     Optional arguments:
-      - delay (float): Delay in seconds between sending each message. Default value is '0'.
+      - delay (float): Delay in milliseconds between sending each message. Default value is '0'.
       - slice (str): Slice the list of messages before sending on the CAN bus. Based one the divide and conquer algorithm. Multiple slice characters can be specified in continuation of each other.
         - 't': Top half of remaining result.
         - 'b': Bottom half of remaining result.
