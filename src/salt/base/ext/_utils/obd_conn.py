@@ -5,6 +5,7 @@ import logging
 import obd
 import obd.utils
 import RPi.GPIO as gpio
+import time
 
 from obd.interfaces import STN11XX
 from retrying import retry
