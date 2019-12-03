@@ -8,6 +8,7 @@ frontend-release-installed:
     - force_reset: True
     - force_clone: True
     - target: /var/www/html
+    - depth: 1
     - retry:
         attempts: 3
         interval: 3
