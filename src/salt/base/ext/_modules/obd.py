@@ -143,10 +143,10 @@ def send(msg, **kwargs):
       - type (str): Specify a name of the type of the result. Default is 'raw'.
 
     Optional arguments, CAN specific:
-      - can_ext_addr (str): Use CAN extended address.
-      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
@@ -182,7 +182,7 @@ def battery(**kwargs):
     Gets current battery voltage
     """
 
-    return client.send_sync(_msg_pack("ELM_VOLTAGE", protocol=None, force=True, _converter="battery", **kwargs))
+    return client.send_sync(_msg_pack("ELM_VOLTAGE", protocol=str(None), force=True, _converter="battery", **kwargs))
 
 
 def dtc(clear=False, **kwargs):
@@ -267,7 +267,7 @@ def play(file, **kwargs):
       - file (str): Path to file recorded with the 'obd.dump' command.
 
     Optional arguments:
-      - delay (float): Delay in seconds between sending each message. Default value is '0'.
+      - delay (float): Delay in milliseconds between sending each message. Default value is '0'.
       - slice (str): Slice the list of messages before sending on the CAN bus. Based one the divide and conquer algorithm. Multiple slice characters can be specified in continuation of each other.
         - 't': Top half of remaining result.
         - 'b': Bottom half of remaining result.
@@ -284,6 +284,7 @@ def play(file, **kwargs):
       - protocol (str): ID of specific protocol to be used to send the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - test (bool): Run command in test-only? (dry-run) mode. No data will be sent on CAN bus. Default value is 'False'.
     """
 

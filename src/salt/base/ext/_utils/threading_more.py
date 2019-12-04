@@ -39,7 +39,9 @@ class WorkerThread(threading.Thread):
         self.delay = delay
         self.interval = interval
         self.registry = registry
-        self.kill_event = threading.Event()
+        self.proceed_event = threading.Event()
+        self.wake_event = threading.Event()
+        self.terminate = False
 
         if registry and not registry.add(self):
             raise ValueError("Worker thread '{:s}' already added to registry".format(name))
@@ -60,21 +62,24 @@ class WorkerThread(threading.Thread):
     def work(self):
         try:
 
-            if self.delay and self.delay > 0.0:
-                log.info("Delayed start of %f second(s) of worker thread '%s'", self.delay, self.name)
+            # Perform delayed start if requested
+            self.__delay()
 
-                self.context["state"] = "pending"
+            # No need to continue if already terminated at this point
+            if self.terminate:
+                return
 
-                self.kill_event.wait(self.delay)
-                if self.is_killed():
-                    return
-
-            log.debug("Running worker thread '%s'...", self.name)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Running worker thread '%s'...", self.name)
 
             self.context["state"] = "running"
             self.context["first_run"] = datetime.datetime.utcnow().isoformat()
 
-            while not self.is_killed() and self.loop != 0:
+            # Ensure allowed to proceed
+            self.proceed_event.set()
+
+            # Loop until completion
+            while self.__proceed() and self.loop != 0:
                 if self.loop > 0:
                     self.loop -= 1
 
@@ -83,7 +88,8 @@ class WorkerThread(threading.Thread):
                 if self.interval > 0:
                     self.context["last_run"] = datetime.datetime.utcnow().isoformat()
 
-                    self.kill_event.wait(self.interval)
+                    # Sleep until awakened or timeout reached
+                    self.wake_event.wait(self.interval)
 
             self.context["state"] = "completed"
 
@@ -98,15 +104,86 @@ class WorkerThread(threading.Thread):
             log.info("Worker thread '%s' terminated", self.name)
 
             if self.registry and self.registry.remove(self):
-                log.debug("Worker thread '%s' removed from registry", self.name)
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Worker thread '%s' removed from registry", self.name)
             else:
                 log.warn("Was unable to remove worker thread '%s' from registry", self.name)
 
-    def is_killed(self):
-        return self.kill_event.is_set()
+    def pause(self):
+        if not self.proceed_event.is_set():
+            return
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Pausing worker thread '%s'...", self.name)
+
+        # Disallow to proceed
+        self.proceed_event.clear()
+
+        # Ensure to wake up if sleeping
+        self.wake_event.set()
+
+    def resume(self):
+        if self.proceed_event.is_set():
+            return
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Resuming worker thread '%s'...", self.name)
+
+        # Allow to proceed
+        self.proceed_event.set()
 
     def kill(self):
-        self.kill_event.set()
+        if self.terminate:
+            return
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Killing worker thread '%s'...", self.name)
+
+        # Raise the white flag
+        self.terminate = True
+
+        # Ensure to proceed if waiting
+        self.proceed_event.set()
+
+        # Ensure to wake up if sleeping
+        self.wake_event.set()
+
+    def __delay(self):
+        if self.delay and self.delay > 0.0:
+            log.info("Delayed startup/resume of %f second(s) of worker thread '%s'...", self.delay, self.name)
+
+            self.context["state"] = "pending"
+
+            # Sleep until awakened or timeout reached
+            self.wake_event.wait(self.delay)
+
+    def __proceed(self):
+
+        # Check whether to wait or proceed
+        if not self.proceed_event.is_set():
+            self.context["state"] = "paused"
+
+            log.info("Paused worker thread '%s'", self.name)
+
+            # Wait until allowed to proceed again
+            self.proceed_event.wait()
+
+            # No need to continue if terminated at this point
+            if self.terminate:
+                return False
+
+            log.info("Resumed worker thread '%s'", self.name)
+
+            # Perform initial delay if any
+            self.__delay()
+
+            self.context["state"] = "running"
+
+        # Check if set to terminate
+        if self.terminate:
+            return False
+
+        return True
 
 
 class ThreadRegistry(object):
@@ -147,42 +224,27 @@ class ThreadRegistry(object):
                     if re.match(name.replace("*", ".*"), t.name)
             ]
 
-    def start_all_for(self, name):
-        with self._lock:
-            threads = self.find_all_by(name)
-            for t in threads:
-                t.start()
-
-            return threads
-
-    def kill_all_for(self, name, force_wildcard=False):
+    def do_all_for(self, name, func, force_wildcard=False):
         with self._lock:
             ret = []
 
             threads = self.find_all_by(name)
-            for t in [t for t in threads if hasattr(t, "kill")]:
+            for t in threads:
 
-                # Names starting with an underscore must be killed explicitly
+                # Unless forced is name starting with an underscore not matched with wildcard
                 if not force_wildcard and t.name.startswith("_") and t.name != name:
                     continue
 
-                t.kill()
+                func(t)
+
                 ret.append(t)
 
             return ret
 
-    def modify_all_for(self, name, callback):
-        with self._lock:
-            threads = self.find_all_by(name)
-            for t in threads:
-                callback(t)
-
-            return threads
-
 
 class TimedEvent(threading._Event):
     """
-    Records exact timestamp of when event was set.
+    Records exact timestamp of when a event was set.
     """
 
     def __init__(self, *args, **kwargs):
@@ -199,3 +261,27 @@ class TimedEvent(threading._Event):
         self.timestamp = None
         
         super(TimedEvent, self).clear()
+
+
+class ReturnThread(threading.Thread):
+    """
+    Stores the return value from the target function.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(ReturnThread, self).__init__(*args, **kwargs)
+
+        self._return = None
+        self.exception = None
+
+    def run(self):
+        if self._Thread__target is not None:
+            try:
+                self._return = self._Thread__target(*self._Thread__args, **self._Thread__kwargs)
+            except Exception as ex:
+                self.exception = ex
+
+    def join(self):
+        super(ReturnThread, self).join()
+
+        return self._return

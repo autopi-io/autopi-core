@@ -35,7 +35,7 @@ def get_minion_id():
     return minion_id
 
 def retry_if_url_error(ex):
-    print("API not ready, retrying. Please wait...")
+    print(Colors.WARNING + "API not ready, retrying..." + Colors.ENDC)
     if not isinstance(ex, urllib2.HTTPError):
         return isinstance(ex, urllib2.URLError)
     return False

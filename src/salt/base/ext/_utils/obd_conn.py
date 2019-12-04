@@ -5,6 +5,7 @@ import logging
 import obd
 import obd.utils
 import RPi.GPIO as gpio
+import time
 
 from obd.interfaces import STN11XX
 from retrying import retry
@@ -139,17 +140,19 @@ class OBDConn(object):
             self.open()
 
     def close(self, permanent=False):
+
+        if not self.is_open():
+            raise Exception("Already closed")
+
         if self.on_closing:
             try:
                 self.on_closing()
             except:
                 log.exception("Error in 'on_closing' event handler")
 
-        self.is_permanently_closed = permanent
-        self.on_status = None  # We do not want any more status updates
-
         self._obd.close()
         self._obd = None
+        self.is_permanently_closed = permanent
 
         if self.on_closed:
             try:
@@ -197,7 +200,10 @@ class OBDConn(object):
         if ident == None:
             raise ValueError("Protocol must be specified")
 
+        # Enforce type and formatting
         ident = str(ident).upper()
+        baudrate = int(baudrate) if baudrate != None else None
+
         if not ident in self.supported_protocols.undecorated(self):  # No need to call the 'ensure_open' decorator again
             raise ValueError("Unsupported protocol specified")
 
@@ -225,7 +231,9 @@ class OBDConn(object):
                 # No protocol requested and no default available
                 return
 
+        # Enforce type and formatting
         ident = str(ident).upper()
+        baudrate = int(baudrate) if baudrate != None else None
 
         # Check current protocol
         try:
@@ -285,11 +293,29 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def send_all(self, msgs, delay=None, **kwargs):
+
+        ret = []
+
+        # Filter out and apply advanced runtime settings if any
+        self.ensure_runtime_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
+
         for msg in msgs:
-            self.send.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator each time
+
+            # Parse out header if found
+            hash_pos = msg.find("#")
+            if hash_pos > 0:
+                kwargs["header"] = msg[:hash_pos]
+                res = self._obd.send(msg[hash_pos + 1:], **kwargs)
+            else:
+                res = self._obd.send(msg, **kwargs)
+
+            if res:
+                ret.append((msg, res))
 
             if delay:
                 time.sleep(delay / 1000.0)
+
+        return ret
 
     @Decorators.ensure_open
     def execute(self, cmd, **kwargs):

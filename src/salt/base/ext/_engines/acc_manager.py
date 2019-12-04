@@ -279,3 +279,9 @@ def start(**settings):
         raise
     finally:
         log.info("Stopping accelerometer manager")
+
+        if conn.is_open():
+            try:
+                conn.close()
+            except:
+                log.exception("Failed to close MMA8X5X connection")

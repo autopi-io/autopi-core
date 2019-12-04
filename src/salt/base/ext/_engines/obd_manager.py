@@ -4,6 +4,7 @@ import battery_util
 import ConfigParser
 import cProfile as profile
 import datetime
+import elm327_proxy
 import logging
 import math
 import obd
@@ -12,7 +13,7 @@ import psutil
 import salt.loader
 
 from binascii import unhexlify
-from common_util import abs_file_path, factory_rendering
+from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering
 from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
@@ -28,6 +29,9 @@ edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended",
 
 # OBD connection
 conn = OBDConn()
+
+# ELM327 proxy instance
+proxy = elm327_proxy.ELM327Proxy()
 
 # Loaded CAN databases indexed by procotol ID
 can_db_cache = {}
@@ -109,7 +113,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
 
     # Ensure protocol
-    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command
+    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
         pass
     else:
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
@@ -157,10 +161,10 @@ def send_handler(msg, **kwargs):
       - type (str): Specify a name of the type of the result. Default is 'raw'.
 
     Optional arguments, CAN specific:
-      - can_ext_addr (str): Use CAN extended address.
-      - can_flow_ctrl_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_ctrl_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_ctrl_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     ret = {
@@ -190,8 +194,6 @@ def send_handler(msg, **kwargs):
                 ret["values"] = {idx: val for idx, val in enumerate(res, 1)}
         else:
             ret["values"] = res
-    elif kwargs.get("expect_response", False):
-        raise Exception("Expected response but got empty")
 
     return ret
 
@@ -547,7 +549,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
       - file (str): Path to file recorded with the 'obd.dump' command.
 
     Optional arguments:
-      - delay (float): Delay in seconds between sending each message. Default value is '0'.
+      - delay (float): Delay in milliseconds between sending each message. Default value is '0'.
       - slice (str): Slice the list of messages before sending on the CAN bus. Based one the divide and conquer algorithm. Multiple slice characters can be specified in continuation of each other.
         - 't': Top half of remaining result.
         - 'b': Bottom half of remaining result.
@@ -569,7 +571,11 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
     """
 
     ret = {
-        "count": {}
+        "count": {
+            "total": 0,
+            "success": 0,
+            "failed": 0
+        }
     }
 
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
@@ -645,7 +651,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
                 duplicate = True
                 continue
 
-            incl.update([l for l in lines if l.startswith(f)])
+            incl.update([l for l in lines if l.upper().startswith(f)])
         if incl:
             lines = [l for l in lines if l in incl]
 
@@ -659,7 +665,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
                 duplicate = False
                 continue
 
-            excl.update([l for l in lines if l.startswith(f)])
+            excl.update([l for l in lines if l.upper().startswith(f)])
         if excl:
             lines = [l for l in lines if l not in excl]
 
@@ -691,7 +697,7 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         # Only use protocol settings from header when no protocol is specified
         if protocol == None:
             protocol = header.get("protocol", None)
-            baudrate = baudrate or (header.get("baudrate", None) if conn.supported_protocols().get(str(protocol), {}).get("interface", None) != "ELM327" else None)  # ELM327 protocols does not support custom baudrates
+            baudrate = baudrate or header.get("baudrate", None)
 
         # Ensure protocol
         conn.ensure_protocol(protocol,
@@ -700,17 +706,25 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
 
         start = timer()
 
+        res = []
         if experimental:
 
             # For some reason this runs much faster when profiling - go firgure!
-            profile.runctx("conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)", globals(), locals())
+            profile.runctx("res.extend(conn.send_all(lines, delay=delay, expect_response=False, raw_response=True, auto_format=auto_format))", globals(), locals())
         else:
-            conn.send_all(lines, delay=delay, raw_response=True, auto_format=auto_format)
+            res = conn.send_all(lines, delay=delay, expect_response=False, raw_response=True, auto_format=auto_format)
 
-        ret["count"]["sent"] = len(lines)
+        # Only failed lines can have responses here
+        if res:
+            ret["count"]["failed"] = len(res)
+
+            # Append error(s) to corresponding line
+            for msg, errs in res:
+                idx = lines.index(msg)
+                lines[idx] = "{:} -> {:}".format(msg, ", ".join(errs))
+
+        ret["count"]["success"] = len(lines) - ret["count"]["failed"]
         ret["duration"] = timer() - start
-    else:
-        ret["count"]["sent"] = 0
 
     if group:
         groups = group_by(group, lines)
@@ -719,6 +733,15 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         ret["output"] = lines
 
     return ret
+
+
+@edmp.register_hook()
+def _relay_handler(cmd):
+    """
+    System handler to relay commands directly to the ELM327 compatible interface.
+    """
+
+    return conn.execute(cmd, raw_response=True)
 
 
 def _decode_can_frame(can_db, res):
@@ -1040,8 +1063,52 @@ def start(**settings):
 
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status)) 
-        conn.on_closing = lambda: edmp.close()  # Will kill active workers
+        conn.on_closing = lambda: edmp.worker_threads.do_all_for("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
+
+        # Start ELM327 proxy if configured
+        if "elm327_proxy" in settings:
+            try:
+
+                # Setup file logging if defined
+                if "logging" in settings["elm327_proxy"]:
+                    try:
+                        file = abs_file_path(settings["elm327_proxy"]["logging"].pop("file", "elm327_proxy.log"), "/var/log/salt")
+                        add_rotating_file_handler_to(elm327_proxy.log, file, **settings["elm327_proxy"]["logging"])
+                    except:
+                        log.exception("Failed to setup dedicated file log handler for ELM327 proxy")
+
+                def on_connect(addr):
+                    edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/connected")
+
+                    if settings["elm327_proxy"].get("pause_workers", True):
+                        threads = edmp.worker_threads.do_all_for("*", lambda t: t.pause())
+                        log.info("Paused {:} worker(s) while ELM327 proxy is in use".format(len(threads)))
+
+                def on_disconnect(addr):
+                    edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/disconnected")
+
+                    if conn.is_open() and not proxy._stop:  # No reason to run when shutting down
+
+                        if settings["elm327_proxy"].get("reset_after_use", True):
+                            connection_handler(reset="cold")
+                            log.info("Performed cold reset after ELM327 proxy has been in use")
+
+                        if settings["elm327_proxy"].get("pause_workers", True):
+                            threads = edmp.worker_threads.do_all_for("*", lambda t: t.resume())
+                            log.info("Resumed {:} worker(s) after ELM327 proxy has been in use".format(len(threads)))
+
+                proxy.on_command = _relay_handler
+                proxy.on_connect = on_connect
+                proxy.on_disconnect = on_disconnect
+
+                proxy.start(
+                    host=settings["elm327_proxy"].get("host", "0.0.0.0"),
+                    port=settings["elm327_proxy"].get("port", 35000)
+                )
+
+            except:
+                log.exception("Failed to start ELM327 proxy")
 
         # Run message processor
         edmp.run()
@@ -1050,5 +1117,21 @@ def start(**settings):
         log.exception("Failed to start OBD manager")
 
         raise
+
     finally:
         log.info("Stopping OBD manager")
+
+        # First stop ELM327 proxy if running
+        if proxy.is_alive():
+            try:
+                proxy.stop()
+            except:
+                log.exception("Failed to stop ELM327 proxy")
+
+        # Then close OBD connection if open
+        if conn.is_open():
+            try:
+                conn.close()
+            except:
+                log.exception("Failed to close OBD connection")
+
