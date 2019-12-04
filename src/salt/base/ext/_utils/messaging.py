@@ -806,7 +806,7 @@ class EventDrivenMessageClient(object):
         # Wait for message until timeout
         message = bus.get_event(wait=timeout, **kwargs)
         if not message:
-            log.warn("No reply message with tag '%s' received within timeout of %d secs", tag, timeout)
+            log.warn("No reply message with tag '%s' received within timeout of %d secs", kwargs.get("tag", None), timeout)
 
             raise salt.exceptions.CommandExecutionError(
                 "No reply message received within timeout of {:d} secs - please try again and maybe increase timeout value".format(timeout))

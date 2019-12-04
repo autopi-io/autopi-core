@@ -7,6 +7,7 @@ frontend-release-installed:
     - rev: production
     - force_reset: True
     - force_clone: True
+    - force_fetch: True
     - target: /var/www/html
     - depth: 1
     - retry:
