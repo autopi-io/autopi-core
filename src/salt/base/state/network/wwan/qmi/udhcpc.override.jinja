@@ -1,1 +1,3 @@
+{%- if salt['grains.get']('qmi:mtu') %}
 mtu={{ salt['grains.get']('qmi:mtu') }}
+{%- endif %}
