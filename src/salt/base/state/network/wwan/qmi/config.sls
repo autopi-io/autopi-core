@@ -15,13 +15,9 @@
     - template: jinja
 
 /etc/udhcpc/qmi.override:
-{%- if salt['grains.get']('qmi:mtu') %}
   file.managed:
     - source: salt://network/wwan/qmi/udhcpc.override.jinja
     - template: jinja
-{%- else %}
-  file.absent
-{%- endif %}
 
 qmi-manager:
   service.running:
