@@ -129,7 +129,7 @@ def apn_settings(unit_id):
         return 'unit_id does not match the id configured on this device', 401
 
     grain_name = 'qmi'
-    allowed_keys = ["pin", "user", "pass", "apn"]
+    allowed_keys = ["pin", "user", "pass", "apn", "mtu"]
 
     if request.method == 'GET':
         obj = __salt__['grains.get'](grain_name, default={})
@@ -137,8 +137,13 @@ def apn_settings(unit_id):
         return jsonify(obj)
     elif request.method == 'PUT':
         obj = request.get_json(force=True)
-        validated_settings = {"apn": obj.get("apn", ""), "pass": obj.get(
-            "pass", ""), "user": obj.get("user", ""), "pin": obj.get("pin", "")}
+        validated_settings = {
+            "apn": obj.get("apn", ""), 
+            "pass": obj.get("pass", ""), 
+            "user": obj.get("user", ""), 
+            "pin": obj.get("pin", ""),
+            "mtu": obj.get("mtu", None)
+        }
 
         if not all(key in allowed_keys for key in obj.keys()):
             invalid_keys = list(set(obj.keys()) - set(allowed_keys))
