@@ -180,7 +180,7 @@ def sync_time_handler(force=False):
         return ret
 
     # Check if system time is already NTP synchronized
-    status = __salt__["time.status"]()
+    status = __salt__["clock.status"]()
     if not force and status["ntp_synchronized"] == "yes":
         log.info("System time is already NTP synchronized")
 
@@ -197,7 +197,7 @@ def sync_time_handler(force=False):
         # Disable automatic time synchronization 
         # NOTE: This is done now to minimize time between get network time and adjust system clock 
         if status["network_time_on"] == "yes":
-            __salt__["time.ntp"](enable=False)
+            __salt__["clock.ntp"](enable=False)
 
         try:
 
@@ -240,8 +240,8 @@ def sync_time_handler(force=False):
             # Set old time before we adjust clock
             ret["old"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
-            # Set sytem time manually
-            __salt__["time.set"](time, adjust_system_clock=True)
+            # Set system time manually
+            __salt__["clock.set"](time, adjust_system_clock=True)
 
             ret["new"] = time
 
@@ -261,7 +261,7 @@ def sync_time_handler(force=False):
         finally:
 
             # Re-enable automatic time synchronization
-            __salt__["time.ntp"](enable=True)
+            __salt__["clock.ntp"](enable=True)
 
     # Trigger time synced event
     edmp.trigger_event(

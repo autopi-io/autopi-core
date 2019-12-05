@@ -3,7 +3,7 @@ import salt.exceptions
 
 
 # Define the module's virtual name
-__virtualname__ = "time"
+__virtualname__ = "clock"
 
 log = logging.getLogger(__name__)
 
