@@ -238,11 +238,12 @@ def volt_level(samples=1):
 
         readings.append(float(match.group("value")))
 
-    # Calculate average
-    ret["value"] = sum(readings) / len(readings)
-    ret["unit"] = "V"
     ret["duration"] = timer() - start
-
+    ret["unit"] = "V"
+    ret["average"] = sum(readings) / len(readings)
+    ret["minimum"] = min(readings)
+    ret["maximum"] = max(readings)
+    
     return ret
 
 

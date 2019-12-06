@@ -95,7 +95,7 @@ def voltage_calibrated(name, url, samples=3):
         ret["comment"] = "Failed to get actual voltage level: {:}".format(url, res["error"])
         return ret
 
-    actual = res["value"]
+    actual = res["average"]
 
     # Check if actual voltage matches expected
     if round(actual, 1) == round(expected, 1):
@@ -135,7 +135,7 @@ def voltage_calibrated(name, url, samples=3):
         ret["comment"] = "Failed to get actual voltage level: {:}".format(url, res["error"])
         return ret
 
-    actual = res["value"]
+    actual = res["average"]
 
     ret["changes"]["after"] = {
         "expected": expected,
