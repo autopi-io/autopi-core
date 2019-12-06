@@ -2,7 +2,7 @@ import logging
 import salt.exceptions
 import salt_more
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 log = logging.getLogger(__name__)
@@ -191,7 +191,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
     # Helper function to get all scheduled sleep timers
     def timers():
         res = __salt__["schedule.list"](return_yaml=False)
-        ret = {k: v for k, v in res.iteritems() if k.startswith("_sleep_timer")}
+        ret = {k: dict(v, _stamp=datetime.utcnow().isoformat()) for k, v in res.iteritems() if k.startswith("_sleep_timer")}
 
         return ret
 
@@ -233,7 +233,8 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             return_job=False,  # Do not return info to master upon job completion
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={
-                "created": now.isoformat(),
+                "added": now.isoformat(),
+                "expires": (now + timedelta(seconds=period)).isoformat(),
                 "transient": True,  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
                 "revision": 2
             })
