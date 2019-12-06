@@ -2,11 +2,21 @@
 include:
   - checkout.test
 
-# Prevents power off/sleep
-sleep-timers-reset:
+# Simulate engine running event to prevent sleep timers
+fire-engine-running-event:
   module.run:
-    - name: power.sleep_timer
-    - enable: false
+    - name: event.fire
+    - tag: 'vehicle/engine/running'
+    - data: {}
+
+# Calibrate STN voltage
+stn-voltage-calibrated:
+  stn.voltage_calibrated:
+    - url: {{ salt['pillar.get']('reference_voltage_url') }}
+    - samples: 20
+    - retry:
+        attempts: 3
+        interval: 1
 
 # Force update release
 force-release-updated:

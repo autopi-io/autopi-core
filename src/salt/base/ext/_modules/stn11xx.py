@@ -4,6 +4,7 @@ import re
 import salt.exceptions
 
 from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
+from timeit import default_timer as timer
 
 
 # Define the module's virtual name
@@ -13,6 +14,7 @@ UART_WAKE_RULE_PATTERN = "^(?P<min_us>[0-9]+)-(?P<max_us>[0-9]+) us$"
 UART_SLEEP_RULE_PATTERN = "^(?P<sec>[0-9]+) s$"
 VOLT_LEVEL_RULE_PATTERN = "^(?P<volts>[\<\>][0-9]{1,2}\.[0-9]{1,2})V FOR (?P<sec>[0-9]+) s$"
 VOLT_CHANGE_RULE_PATTERN = "^(?P<volts_diff>[+-]?[0-9]{1}\.[0-9]{1,2})V IN (?P<ms>[0-9]+) ms$"
+VOLT_LEVEL_PATTERN = "^(?P<value>[0-9]+\.[0-9]+)(?P<unit>V)$"
 
 log = logging.getLogger(__name__)
 
@@ -211,6 +213,35 @@ def uart_sleep(enable=None, timeout_sec=1200, rule=None):
         "on" if cfg["uart_wake"].startswith("ON") else "off"
     ))
     ret.update(res)
+
+    return ret
+
+
+def volt_level(samples=1):
+    """
+    Determine the current voltage level.
+    """
+
+    ret = {}
+
+    start = timer()
+
+    # Perform readings
+    readings = []
+    for idx in range(samples):
+        res = _execute("ATRV")
+
+        match = re.match(VOLT_LEVEL_PATTERN, res["value"])
+        if not match:
+            raise salt.exceptions.CommandExecutionError(
+                "Failed to parse voltage level result #{:}: {:s}".format(idx, res))
+
+        readings.append(float(match.group("value")))
+
+    # Calculate average
+    ret["value"] = sum(readings) / len(readings)
+    ret["unit"] = "V"
+    ret["duration"] = timer() - start
 
     return ret
 
