@@ -233,7 +233,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             return_job=False,  # Do not return info to master upon job completion
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={
-                "added": now.isoformat(),
+                "created": now.isoformat(),
                 "expires": (now + timedelta(seconds=period)).isoformat(),
                 "transient": True,  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
                 "revision": 2
