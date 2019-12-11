@@ -113,7 +113,7 @@ def voltage_calibrated(name, url, samples=3):
         return ret
 
     # Perform calibration
-    res = salt_more.call_error_safe(__salt__["stn.volt_calibrate"], value="{:0>4}".format(str(round(expected, 2)).replace(".", "")))
+    res = salt_more.call_error_safe(__salt__["stn.volt_calibrate"], value=int(str(round(expected, 2)).replace(".", "")))
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to calibrate voltage: {:}".format(res["error"])

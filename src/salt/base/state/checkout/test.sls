@@ -52,7 +52,7 @@ acc-test:
     - validate:
       - round(ret["x"], 1) == 0.0
       - round(ret["y"], 1) == 0.0
-      - round(ret["z"], 1) == -1.0
+      - round(ret["z"], 1) == 1.0
 
 rpi-test:
   test.module:

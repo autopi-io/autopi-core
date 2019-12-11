@@ -217,7 +217,7 @@ def uart_sleep(enable=None, timeout_sec=1200, rule=None):
     return ret
 
 
-def volt_level(samples=1):
+def volt_level(samples=10):
     """
     Determine the current voltage level.
     """
