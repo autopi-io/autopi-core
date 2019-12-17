@@ -15,7 +15,7 @@ stn-voltage-calibrated:
     - url: {{ salt['pillar.get']('reference_voltage_url') }}
     - samples: 20
     - retry:
-        attempts: 3
+        attempts: 10
         interval: 1
 
 # Force update release
