@@ -18,3 +18,11 @@ pi-user-aliases-configured:
       - alias autopitest="autopi state.sls checkout.test"
     - user: pi
     - group: pi
+
+haveged-installed:
+  pkg.installed:
+    - name: haveged
+
+haveged-service-running:
+  service.running:
+    - name: haveged
