@@ -98,7 +98,8 @@ def heartbeat_handler():
 
                 # Trigger state event
                 edmp.trigger_event({
-                    "trigger": res["last_trigger"]["up"]
+                    "trigger": res["last_trigger"]["up"],
+                    "awaken": res["last_state"]["down"]
                 }, "system/power/{:}{:}".format("_" if new_state in ["booting"] else "", new_state))
 
     finally:
