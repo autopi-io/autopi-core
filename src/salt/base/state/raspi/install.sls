@@ -26,3 +26,9 @@ haveged-installed:
 haveged-service-running:
   service.running:
     - name: haveged
+
+package-manager-reconfigured:
+  cmd.run:
+    - name: "dpkg --configure -a"
+    - onfail:
+      - pkg: haveged
