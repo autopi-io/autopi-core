@@ -1,1 +1,2 @@
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 ACTION=="add", SUBSYSTEM=="usbmisc", DRIVER=="", KERNEL=="cdc-wdm0", RUN+="/bin/sh -c 'echo Y > /sys/class/net/wwan0/qmi/raw_ip'"
