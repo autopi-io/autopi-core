@@ -304,10 +304,10 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
 
 def restart_modem():
     """
-    Restart modem the hard way by stopping and starting its power supply.
-    """
+    Restart modem the hard way by stopping and starting its 3V3 power supply.
 
-    # TODO: We also need to close all open serial conenctions to modem to prevent system freeze
+    WARNING: Any open serial connections to the modem (eg. in ec2x_manager and tracking_manager) may cause the system to freeze or block the TTYs and make new numbering after modem is re-initialized. It is recommended to use 'ec2x.power_off' command instead.
+    """
 
     return __salt__["spm.query"]("restart_3v3")
 
