@@ -36,7 +36,7 @@ def nas_get_cell_location_info():
 
     out = cli("nas-get-cell-location-info")
 
-    return parse(out)
+    return parse(out, skip_first=1)
 
 def nas_get_operator_name():
     """
@@ -54,7 +54,7 @@ def nas_get_system_info():
 
     out = cli("nas-get-system-info")
 
-    return parse(out)
+    return parse(out, skip_first=1)
 
 def nas_get_serving_system():
     """
@@ -63,7 +63,7 @@ def nas_get_serving_system():
 
     out = cli("nas-get-serving-system")
 
-    return parse(out)
+    return parse(out, skip_first=1)
 
 def nas_get_signal_info():
     """
@@ -71,20 +71,21 @@ def nas_get_signal_info():
     """
 
     out = cli("nas-get-signal-info")
-    
-    return parse(out)
 
-def nas_get_signal_strength(rated_only=False):
+    return parse(out, skip_first=1)
+
+def nas_get_signal_strength(rated_only=False, include_desc=False):
     """
     Get signal strength.
 
     Optional arguments:
       - rated_only (bool): Default is 'False'.
+      - include_desc (bool): Default is 'False'.
     """
 
     out = cli("nas-get-signal-strength")
 
-    return parse_signal_strength(out, skip_unrated=rated_only)
+    return parse_signal_strength(out, skip_unrated=rated_only, include_desc=include_desc)
 
 
 #
@@ -108,4 +109,4 @@ def wds_get_packet_statistics():
 
     out = cli("wds-get-packet-statistics")
 
-    return parse(out)
+    return parse(out, skip_first=1)

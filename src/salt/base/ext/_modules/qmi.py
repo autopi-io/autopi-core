@@ -45,15 +45,24 @@ def operator_name():
     return qmilib.nas_get_operator_name()
 
 
-def signal_strength(rated_only=False):
+def serving_system():
+    """
+    Get serving system.
+    """
+
+    return qmilib.nas_get_serving_system()
+
+
+def signal_strength(rated_only=False, include_desc=True):
     """
     Get current signal strength values.
 
     Optional arguments:
       - rated_only (bool): Default is 'False'.
+      - include_desc (bool): Default is 'True'.
     """
 
-    return qmilib.nas_get_signal_strength(rated_only=rated_only)
+    return qmilib.nas_get_signal_strength(rated_only=rated_only, include_desc=include_desc)
 
 
 def system_info():
