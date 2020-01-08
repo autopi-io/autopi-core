@@ -14,9 +14,12 @@ def parse(string, skip_first=0):
     lines = iter(string.split("\n")[skip_first:])
     line = next(lines, None)
     while line != None:
-        next_line = next(lines, None)
-
         kv = line.split(":", 1)
+
+        # Prepare next line
+        line = next(lines, None)
+
+        # Parse current line
         level = kv[0].count("\t")
         key = kv[0].lower().replace(" ", "_").lstrip()
         if not key:
@@ -28,7 +31,7 @@ def parse(string, skip_first=0):
         else:
 
             # Kind of hack fix: Check if next line is a child of current
-            if next_line and level < next_line.count("\t"):
+            if line and level < line.count("\t"):
 
                 # Override value with dictionary
                 val = collections.OrderedDict()
@@ -40,9 +43,6 @@ def parse(string, skip_first=0):
 
         # Update parents by level index
         parents[level + 1] = val
-
-        # Move to next line
-        line = next_line
 
     return ret
 
