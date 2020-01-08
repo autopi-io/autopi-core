@@ -25,6 +25,44 @@ print "-------------------------------------------------------------------------
 print json.dumps(parser.parse_signal_strength(nas_get_signal_strength, include_desc=True), indent=4)
 
 
+nas_get_serving_system = """[/dev/cdc-wdm0] Successfully got serving system:
+	Registration state: 'registered'
+	CS: 'attached'
+	PS: 'attached'
+	Selected network: '3gpp'
+	Radio interfaces: '1'
+		[0]: 'lte'
+	Roaming status: 'on'
+	Data service capabilities: '1'
+		[0]: 'lte'
+	Current PLMN:
+		MCC: '238'
+		MNC: '20'
+		Description: '02;&.'
+	Roaming indicators: '1'
+		[0]: 'on' (lte)
+	3GPP time zone offset: '60' minutes
+	3GPP daylight saving time adjustment: '0' hours
+	3GPP location area code: '65534'
+	3GPP cell ID: '44678925'
+	Detailed status:
+		Status: 'available'
+		Capability: 'cs-ps'
+		HDR Status: 'none'
+		HDR Hybrid: 'no'
+		Forbidden: 'no'
+	LTE tracking area code: '14011'
+	Full operator code info:
+		MCC: '238'
+		MNC: '20'
+		MNC with PCS digit: 'no'"""
+
+print "-------------------------------------------------------------------------------"
+print nas_get_serving_system
+print "-------------------------------------------------------------------------------"
+print json.dumps(parser.parse(nas_get_serving_system, skip_first=1), indent=4)
+
+
 nas_get_system_info = """[/dev/cdc-wdm0] Successfully got system info:
 	GSM service:
 		Status: 'none'

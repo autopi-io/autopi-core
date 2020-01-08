@@ -6,32 +6,43 @@ import signal_rater
 def parse(string, skip_first=0):
     ret = collections.OrderedDict()
 
+    # Keep an index with parents by level
     parents = {}
     for lvl in range(0, skip_first + 1):
         parents[lvl] = ret
 
-    for line in string.split("\n")[skip_first:]:
-        kv = line.split(":", 1)
+    lines = iter(string.split("\n")[skip_first:])
+    line = next(lines, None)
+    while line != None:
+        next_line = next(lines, None)
 
+        kv = line.split(":", 1)
+        level = kv[0].count("\t")
         key = kv[0].lower().replace(" ", "_").lstrip()
         if not key:
             continue
 
-        lvl = kv[0].count("\t")
         val = kv[1].strip().replace("'", "") if len(kv) > 1 else None
-        
         if not val:
             val = collections.OrderedDict()
-
-            # Add to parent
-            parents[lvl][key] = val
-
-            # Update parents index
-            parents[lvl + 1] = val
         else:
 
-            # Add to parent
-            parents[lvl][key] = int(val) if val.isdigit() else val
+            # Kind of hack fix: Check if next line is a child of current
+            if next_line and level < next_line.count("\t"):
+
+                # Override value with dictionary
+                val = collections.OrderedDict()
+            else:
+                val = int(val) if val.isdigit() else val
+
+        # Add value to parent
+        parents[level][key] = val
+
+        # Update parents by level index
+        parents[level + 1] = val
+
+        # Move to next line
+        line = next_line
 
     return ret
 
