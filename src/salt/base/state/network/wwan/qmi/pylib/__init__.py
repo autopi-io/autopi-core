@@ -1,6 +1,6 @@
 import subprocess
 
-from .parser import parse_signal_strength
+from .parser import parse, parse_signal_strength
 
 
 def cli(option, device="/dev/cdc-wdm0"):
@@ -14,7 +14,7 @@ def cli(option, device="/dev/cdc-wdm0"):
       - device (str): Default is '/dev/cdc-wdm0'.
     """
 
-    p = subprocess.Popen(["qmicli", "--silent", "--device={:s}".format(device), "--{:s}".format(name)],
+    p = subprocess.Popen(["qmicli", "--silent", "--device={:s}".format(device), "--{:s}".format(option)],
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out = p.stdout.read()
     err = p.stderr.read()
@@ -36,7 +36,7 @@ def nas_get_cell_location_info():
 
     out = cli("nas-get-cell-location-info")
 
-    return out
+    return parse(out)
 
 def nas_get_operator_name():
     """
@@ -45,7 +45,7 @@ def nas_get_operator_name():
 
     out = cli("nas-get-operator-name")
 
-    return out
+    return parse(out)
 
 def nas_get_system_info():
     """
@@ -54,7 +54,7 @@ def nas_get_system_info():
 
     out = cli("nas-get-system-info")
 
-    return out
+    return parse(out)
 
 def nas_get_serving_system():
     """
@@ -63,7 +63,7 @@ def nas_get_serving_system():
 
     out = cli("nas-get-serving-system")
 
-    return out
+    return parse(out)
 
 def nas_get_signal_info():
     """
@@ -71,18 +71,8 @@ def nas_get_signal_info():
     """
 
     out = cli("nas-get-signal-info")
-
-    """
-    lines = parsing.lines_parser(out)
-
-    ret = {}
-
-    parsing.into_dict_parser(lines[1:], root=ret, value_parser=parsing.number_parser)
-
-    return ret
-    """
-
-    return out
+    
+    return parse(out)
 
 def nas_get_signal_strength(rated_only=False):
     """
@@ -108,7 +98,7 @@ def wds_get_packet_service_status():
 
     out = cli("wds-get-packet-service-status")
 
-    return out
+    return parse(out)
 
 
 def wds_get_packet_statistics():
@@ -118,4 +108,4 @@ def wds_get_packet_statistics():
 
     out = cli("wds-get-packet-statistics")
 
-    return out
+    return parse(out)
