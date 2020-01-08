@@ -37,6 +37,14 @@ def connection_stats():
     return qmilib.wds_get_packet_statistics()
 
 
+def home_network():
+    """
+    Get home network.
+    """
+
+    return qmilib.nas_get_home_network()
+
+
 def operator_name():
     """
     Get operator name data.

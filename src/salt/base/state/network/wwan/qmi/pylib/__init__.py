@@ -1,3 +1,4 @@
+import string
 import subprocess
 
 from .parser import parse, parse_signal_strength
@@ -22,7 +23,9 @@ def cli(option, device="/dev/cdc-wdm0"):
     if err:
         raise Exception(err)
 
-    return out
+    # Filter out any non printable characters
+    printable = set(string.printable)
+    return filter(lambda c: c in printable, out)
 
 
 #
@@ -35,6 +38,15 @@ def nas_get_cell_location_info():
     """
 
     out = cli("nas-get-cell-location-info")
+
+    return parse(out, skip_first=1)
+
+def nas_get_home_network():
+    """
+    Get home network.
+    """
+
+    out = cli("nas-get-home-network")
 
     return parse(out, skip_first=1)
 
