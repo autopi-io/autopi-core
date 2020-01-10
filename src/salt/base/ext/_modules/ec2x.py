@@ -172,7 +172,8 @@ def urc_port_config(value=None):
 
 def power_off(normal=True, **kwargs):
     """
-    Used to shut down the entire EC2x module.
+    Used to shut down the entire EC2x module. The module will restart automatically.
+    A 30-second wait is included after power off to allow the module time to recover before receiving any new command requests.
     """
 
     res = power("AT+QPOWD={:d}".format(normal), **kwargs)

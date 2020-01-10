@@ -75,7 +75,8 @@ def exec_handler(cmd, **kwargs):
 @edmp.register_hook()
 def power_handler(cmd, reason="unknown"):
     """
-    Powers down the EC2X device.
+    Powers down the EC2X device. Afterwards the module will start automatically.
+    A 30-second wait is included after power off to allow the module time to recover before receiving any new requests.
 
     Arguments:
       - cmd (str): AT command to perform the power down.
