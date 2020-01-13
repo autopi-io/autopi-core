@@ -289,23 +289,8 @@ def start(**settings):
         # Initialize serial connection
         conn.init(settings["serial_conn"])
 
-        # TODO: Get workers from pillar data instead of hardcoded here (but wait until all units have engine that accept **kwargs to prevent error)
-        default_workers = [{
-            "name": "sync_time",
-            "interval": 5,  # Run every 5 seconds
-            "kill_upon_success": True,  # Kill after first successful run
-            "messages": [
-                {
-                    "handler": "sync_time",
-                    "kwargs": {
-                        "force": False
-                    }
-                }
-            ]
-        }]
-
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", default_workers))
+        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
         edmp.run()
 
     except Exception:
