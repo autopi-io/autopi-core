@@ -14,3 +14,8 @@ udev-service-restarted-after-usb-rules-changed:
     - name: udev
     - watch:
       - file: /etc/udev/rules.d/99-usb.rules
+
+hwclock-configured:
+  file.managed:
+    - name: /lib/udev/hwclock-set
+    - source: salt://raspi/udev/hwclock-set.jinja

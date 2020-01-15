@@ -32,3 +32,11 @@ package-manager-reconfigured:
     - name: "dpkg --configure -a"
     - onfail:
       - pkg: haveged
+
+fake-hwclock-configured:
+  {%- if salt['pillar.get']('rpi:hwclock:use_fake', default=True) %}
+  pkg.installed:
+  {%- else %}
+  pkg.purged:
+  {%- endif %}
+    - name: fake-hwclock
