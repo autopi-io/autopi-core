@@ -19,3 +19,4 @@ hwclock-configured:
   file.managed:
     - name: /lib/udev/hwclock-set
     - source: salt://raspi/udev/hwclock-set.jinja
+    - template: jinja
