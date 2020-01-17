@@ -21,7 +21,7 @@ class SerialConn(object):
 
                 try:
                     return func(self, *args, **kwargs)
-                except serial.SerialException as se:
+                except SerialException as se:
 
                     if self.close_on_error:
                         log.warning("Closing serial connection due to error: {:}".format(se))
