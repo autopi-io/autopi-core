@@ -40,7 +40,7 @@ def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
         conn.write_line(cmd)
 
         for ready_word in ready_words:
-            res = conn.read(ready_word, error_regex)
+            res = conn.read_until(ready_word, error_regex)
 
             if "error" in res:
                 break
@@ -122,14 +122,14 @@ def upload_handler(cmd, src):
         content = f.read()
 
     conn.write_line(cmd)
-    res = conn.read("CONNECT", error_regex)
+    res = conn.read_until("CONNECT", error_regex)
 
     if "error" in res:
         return res
 
-    conn.serial().write(content)
+    conn.write(content)
 
-    res = conn.read("OK", error_regex, echo_on=False)
+    res = conn.read_until("OK", error_regex, echo_on=False)
 
     return res
 
@@ -146,14 +146,14 @@ def download_handler(cmd, size, dest):
     """
 
     conn.write_line(cmd)
-    res = conn.read("CONNECT", error_regex)
+    res = conn.read_until("CONNECT", error_regex)
 
     if "error" in res:
         return res
 
-    content = conn.serial().read(size)
+    content = conn.read(size)
 
-    res = conn.read("OK", error_regex, echo_on=False)
+    res = conn.read_until("OK", error_regex, echo_on=False)
     if not "error" in res:
         with open(dest, mode="wb") as f:
             f.write(content)

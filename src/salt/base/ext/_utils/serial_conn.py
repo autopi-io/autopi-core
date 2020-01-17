@@ -9,6 +9,35 @@ log = logging.getLogger(__name__)
 
 class SerialConn(object):
 
+    class Decorators(object):
+
+        @staticmethod
+        def ensure_open(func):
+
+            def decorator(self, *args, **kwargs):
+
+                # Ensure connection is open
+                self.ensure_open()
+
+                try:
+                    return func(self, *args, **kwargs)
+                except serial.SerialException as se:
+
+                    if self.close_on_error:
+                        log.warning("Closing serial connection due to error: {:}".format(se))
+
+                        try:
+                            self.close()
+                        except:
+                            log.exception("Failed to close serial connection after error occurred: {:}".format(se))
+
+                    raise
+
+            # Add reference to the original undecorated function
+            decorator.undecorated = func
+
+            return decorator
+
     def __init__(self):
         pass
 
@@ -31,6 +60,8 @@ class SerialConn(object):
             self._serial.timeout = settings["timeout"]
         else:
             raise ValueError("Either 'device' or 'url' must be specified in settings")
+
+        self.close_on_error = settings.get("close_on_error", True)
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self):
@@ -61,34 +92,25 @@ class SerialConn(object):
     def __exit__(self, type, value, traceback):
         self.close()
 
-    def ensured(self, func):
-        '''
-        Decorater method.
-        '''
+    @Decorators.ensure_open
+    def write(self, *args, **kwargs):
+        return self._serial.write(*args, **kwargs)
 
-        def func_wrapper():
-            self.ensure_open()
-            return func()
-
-        return func_wrapper
-
-    def serial(self):
-        self.ensure_open()
-        
-        return self._serial
-
+    @Decorators.ensure_open
     def write_line(self, data, line_terminator="\r"):
         log.debug("TX: %s", repr(data))
-        self.ensure_open()
 
         if line_terminator:
             data += line_terminator
 
         self._serial.write(data)
 
-    def read_line(self, timeout=None):
-        self.ensure_open()
+    @Decorators.ensure_open
+    def read(self, *args, **kwargs):
+        return self._serial.read(*args, **kwargs)
 
+    @Decorators.ensure_open
+    def read_line(self, timeout=None):
         try:
 
             # Use temporary timeout if specified
@@ -129,14 +151,14 @@ class SerialConn(object):
 
         return lines
 
-    def read(self, ready_word, error_regex,
+    @Decorators.ensure_open
+    def read_until(self, ready_word, error_regex,
             line_separator="\n",
             dedicated_ready_line=True,
             ignore_empty_lines=True,
             echo_on=True,
             expect_multi_lines=False,
             return_command=False):
-        self.ensure_open()
 
         ret = {}
 
