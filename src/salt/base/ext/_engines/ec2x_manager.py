@@ -102,7 +102,7 @@ def power_handler(cmd, reason="unknown"):
     # Trigger power off event
     edmp.trigger_event({
         "reason": reason,
-    }, "system/device/ec2x/power_off")
+    }, "system/device/ec2x/powered_off")
 
     return res
 
