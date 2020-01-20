@@ -9,9 +9,14 @@ from serial_conn import SerialConn
 
 log = logging.getLogger(__name__)
 
+context = {
+    "time": {
+        "state": None
+    }
+}
+
 # Message processor
-edmp = EventDrivenMessageProcessor("ec2x",
-    default_hooks={"handler": "exec"})
+edmp = EventDrivenMessageProcessor("ec2x", context=context, default_hooks={"handler": "exec"})
 
 # Serial connection
 conn = SerialConn()
@@ -24,11 +29,36 @@ rtc_time_regex = re.compile('^\+CCLK: "(?P<year>\d{2})/(?P<month>\d{2})/(?P<day>
 network_time_regex = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
 # Example: +QLTS: "2017/01/13,03:40:48+32,0"
 
-context = {
-    "time": {
-        "state": None
-    }
-}
+
+@edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
+
+
+@edmp.register_hook(synchronize=False)
+def connection_handler(close=False):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close serial connection? Default value is 'False'. 
+    """
+
+    ret = {}
+
+    if close:
+        log.warning("Closing serial connection")
+
+        conn.close()
+
+    ret["is_open"] = conn.is_open()
+    ret["settings"] = conn.settings
+
+    return ret
 
 
 def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
@@ -290,7 +320,10 @@ def start(**settings):
         conn.init(settings["serial_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

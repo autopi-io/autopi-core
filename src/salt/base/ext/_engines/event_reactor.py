@@ -1,20 +1,19 @@
-import copy
 import logging
-import salt.loader
 
 from common_util import dict_get, dict_find, dict_filter
-from messaging import EventDrivenMessageProcessor, keyword_resolve
+from messaging import EventDrivenMessageProcessor
 
 
 log = logging.getLogger(__name__)
-
-# Message processor
-edmp = EventDrivenMessageProcessor("reactor")
 
 context = {
     "cache.get": lambda *args, **kwargs: dict_get(context.get("cache", None), *args, **kwargs),
     "cache.find": lambda *args, **kwargs: dict_find(context.get("cache", {}).values(), *args, **kwargs)
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("reactor", context=context)
+
 
 @edmp.register_hook()
 def module_handler(name, *args, **kwargs):
@@ -137,67 +136,11 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting event reactor with settings: {:}".format(settings))
 
-        # Initialize message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []))
-
-        # Setup event matchers
-        for mapping in settings.get("mappings", []):
-
-            # Define function to handle events when matched
-            def on_event(event, match=None, mapping=mapping):
-
-                # Check if conditions is defined
-                conditions = mapping.get("conditions", [])
-                if "condition" in mapping:
-                    conditions.append(mapping["condition"])
-                for index, condition in enumerate(conditions, 1):
-                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": context}):
-                        log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
-                    else:
-                        return
-
-                # Process all action messages
-                actions = mapping.get("actions", [])
-                if "action" in mapping:
-                    actions.append(mapping["action"])
-                for index, message in enumerate(actions, 1):
-
-                    # Check if keyword resolving is enabled
-                    if mapping.get("keyword_resolve", False):
-                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": context})
-                        log.debug("Keyword resolved message: {:}".format(resolved_message))
-
-                    # TODO: Figure out if we can improve performance by processing each message in a dedicated worker thread or process?
-
-                        res = edmp.process(resolved_message)
-                    else:
-                        res = edmp.process(message)
-
-                    if index < len(actions) and mapping.get("chain_conditionally", False):
-                        if not res or isinstance(res, dict) and not res.get("result", True):
-                            if log.isEnabledFor(logging.DEBUG):
-                                log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
-
-                            break
-
-            match_type = None
-            if "regex" in mapping:
-                match_type = "regex"
-            elif "startswith" in mapping:
-                match_type = "startswith"
-            elif "endswith" in mapping:
-                match_type = "endswith"
-            elif "fnmatch" in mapping:
-                match_type = "fnmatch"
-            else:
-                log.error("No valid match type found for mapping: {:}".format(mapping))
-
-                continue  # Skip mapping
-
-            # Register event matcher using above function
-            edmp.register_event_matcher(mapping[match_type], on_event, match_type=match_type)
-
-        # Run message processor
+        # Initialize and run message processor
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

@@ -1,3 +1,4 @@
+import copy
 import datetime
 import logging
 import re
@@ -355,9 +356,9 @@ class MessageProcessor(object):
         Administration workflow to query and manage this processor instance.
 
         Supported commands:
-            - <hook> <list|call> [name]
-            - <worker> <list|show|create|start|kill> [name|*]
-            - <run>
+            - hook list|call <name> [argument]... [<key>=<value>]...
+            - worker list|show|create|start|pause|resume|kill <name> [<key>=<value>]...
+            - run <key>=<value>...
         """
 
         args = message.get("args", [])
@@ -369,7 +370,7 @@ class MessageProcessor(object):
                     "values": [h for h in self._hook_funcs]
                 }
 
-            elif args[1] == "call" and len(args) > 3:
+            elif args[1] == "call":
                 return self._get_func(args[2])(*args[3:], **kwargs)
 
         elif len(args) > 1 and args[0] == "worker":
@@ -525,15 +526,16 @@ class MessageProcessor(object):
 
 class EventDrivenMessageProcessor(MessageProcessor):
 
-    def __init__(self, namespace, default_hooks={}):
+    def __init__(self, namespace, context={}, default_hooks={}):
         MessageProcessor.__init__(self, default_hooks)
         self._namespace = namespace
+        self._context = context
         self._tag_regex = re.compile("^{:s}/req/(?P<id>.+)$".format(namespace))
         self._event_matchers = []
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
 
-    def init(self, __salt__, __opts__, hooks=[], workers=[]):
+    def init(self, __salt__, __opts__, hooks=[], workers=[], reactors=[]):
         """
         Initialize this instance.
         """
@@ -556,7 +558,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             self.process_event,
             match_type="regex")
 
-        # Add specified workflow hooks
+        # Add given workflow hooks
         for hook in hooks or []:
             try:
 
@@ -591,7 +593,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             except Exception:
                 log.exception("Failed to add hook: {:}".format(hook))
 
-        # Add specified workers
+        # Add given workers
         for worker in workers or []:
             messages = worker.pop("messages")
 
@@ -600,6 +602,63 @@ class EventDrivenMessageProcessor(MessageProcessor):
             # Enqueue all messages to worker
             for message in messages:
                 self.dedicated_worker(message, enqueue=worker["name"])
+
+        # Add given reactors
+        for reactor in reactors or []:
+
+            # Define function to handle events when matched
+            def on_event(event, match=None, reactor=reactor):
+
+                # Check if conditions is defined
+                conditions = reactor.get("conditions", [])
+                if "condition" in reactor:
+                    conditions.append(reactor["condition"])
+                for index, condition in enumerate(conditions, 1):
+                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": self._context}):
+                        log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
+                    else:
+                        return
+
+                # Process all action messages
+                actions = reactor.get("actions", [])
+                if "action" in reactor:
+                    actions.append(reactor["action"])
+                for index, message in enumerate(actions, 1):
+
+                    # Check if keyword resolving is enabled
+                    if reactor.get("keyword_resolve", False):
+                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context})
+                        log.debug("Keyword resolved message: {:}".format(resolved_message))
+
+                        # TODO: Figure out if we can improve performance by processing each message in a dedicated worker thread or process?
+
+                        res = self.process(resolved_message)
+                    else:
+                        res = self.process(message)
+
+                    if index < len(actions) and reactor.get("chain_conditionally", False):
+                        if not res or isinstance(res, dict) and not res.get("result", True):
+                            if log.isEnabledFor(logging.DEBUG):
+                                log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
+
+                            break
+
+            match_type = None
+            if "regex" in reactor:
+                match_type = "regex"
+            elif "startswith" in reactor:
+                match_type = "startswith"
+            elif "endswith" in reactor:
+                match_type = "endswith"
+            elif "fnmatch" in reactor:
+                match_type = "fnmatch"
+            else:
+                log.error("No valid match type found for reactor: {:}".format(reactor))
+
+                continue  # Skip reactor
+
+            # Register event matcher using above function
+            self.register_event_matcher(reactor[match_type], on_event, match_type=match_type)
 
     def _custom_match_tag_regex(self, event_tag, search_tag):
         return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)

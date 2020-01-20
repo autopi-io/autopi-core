@@ -6,17 +6,17 @@ from messaging import EventDrivenMessageProcessor
 
 log = logging.getLogger(__name__)
 
-# Message processor
-edmp = EventDrivenMessageProcessor("cloud")
-
-cache = NextCloudCache()
-
 context = {
     "upload": {
         "count": 0,
         "complete": {},
     }
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("cloud", context=context)
+
+cache = NextCloudCache()
 
 
 @edmp.register_hook(synchronize=False)
@@ -123,7 +123,10 @@ def start(**settings):
         cache.setup(**options)
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

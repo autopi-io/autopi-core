@@ -36,6 +36,37 @@ def _parse_dict(data, separator=": ", multiline=False):
     return ret
 
 
+def help():
+    """
+    Shows this help information.
+    """
+    
+    return __salt__["sys.doc"]("ec2x")
+
+
+def context(**kwargs):
+    """
+    Gets current context.
+    """
+
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+
+
+def connection(**kwargs):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close serial connection? Default value is 'False'. 
+
+    Examples:
+      - 'ec2x.connection'
+      - 'ec2x.connection close=True'
+    """
+
+    return client.send_sync(_msg_pack(_handler="connection", **kwargs))
+
+
 def query(cmd, cooldown_delay=None, **kwargs):
     """
     Low-level function to execute AT commands.
@@ -69,14 +100,6 @@ def download(cmd, size, dest, **kwargs):
     """
 
     return client.send_sync(_msg_pack(cmd, size, dest, _handler="download", **kwargs))
-
-
-def help():
-    """
-    Shows this help information.
-    """
-    
-    return __salt__["sys.doc"]("ec2x")
 
 
 def product_info():

@@ -10,15 +10,15 @@ from retrying import retry
 
 log = logging.getLogger(__name__)
 
-# Message processor
-edmp = EventDrivenMessageProcessor("audio", default_hooks={"handler": "play"})
-
 context = {
     "mixer": {
         "settings": None,
         "initialized": False
     }
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("audio", context=context, default_hooks={"handler": "play"})
 
 
 @retry(stop_max_attempt_number=5, wait_fixed=1000)
@@ -191,7 +191,10 @@ def start(**settings):
             log.debug("Initially powered on amplifier chip by setting GPIO pin #%d high", gpio_pin.AMP_ON)
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__)
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

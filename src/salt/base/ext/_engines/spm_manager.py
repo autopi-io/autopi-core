@@ -11,15 +11,15 @@ from spm_conn import SPMConn
 
 log = logging.getLogger(__name__)
 
-# Message processor
-edmp = EventDrivenMessageProcessor("spm", default_hooks={"handler": "query"})
-
-# SPM connection
-conn = SPMConn()
-
 context = {
     "state": None
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"handler": "query"})
+
+# SPM connection
+conn = SPMConn()
 
 
 @edmp.register_hook()
@@ -165,7 +165,10 @@ def start(**settings):
         conn.setup()
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

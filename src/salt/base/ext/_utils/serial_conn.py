@@ -23,7 +23,7 @@ class SerialConn(object):
                     return func(self, *args, **kwargs)
                 except SerialException as se:
 
-                    if self.close_on_error:
+                    if self._settings.get("close_on_error", True):
                         log.warning("Closing serial connection due to error: {:}".format(se))
 
                         try:
@@ -61,7 +61,11 @@ class SerialConn(object):
         else:
             raise ValueError("Either 'device' or 'url' must be specified in settings")
 
-        self.close_on_error = settings.get("close_on_error", True)
+        self._settings = settings
+
+    @property
+    def settings(self):
+        return self._settings
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self):
