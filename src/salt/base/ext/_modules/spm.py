@@ -58,9 +58,23 @@ def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
 
 def manage(*args, **kwargs):
     """
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - hook list|call <name> [argument]... [<key>=<value>]...
+      - worker list|show|start|pause|resume|kill <name>
+      - run <key>=<value>...
+
     Examples:
-      - 'spm.manage handler'        Lists all available handlers.
-      - 'spm.manage worker list *'  Lists all existing worker threads.
+      - 'spm.manage hook list'
+      - 'spm.manage hook call query_handler status'
+      - 'spm.manage worker list *'
+      - 'spm.manage worker show *'
+      - 'spm.manage worker start *'
+      - 'spm.manage worker pause *'
+      - 'spm.manage worker resume *'
+      - 'spm.manage worker kill *'
+      - 'spm.manage run handler="query" args="[\"status\"]"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

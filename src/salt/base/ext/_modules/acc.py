@@ -72,7 +72,23 @@ def context(**kwargs):
 
 def manage(*args, **kwargs):
     """
-    Example: 'acc.manage worker list *'
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - hook list|call <name> [argument]... [<key>=<value>]...
+      - worker list|show|start|pause|resume|kill <name>
+      - run <key>=<value>...
+
+    Examples:
+      - 'acc.manage hook list'
+      - 'acc.manage hook call query_handler xyz'
+      - 'acc.manage worker list *'
+      - 'acc.manage worker show *'
+      - 'acc.manage worker start *'
+      - 'acc.manage worker pause *'
+      - 'acc.manage worker resume *'
+      - 'acc.manage worker kill *'
+      - 'acc.manage run handler="query" args="[\"xyz\"]"' returner="cloud"
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

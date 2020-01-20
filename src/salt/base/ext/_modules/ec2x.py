@@ -906,7 +906,23 @@ def list_sms():
 
 def manage(*args, **kwargs):
     """
-    Example: ec2x.manage worker list *
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - hook list|call <name> [argument]... [<key>=<value>]...
+      - worker list|show|start|pause|resume|kill <name>
+      - run <key>=<value>...
+
+    Examples:
+      - 'ec2x.manage hook list'
+      - 'ec2x.manage hook call exec_handler ATI'
+      - 'ec2x.manage worker list *'
+      - 'ec2x.manage worker show *'
+      - 'ec2x.manage worker start *'
+      - 'ec2x.manage worker pause *'
+      - 'ec2x.manage worker resume *'
+      - 'ec2x.manage worker kill *'
+      - 'ec2x.manage run handler="exec" args="[\"ATI\"]" returner="cloud"' 
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

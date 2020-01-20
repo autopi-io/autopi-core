@@ -36,7 +36,23 @@ def status(**kwargs):
 
 def manage(*args, **kwargs):
     """
-    Example: tracking.manage worker list *
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - hook list|call <name> [argument]... [<key>=<value>]...
+      - worker list|show|start|pause|resume|kill <name>
+      - run <key>=<value>...
+
+    Examples:
+      - 'tracking.manage hook list'
+      - 'tracking.manage hook call gnss_query_handler location'
+      - 'tracking.manage worker list *'
+      - 'tracking.manage worker show *'
+      - 'tracking.manage worker start *'
+      - 'tracking.manage worker pause *'
+      - 'tracking.manage worker resume *'
+      - 'tracking.manage worker kill *'
+      - 'tracking.manage run handler="gnss_query" args="[\"location\"]" converter="gnss_location_to_position" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
