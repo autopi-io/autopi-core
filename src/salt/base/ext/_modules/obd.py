@@ -296,9 +296,9 @@ def manage(*args, **kwargs):
     Runtime management of the underlying service instance.
 
     Supported commands:
-      - hook list|call <name> [argument]... [<key>=<value>]...
-      - worker list|show|start|pause|resume|kill <name>
-      - run <key>=<value>...
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
 
     Examples:
       - 'obd.manage hook list'
@@ -309,7 +309,7 @@ def manage(*args, **kwargs):
       - 'obd.manage worker pause *'
       - 'obd.manage worker resume *'
       - 'obd.manage worker kill *'
-      - 'obd.manage run handler="query" args="[\"ELM_VOLTAGE\"]"' converter="battery" returner="cloud"
+      - 'obd.manage run handler="query" args="[\"ELM_VOLTAGE\"]" converter="battery" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

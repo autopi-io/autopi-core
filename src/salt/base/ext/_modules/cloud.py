@@ -62,9 +62,9 @@ def manage(*args, **kwargs):
     Runtime management of the underlying service instance.
 
     Supported commands:
-      - hook list|call <name> [argument]... [<key>=<value>]...
-      - worker list|show|start|pause|resume|kill <name>
-      - run <key>=<value>...
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
 
     Examples:
       - 'cloud.manage hook list'

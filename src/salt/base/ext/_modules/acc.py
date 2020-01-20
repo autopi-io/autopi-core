@@ -75,9 +75,9 @@ def manage(*args, **kwargs):
     Runtime management of the underlying service instance.
 
     Supported commands:
-      - hook list|call <name> [argument]... [<key>=<value>]...
-      - worker list|show|start|pause|resume|kill <name>
-      - run <key>=<value>...
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
 
     Examples:
       - 'acc.manage hook list'
@@ -88,7 +88,7 @@ def manage(*args, **kwargs):
       - 'acc.manage worker pause *'
       - 'acc.manage worker resume *'
       - 'acc.manage worker kill *'
-      - 'acc.manage run handler="query" args="[\"xyz\"]"' returner="cloud"
+      - 'acc.manage run handler="query" args="[\"xyz\"]" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
