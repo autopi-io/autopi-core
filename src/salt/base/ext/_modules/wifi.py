@@ -1,5 +1,6 @@
 import logging
 import parsing
+import salt.exceptions
 
 from iw_parse import get_interfaces
 
@@ -30,9 +31,11 @@ def status(interface="wlan0"):
       - interface (str): Default is 'wlan0'.
     """
 
-    res = __salt__["cmd.run"]("wpa_cli -i {:} status".format(interface))
-    ret = parsing.into_dict_parser(res, separator="=")
+    res = __salt__["cmd.run_all"]("wpa_cli -i {:} status".format(interface))
+    if res["retcode"] != 0:
+        raise salt.exceptions.CommandExecutionError(res["stderr"])
 
+    ret = parsing.into_dict_parser(res["stdout"], separator="=")
     return ret
 
 
