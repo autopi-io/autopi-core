@@ -1,3 +1,4 @@
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 APN={{ salt['grains.get']('qmi:apn', default='internet') }}
 {%- if salt['grains.get']('qmi:user') %}
 APN_USER={{ salt['grains.get']('qmi:user') }}

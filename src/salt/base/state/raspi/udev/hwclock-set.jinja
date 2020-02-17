@@ -1,0 +1,51 @@
+#!/bin/sh
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
+# Reset the System Clock to UTC if the hardware clock from which it
+# was copied by the kernel was in localtime.
+
+dev=$1
+{% if salt['pillar.get']('rpi:hwclock:rtc_to_sys', default=False) %}
+#if [ -e /run/systemd/system ] ; then
+#    exit 0
+#fi
+{%- else %}
+if [ -e /run/systemd/system ] ; then
+    exit 0
+fi
+{%- endif %}
+
+if [ -e /run/udev/hwclock-set ]; then
+    exit 0
+fi
+
+if [ -f /etc/default/rcS ] ; then
+    . /etc/default/rcS
+fi
+
+# These defaults are user-overridable in /etc/default/hwclock
+BADYEAR=no
+HWCLOCKACCESS=yes
+HWCLOCKPARS=
+HCTOSYS_DEVICE=rtc0
+if [ -f /etc/default/hwclock ] ; then
+    . /etc/default/hwclock
+fi
+
+if [ yes = "$BADYEAR" ] ; then
+	{%- if salt['pillar.get']('rpi:hwclock:sys_to_rtc', default=True) %}
+    /sbin/hwclock --rtc=$dev --systz --badyear
+    {%- else %}
+#   /sbin/hwclock --rtc=$dev --systz --badyear
+    {%- endif %}
+    /sbin/hwclock --rtc=$dev --hctosys --badyear
+else
+	{%- if salt['pillar.get']('rpi:hwclock:sys_to_rtc', default=True) %}
+    /sbin/hwclock --rtc=$dev --systz
+    {%- else %}
+#   /sbin/hwclock --rtc=$dev --systz
+    {%- endif %}
+    /sbin/hwclock --rtc=$dev --hctosys
+fi
+
+# Note 'touch' may not be available in initramfs
+> /run/udev/hwclock-set

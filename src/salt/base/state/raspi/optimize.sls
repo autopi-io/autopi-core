@@ -26,13 +26,6 @@ raspi-config-masked:
   service.masked:
     - name: raspi-config
 
-hciuart-disabled:
-  service.disabled:
-    - name: hciuart
-hciuart-masked:
-  service.masked:
-    - name: hciuart
-
 alsa-restore-disabled:
   service.disabled:
     - name: alsa-restore

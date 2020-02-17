@@ -32,7 +32,7 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
-def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
+def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90):
     """
     Flashes new SPM firmware to ATtiny.
     """
@@ -50,7 +50,7 @@ def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
 
     # Flash firmware
     if not check_only:
-        res = client.send_sync(_msg_pack(hex_file, no_write=False, _handler="flash_firmware"), timeout=timeout)
+        res = client.send_sync(_msg_pack(hex_file, part_id, no_write=False, _handler="flash_firmware"), timeout=timeout)
         ret["output"] = res.get("output", None)
 
     return ret
@@ -58,9 +58,23 @@ def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
 
 def manage(*args, **kwargs):
     """
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
+
     Examples:
-      - 'spm.manage handler'        Lists all available handlers.
-      - 'spm.manage worker list *'  Lists all existing worker threads.
+      - 'spm.manage hook list'
+      - 'spm.manage hook call query_handler status'
+      - 'spm.manage worker list *'
+      - 'spm.manage worker show *'
+      - 'spm.manage worker start *'
+      - 'spm.manage worker pause *'
+      - 'spm.manage worker resume *'
+      - 'spm.manage worker kill *'
+      - 'spm.manage run handler="query" args="[\"status\"]"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

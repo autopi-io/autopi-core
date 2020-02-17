@@ -64,7 +64,7 @@ warnings-disabled:
     - repl: "avoid_warnings=1"
     - append_if_not_found: true
 
-minimal-memory-split:
+gpu-memory-configured:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?gpu_mem=.*$"
@@ -97,6 +97,20 @@ hciuart:
   service.dead:
     - enable: false
   {%- endif %}
+
+{% set _rtc = salt['pillar.get']('rpi:boot:rtc', default='') %}
+rtc-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=i2c-rtc.*$"
+    {%- if _rtc %}
+    - repl: "dtoverlay=i2c-rtc,{{ _rtc }}"
+    - append_if_not_found: true
+    {%- else %}
+    - repl: "#dtoverlay=i2c-rtc,"
+    {%- endif %}
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
 
 reboot-upon-changes-required:
   module.wait:

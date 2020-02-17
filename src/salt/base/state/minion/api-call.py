@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
+
 from __future__ import print_function
 
 import json

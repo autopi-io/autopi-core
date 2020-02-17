@@ -29,7 +29,7 @@ context = {
 }
 
 # Message processor
-edmp = EventDrivenMessageProcessor("acc", default_hooks={"workflow": "extended", "handler": "query"})
+edmp = EventDrivenMessageProcessor("acc", context=context, default_hooks={"workflow": "extended", "handler": "query"})
 
 # MMA8X5X I2C connection
 conn = MMA8X5XConn(stats=context)
@@ -44,6 +44,28 @@ def context_handler():
     """
 
     return context
+
+
+@edmp.register_hook(synchronize=False)
+def connection_handler(close=False):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close MMA8X5X connection? Default value is 'False'. 
+    """
+
+    ret = {}
+
+    if close:
+        log.warning("Closing MMA8X5X connection")
+
+        conn.close()
+
+    ret["is_open"] = conn.is_open()
+    ret["settings"] = conn.settings
+
+    return ret
 
 
 @edmp.register_hook()
@@ -105,7 +127,7 @@ def interrupt_query_handler(cmd, *args, **kwargs):
 
 
 @edmp.register_hook()
-def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, interrupt_driven=False, file=None):
+def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, interrupt_driven=True, file=None):
     """
     Dumps raw XYZ readings to screen or file.
 
@@ -117,7 +139,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
       - decimals (int): How many decimals to calculate? Default value is '4'.
       - timestamp (bool): Add timestamp to each sample? Default value is 'True'.
       - sound (bool): Play sound when starting and stopping recording? Default value is 'True'.
-      - interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is 'False'.
+      - interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is 'True'.
     """
 
     # Validate input
@@ -153,10 +175,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
             __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
         # Apply specified settings
-        conn.config({
-            "range": range,
-            "data_rate": rate,
-        })
+        conn.configure(range=range, data_rate=rate)
 
         # Run for specified duration
         start = timer()
@@ -183,10 +202,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
     finally:
 
         # Restore original settings
-        conn.config({
-            "range": orig_range,
-            "data_rate": orig_rate,
-        })
+        conn.configure(range=orig_range, data_rate=orig_rate)
 
         # Play sound to indicate recording has ended
         if sound:
@@ -266,11 +282,14 @@ def start(**settings):
         gpio.setup(gpio_pin.ACC_INT1, gpio.IN)
         gpio.add_event_detect(gpio_pin.ACC_INT1, gpio.FALLING, callback=lambda ch: interrupt_event.set())
 
-        # Configure connection
-        conn.setup(settings["mma8x5x_conn"])
+        # Initialize MMA8X5X connection
+        conn.init(settings["mma8x5x_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

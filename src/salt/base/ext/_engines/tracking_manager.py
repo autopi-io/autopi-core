@@ -10,12 +10,6 @@ from serial_conn import SerialConn
 
 log = logging.getLogger(__name__)
 
-# Message processor
-edmp = EventDrivenMessageProcessor("tracking", default_hooks={"workflow": "extended"})
-
-# Serial connection
-conn = SerialConn()
-
 context = {
     "position": {
         "state": None,  # Available states: unknown|standstill|moving
@@ -24,6 +18,12 @@ context = {
         "last_reported": None,
     }
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("tracking", context=context, default_hooks={"workflow": "extended"})
+
+# Serial connection
+conn = SerialConn()
 
 
 @edmp.register_hook(synchronize=False)
@@ -228,7 +228,10 @@ def start(**settings):
         conn.init(settings["serial_conn"])
 
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

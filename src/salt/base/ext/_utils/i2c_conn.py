@@ -35,8 +35,8 @@ class I2CConn(object):
 
         self.on_written = None
 
-    def setup(self, settings):
-        log.debug("Configuring I2C connection using settings: %s", settings)
+    def init(self, settings):
+        log.debug("Initializing I2C connection using settings: %s", settings)
 
         if not "port" in settings:
             raise ValueError("I2C 'port' must be specified in settings")

@@ -11,7 +11,7 @@ def __virtual__():
     return __virtualname__
 
 
-def firmware_flashed(name, version):
+def firmware_flashed(name, part_id, version):
     """
     Ensures a specific SPM firmware version is flashed onto the ATtiny.
     """
@@ -41,7 +41,7 @@ def firmware_flashed(name, version):
         ret["comment"] = "Firmware will be flashed"
         return ret
 
-    res = salt_more.call_error_safe(__salt__["spm.flash_firmware"], name, confirm=True, check_only=False)
+    res = salt_more.call_error_safe(__salt__["spm.flash_firmware"], name, part_id, confirm=True, check_only=False)
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to flash firmware: {:}".format(res["error"])

@@ -26,6 +26,29 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
+def context(**kwargs):
+    """
+    Gets current context.
+    """
+
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+
+
+def connection(**kwargs):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close MMA8X5X connection? Default value is 'False'. 
+
+    Examples:
+      - 'acc.connection'
+      - 'acc.connection close=True'
+    """
+
+    return client.send_sync(_msg_pack(_handler="connection", **kwargs))
+
+
 def query(cmd, *args, **kwargs):
     """
     Queries a given accelerometer command.
@@ -56,23 +79,31 @@ def dump(**kwargs):
       - decimals (int): How many decimals to calculate? Default value is '4'.
       - timestamp (bool): Add timestamp to each sample? Default value is 'True'.
       - sound (bool): Play sound when starting and stopping recording? Default value is 'True'.
-      - interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is 'False'.
+      - interrupt_driven (bool): Await hardware data ready signal before reading a sample? Default value is 'True'.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))
 
 
-def context(**kwargs):
-    """
-    Gets current context.
-    """
-
-    return client.send_sync(_msg_pack(_handler="context", **kwargs))
-
-
 def manage(*args, **kwargs):
     """
-    Example: 'acc.manage worker list *'
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
+
+    Examples:
+      - 'acc.manage hook list'
+      - 'acc.manage hook call query_handler xyz'
+      - 'acc.manage worker list *'
+      - 'acc.manage worker show *'
+      - 'acc.manage worker start *'
+      - 'acc.manage worker pause *'
+      - 'acc.manage worker resume *'
+      - 'acc.manage worker kill *'
+      - 'acc.manage run handler="query" args="[\"xyz\"]" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

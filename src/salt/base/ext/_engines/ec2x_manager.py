@@ -9,9 +9,14 @@ from serial_conn import SerialConn
 
 log = logging.getLogger(__name__)
 
+context = {
+    "time": {
+        "state": None
+    }
+}
+
 # Message processor
-edmp = EventDrivenMessageProcessor("ec2x",
-    default_hooks={"handler": "exec"})
+edmp = EventDrivenMessageProcessor("ec2x", context=context, default_hooks={"handler": "exec"})
 
 # Serial connection
 conn = SerialConn()
@@ -24,11 +29,36 @@ rtc_time_regex = re.compile('^\+CCLK: "(?P<year>\d{2})/(?P<month>\d{2})/(?P<day>
 network_time_regex = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<day>\d{2}),(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(?P<tz>[+|-]\d+),(?P<dst>\d+)"$')
 # Example: +QLTS: "2017/01/13,03:40:48+32,0"
 
-context = {
-    "time": {
-        "state": None
-    }
-}
+
+@edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
+
+
+@edmp.register_hook(synchronize=False)
+def connection_handler(close=False):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close serial connection? Default value is 'False'. 
+    """
+
+    ret = {}
+
+    if close:
+        log.warning("Closing serial connection")
+
+        conn.close()
+
+    ret["is_open"] = conn.is_open()
+    ret["settings"] = conn.settings
+
+    return ret
 
 
 def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
@@ -40,7 +70,7 @@ def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
         conn.write_line(cmd)
 
         for ready_word in ready_words:
-            res = conn.read(ready_word, error_regex)
+            res = conn.read_until(ready_word, error_regex)
 
             if "error" in res:
                 break
@@ -75,7 +105,8 @@ def exec_handler(cmd, **kwargs):
 @edmp.register_hook()
 def power_handler(cmd, reason="unknown"):
     """
-    Powers down the EC2X device.
+    Powers down the EC2X device. Afterwards the module will start automatically.
+    A 30-second wait is included after power off to allow the module time to recover before receiving any new requests.
 
     Arguments:
       - cmd (str): AT command to perform the power down.
@@ -101,7 +132,7 @@ def power_handler(cmd, reason="unknown"):
     # Trigger power off event
     edmp.trigger_event({
         "reason": reason,
-    }, "system/device/ec2x/power_off")
+    }, "system/device/ec2x/powered_off")
 
     return res
 
@@ -121,14 +152,14 @@ def upload_handler(cmd, src):
         content = f.read()
 
     conn.write_line(cmd)
-    res = conn.read("CONNECT", error_regex)
+    res = conn.read_until("CONNECT", error_regex)
 
     if "error" in res:
         return res
 
-    conn.serial().write(content)
+    conn.write(content)
 
-    res = conn.read("OK", error_regex, echo_on=False)
+    res = conn.read_until("OK", error_regex, echo_on=False)
 
     return res
 
@@ -145,14 +176,14 @@ def download_handler(cmd, size, dest):
     """
 
     conn.write_line(cmd)
-    res = conn.read("CONNECT", error_regex)
+    res = conn.read_until("CONNECT", error_regex)
 
     if "error" in res:
         return res
 
-    content = conn.serial().read(size)
+    content = conn.read(size)
 
-    res = conn.read("OK", error_regex, echo_on=False)
+    res = conn.read_until("OK", error_regex, echo_on=False)
     if not "error" in res:
         with open(dest, mode="wb") as f:
             f.write(content)
@@ -288,23 +319,11 @@ def start(**settings):
         # Initialize serial connection
         conn.init(settings["serial_conn"])
 
-        # TODO: Get workers from pillar data instead of hardcoded here (but wait until all units have engine that accept **kwargs to prevent error)
-        default_workers = [{
-            "name": "sync_time",
-            "interval": 5,  # Run every 5 seconds
-            "kill_upon_success": True,  # Kill after first successful run
-            "messages": [
-                {
-                    "handler": "sync_time",
-                    "kwargs": {
-                        "force": False
-                    }
-                }
-            ]
-        }]
-
         # Initialize and run message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", default_workers))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.run()
 
     except Exception:

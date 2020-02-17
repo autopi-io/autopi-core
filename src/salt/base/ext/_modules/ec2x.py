@@ -36,6 +36,37 @@ def _parse_dict(data, separator=": ", multiline=False):
     return ret
 
 
+def help():
+    """
+    Shows this help information.
+    """
+    
+    return __salt__["sys.doc"]("ec2x")
+
+
+def context(**kwargs):
+    """
+    Gets current context.
+    """
+
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+
+
+def connection(**kwargs):
+    """
+    Manages current connection.
+
+    Optional arguments:
+      - close (bool): Close serial connection? Default value is 'False'. 
+
+    Examples:
+      - 'ec2x.connection'
+      - 'ec2x.connection close=True'
+    """
+
+    return client.send_sync(_msg_pack(_handler="connection", **kwargs))
+
+
 def query(cmd, cooldown_delay=None, **kwargs):
     """
     Low-level function to execute AT commands.
@@ -69,14 +100,6 @@ def download(cmd, size, dest, **kwargs):
     """
 
     return client.send_sync(_msg_pack(cmd, size, dest, _handler="download", **kwargs))
-
-
-def help():
-    """
-    Shows this help information.
-    """
-    
-    return __salt__["sys.doc"]("ec2x")
 
 
 def product_info():
@@ -172,7 +195,8 @@ def urc_port_config(value=None):
 
 def power_off(normal=True, **kwargs):
     """
-    Used to shut down the entire EC2x module.
+    Used to shut down the entire EC2x module. The module will restart automatically.
+    A 30-second wait is included after power off to allow the module time to recover before receiving any new command requests.
     """
 
     res = power("AT+QPOWD={:d}".format(normal), **kwargs)
@@ -905,7 +929,23 @@ def list_sms():
 
 def manage(*args, **kwargs):
     """
-    Example: ec2x.manage worker list *
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
+
+    Examples:
+      - 'ec2x.manage hook list'
+      - 'ec2x.manage hook call exec_handler ATI'
+      - 'ec2x.manage worker list *'
+      - 'ec2x.manage worker show *'
+      - 'ec2x.manage worker start *'
+      - 'ec2x.manage worker pause *'
+      - 'ec2x.manage worker resume *'
+      - 'ec2x.manage worker kill *'
+      - 'ec2x.manage run handler="exec" args="[\"ATI\"]" returner="cloud"' 
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

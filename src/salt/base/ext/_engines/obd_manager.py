@@ -24,18 +24,6 @@ log = logging.getLogger(__name__)
 
 home_dir = "/opt/autopi/obd"
 
-# Message processor
-edmp = EventDrivenMessageProcessor("obd", default_hooks={"workflow": "extended", "handler": "query"})
-
-# OBD connection
-conn = OBDConn()
-
-# ELM327 proxy instance
-proxy = elm327_proxy.ELM327Proxy()
-
-# Loaded CAN databases indexed by procotol ID
-can_db_cache = {}
-
 context = {
     "battery": {
         "state": "",
@@ -59,6 +47,18 @@ context = {
         }
     }
 }
+
+# Message processor
+edmp = EventDrivenMessageProcessor("obd", context=context, default_hooks={"workflow": "extended", "handler": "query"})
+
+# OBD connection
+conn = OBDConn()
+
+# ELM327 proxy instance
+proxy = elm327_proxy.ELM327Proxy()
+
+# Loaded CAN databases indexed by procotol ID
+can_db_cache = {}
 
 
 @edmp.register_hook(synchronize=False)
@@ -1058,7 +1058,10 @@ def start(**settings):
             log.debug("Battery critical limit is {:}V in {:} sec(s)".format(context["battery"]["critical_limit"], context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE]))
 
         # Initialize message processor
-        edmp.init(__salt__, __opts__, hooks=settings.get("hooks", []), workers=settings.get("workers", []))
+        edmp.init(__salt__, __opts__,
+            hooks=settings.get("hooks", []),
+            workers=settings.get("workers", []),
+            reactors=settings.get("reactors", []))
         edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection

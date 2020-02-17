@@ -1,3 +1,4 @@
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 {%- for key, val in salt['pillar.get']('minion_ext:host_aliases', default={}).iteritems() %}
 {{ key }} {{ val }}
 {%- endfor %}

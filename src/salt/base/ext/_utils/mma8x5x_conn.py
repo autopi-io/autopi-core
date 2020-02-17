@@ -271,7 +271,8 @@ class MMA8X5XConn(I2CConn):
     def __init__(self, stats={}):
         super(MMA8X5XConn, self).__init__()
 
-        self.stats = stats
+        self._stats = stats
+        self._settings = {}
 
         # Default values
         self._data_bits = 10
@@ -280,41 +281,52 @@ class MMA8X5XConn(I2CConn):
         self._fifo_mode = FIFO_MODES[FIFO_MODE_DEFAULT]
         self._fifo_watermark = FIFO_WATERMARK_DEFAULT
 
-    def setup(self, settings):
-        super(MMA8X5XConn, self).setup(settings)
+    def init(self, settings):
+        super(MMA8X5XConn, self).init(settings)
 
         self._data_bits = settings.get("data_bits", self._data_bits)
+        self._settings = settings
 
-        self.config(settings)
+    @property
+    def settings(self):
+        return self._settings
 
-    def config(self, settings):
+    def configure(self, **settings):
         try:
 
             # Ensure in standby mode
             self.active(value=False)
 
-            # Setup specified range or use default
+            # Set specified range or use default
             self.range(value=settings.get("range", self._range))
 
-            # Setup specified data rate or use default
+            # Set specified data rate or use default
             self.data_rate(value=settings.get("data_rate", self._data_rate))
 
-            # Setup FIFO mode or use default
+            # Set specified FIFO mode or use default
             # NOTE: Must be disabled before able to change between two enabled modes
             self.fifo_mode(value=self._fifo_mode)  # Always disable
             if "fifo_mode" in settings and settings["fifo_mode"] != self._fifo_mode:
                 self.fifo_mode(value=settings["fifo_mode"])
 
-            # Setup FIFO watermark or use default
+            # Configure specified FIFO watermark or use default
             self.fifo_watermark(value=settings.get("fifo_watermark", self._fifo_watermark))
 
-            # Setup interrupts if defined
+            # Configure interrupts if defined
             for name, pin in settings.get("interrupts", {}).iteritems():
                 self.intr_pin(name, value=pin)
                 self.intr(name, value=True)
 
+            # Ensure settings are updated
+            self._settings.update(settings)
+
         finally:
             self.active(value=True)
+
+    def open(self):
+        super(MMA8X5XConn, self).open()
+
+        self.configure(**self._settings)
 
     def mode(self):
         """
@@ -408,7 +420,7 @@ class MMA8X5XConn(I2CConn):
         status = self.fifo_status()
 
         # Update buffer statistics
-        stats = self.stats.setdefault("buffer", {})
+        stats = self._stats.setdefault("buffer", {})
         stats["await_readout"] = status["sample_count"]
         if status["overflowed"]:
             stats["overflow"] = stats.get("overflow", 0) + 1

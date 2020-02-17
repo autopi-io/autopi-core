@@ -302,12 +302,24 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
     }
 
 
-def restart_modem():
+def restart_3v3(confirm=False, reason="unknown"):
     """
-    Restart modem the hard way by stopping and starting its power supply.
+    Restart the 3V3 power supply. This will restart the modem and also the accelerometer the hard way.
+
+    WARNING: Any open serial connections to the modem (eg. in ec2x_manager and tracking_manager) may cause the system to freeze or block the TTYs and make new numbering after modem is re-initialized. It is recommended to use 'ec2x.power_off' to restart modem.
+    
+    Optional arguments:
+      - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
+      - reason (str): Reason code that tells why the 3V3 supply is restarted. Default is 'unknown'.
     """
 
-    # TODO: We also need to close all open serial conenctions to modem to prevent system freeze
+    if not confirm:
+        raise salt.exceptions.CommandExecutionError(
+            "This command should be used with caution and only if the description in the documentation is understood - add parameter 'confirm=true' to continue anyway")
 
-    return __salt__["spm.query"]("restart_3v3")
+    ret = __salt__["spm.query"]("restart_3v3")
 
+    # Fire a 3V3 restarted event
+    __salt__["event.fire"]({"reason": reason}, "system/power/3v3/restarted")
+
+    return ret

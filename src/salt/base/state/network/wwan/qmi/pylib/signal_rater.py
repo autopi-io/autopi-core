@@ -1,11 +1,18 @@
 
-
 ratings = {
     0:   "none",
     1:   "poor",
     2:   "fair",
     3:   "good",
     4:   "excellent",
+}
+
+rating_descs = {
+    "rssi": "Received Signal Strength Indicator (3G, CDMA/UMTS/EV-DO)",
+    "ecio": "Energy to Interference Ratio (3G, CDMA/UMTS/EV-DO)",
+    "rsrp": "Reference Signal Received Power (4G LTE)",
+    "rsrq": "Reference Signal Received Quality (4G LTE)",
+    "sinr": "Signal to Interference-plus-Noise Ratio (4G LTE)",
 }
 
 

@@ -36,3 +36,17 @@ voltage-level-sleep-trigger:
     - name: volt_level_sleep
     - enable: True
     - rule: "<{{ salt['pillar.get']('power:safety_cut-out:voltage', default='12.20') }}V FOR {{ salt['pillar.get']('power:safety_cut-out:duration', default='300') }} s"
+
+{%- if salt["pillar.get"]("power:firmware:version") in ["2.0"] %}
+ext-wake-trigger:
+  stn.power_trigger:
+    - name: ext_wake
+    - enabled: True
+    - rule: "HIGH FOR 500 ms"
+
+ext-sleep-trigger:
+  stn.power_trigger:
+    - name: ext_sleep
+    - enabled: True
+    - rule: "LOW FOR 3000 ms"
+{%- endif %}

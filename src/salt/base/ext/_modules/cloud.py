@@ -59,9 +59,23 @@ def status(**kwargs):
 
 def manage(*args, **kwargs):
     """
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
+
     Examples:
-      - 'cloud.manage handler'        Lists all available handlers.
-      - 'cloud.manage worker list *'  Lists all existing worker threads.
+      - 'cloud.manage hook list'
+      - 'cloud.manage hook call status_handler'
+      - 'cloud.manage worker list *'
+      - 'cloud.manage worker show *'
+      - 'cloud.manage worker start *'
+      - 'cloud.manage worker pause *'
+      - 'cloud.manage worker resume *'
+      - 'cloud.manage worker kill *'
+      - 'cloud.manage run handler="cache" args="[\"list_queues\"]"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

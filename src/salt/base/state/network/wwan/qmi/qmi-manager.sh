@@ -1,4 +1,5 @@
 #!/bin/bash
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 
 
 # Constants

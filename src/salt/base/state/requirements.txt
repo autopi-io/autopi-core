@@ -1,3 +1,4 @@
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 pip>=10.0.1
 pyserial==3.4
 redis==2.10.6
