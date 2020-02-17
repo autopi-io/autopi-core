@@ -146,9 +146,6 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
         log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
 
-        # Re-setup SPM connection
-        conn.setup() # TODO HN
-
     return ret
 
 
