@@ -285,7 +285,7 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
             # TODO: Delay reboot 10 secs to allow cloud upload of above event
 
             # Ensure a heatbeat has just been sent to prevent heartbeat timeout during reboot
-            __salt__["spm.query"]("noop")
+            __salt__["spm.query"]("heartbeat")
 
             # Perform reboot
             return __salt__["system.reboot"]()
