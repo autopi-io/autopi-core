@@ -10,6 +10,8 @@ from timeit import default_timer as timer
 # Define the module's virtual name
 __virtualname__ = "stn"
 
+EXT_WAKE_RULE_PATTERN = "^(?:HIGH|LOW) FOR (?P<ms>[0-9]+) ms$"
+EXT_SLEEP_RULE_PATTERN = "^(?:HIGH|LOW) FOR (?P<ms>[0-9]+) ms$"
 UART_WAKE_RULE_PATTERN = "^(?P<min_us>[0-9]+)-(?P<max_us>[0-9]+) us$"
 UART_SLEEP_RULE_PATTERN = "^(?P<sec>[0-9]+) s$"
 VOLT_LEVEL_RULE_PATTERN = "^(?P<volts>[\<\>][0-9]{1,2}\.[0-9]{1,2})V FOR (?P<sec>[0-9]+) s$"
@@ -146,6 +148,74 @@ def sleep(delay_sec, keep_conn=False):
     res = _change("STSLEEP {:d}".format(delay_sec), reset=False, keep_conn=keep_conn)
 
     return res
+
+
+def ext_wake(enable=None, ms=2000, rule=None):
+    """
+    External wake trigger configuration.
+    """
+
+    ret = {}
+
+    # Read out current settings
+    cfg = power_config()
+
+    if enable == None:
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["ext_wake"]
+
+        return ret
+
+    # Write rule settings if enable
+    if enable:
+        kwargs = _parse_rule(rule, EXT_WAKE_RULE_PATTERN) if rule else {
+            "ms": ms
+        }
+        res = _change("STSLXWT {ms:}".format(**kwargs))
+        ret.update(res)
+
+    # Enable/disable
+    res = _change("STSLX {:s}, {:s}".format(
+        "on" if cfg["ext_sleep"].startswith("ON") else "off",
+        "on" if enable else "off")
+    )
+    ret.update(res)
+
+    return ret
+
+
+def ext_sleep(enable=None, ms=3000, rule=None):
+    """
+    External sleep trigger configuration.
+    """
+
+    ret = {}
+
+    # Read out current settings
+    cfg = power_config()
+
+    if enable == None:
+        ret["_stamp"] = cfg["_stamp"]
+        ret["value"] = cfg["ext_sleep"]
+
+        return ret
+
+    # Write rule settings if enable
+    if enable:
+        kwargs = _parse_rule(rule, EXT_SLEEP_RULE_PATTERN) if rule else {
+            "ms": ms
+        }
+        res = _change("STSLXST {ms:}".format(**kwargs))
+        ret.update(res)
+
+    # Enable/disable
+    res = _change("STSLX {:s}, {:s}".format(
+        "on" if enable else "off",
+        "on" if cfg["ext_wake"].startswith("ON") else "off"
+    ))
+    ret.update(res)
+
+    return ret
 
 
 def uart_wake(enable=None, min_us=0, max_us=30000, rule=None):

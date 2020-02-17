@@ -83,6 +83,9 @@ class SPMConn(GPIOSPIConn):
 
             raise
 
+    def heartbeat(self):
+        self.noop()
+
     @retry(stop_max_attempt_number=3, wait_fixed=500)
     def version(self):
         try:

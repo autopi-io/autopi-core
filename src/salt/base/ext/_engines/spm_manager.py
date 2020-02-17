@@ -6,7 +6,6 @@ import RPi.GPIO as gpio
 import time
 
 from messaging import EventDrivenMessageProcessor
-from spm_conn import SPMConn
 
 
 log = logging.getLogger(__name__)
@@ -18,8 +17,8 @@ context = {
 # Message processor
 edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"handler": "query"})
 
-# SPM connection
-conn = SPMConn()
+# SPM connection is instantiated during start
+conn = None
 
 
 @edmp.register_hook()
@@ -105,11 +104,11 @@ def heartbeat_handler():
     finally:
 
         # Trigger heartbeat as normal
-        conn.noop()
+        conn.heartbeat()
 
 
 @edmp.register_hook()
-def flash_firmware_handler(hex_file, no_write=True):
+def flash_firmware_handler(hex_file, part_id, no_write=True):
     """
     Flashes new SPM firmware to ATtiny.
     """
@@ -124,7 +123,7 @@ def flash_firmware_handler(hex_file, no_write=True):
         log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
 
-        params = ["avrdude", "-p t24", "-c autopi", "-U flash:w:{:s}".format(hex_file)]
+        params = ["avrdude", "-p {:s}", "-c autopi", "-U flash:w:{:s}".format(part_id, hex_file)]
         if no_write:
             params.append("-n")
 
@@ -148,7 +147,7 @@ def flash_firmware_handler(hex_file, no_write=True):
         gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
 
         # Re-setup SPM connection
-        conn.setup()
+        conn.setup() # TODO HN
 
     return ret
 
@@ -161,8 +160,18 @@ def start(**settings):
         # Give process higher priority
         psutil.Process(os.getpid()).nice(-1)
 
-        # Setting up SPM connection
-        conn.setup()
+        # Initialize SPM connection
+        global conn
+        if "i2c_conn" in settings:
+            from spm2_conn import SPM2Conn
+
+            conn = SPM2Conn()
+            conn.init(settings["i2c_conn"])
+        else:
+            from spm_conn import SPMConn
+
+            conn = SPMConn()
+            conn.setup()
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
@@ -177,3 +186,9 @@ def start(**settings):
         raise
     finally:
         log.info("Stopping SPM manager")
+
+        if getattr(conn, "is_open", False) and conn.is_open():
+            try:
+                conn.close()
+            except:
+                log.exception("Failed to close SPM connection")

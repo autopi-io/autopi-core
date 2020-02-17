@@ -32,7 +32,7 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
-def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
+def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90):
     """
     Flashes new SPM firmware to ATtiny.
     """
@@ -50,7 +50,7 @@ def flash_firmware(hex_file, confirm=False, check_only=True, timeout=90):
 
     # Flash firmware
     if not check_only:
-        res = client.send_sync(_msg_pack(hex_file, no_write=False, _handler="flash_firmware"), timeout=timeout)
+        res = client.send_sync(_msg_pack(hex_file, part_id, no_write=False, _handler="flash_firmware"), timeout=timeout)
         ret["output"] = res.get("output", None)
 
     return ret
