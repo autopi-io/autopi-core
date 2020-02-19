@@ -1,10 +1,8 @@
 import collections
 import datetime
-import gpio_pin
 import logging
 import obd
 import obd.utils
-import RPi.GPIO as gpio
 import time
 
 from obd.interfaces import STN11XX
@@ -54,6 +52,7 @@ class OBDConn(object):
 
         self.is_permanently_closed = False
 
+        self.on_ensure_open = None
         self.on_status = None
         self.on_closing = None
         self.on_closed = None
@@ -84,10 +83,6 @@ class OBDConn(object):
                 self._protocol_id = self._protocol_id
             self._protocol_baudrate = settings["protocol"].get("baudrate", self._protocol_baudrate)
             self._protocol_verify = settings["protocol"].get("verify", self._protocol_verify)
-
-        # Prepare GPIO to listen on STN power pin
-        gpio.setmode(gpio.BOARD)
-        gpio.setup(gpio_pin.STN_PWR, gpio.IN)
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self, force=False):
@@ -127,16 +122,12 @@ class OBDConn(object):
             and self._obd.status() != obd.OBDStatus.NOT_CONNECTED
 
     def ensure_open(self):
-        if self.is_open():
+        is_open = self.is_open()
 
-            # Check if STN has powered down (might be due to low battery)
-            if gpio.input(gpio_pin.STN_PWR) == 0:
-                log.warn("Closing OBD connection permanently because STN has powered off")
+        if self.on_ensure_open:
+            self.on_ensure_open(is_open)
 
-                self.close(permanent=True)
-
-                raise Warning("OBD connection closed permanently because STN has powered off")
-        else:
+        if not is_open:
             self.open()
 
     def close(self, permanent=False):
