@@ -1068,6 +1068,7 @@ def start(**settings):
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
         conn.on_closing = lambda: edmp.worker_threads.do_all_for("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
+        # IMPORTANT: If the STN UART wake trigger is enabled remember to ensure the RPi does not accidentally re-awaken the STN during shutdown!
         if "stn_state_pin" in settings:
 
             # Prepare GPIO to listen on the STN state input pin

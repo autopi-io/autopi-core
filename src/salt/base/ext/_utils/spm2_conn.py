@@ -1,6 +1,8 @@
 import logging
+import time
 
 from i2c_conn import I2CConn
+from retrying import retry
 
 
 # Registers
@@ -44,7 +46,7 @@ STATES = {
     0x02: "booting",
     0x03: "on",
     0x04: "sleeping",
-    0x05: "hibernating",
+    0x05: "hibernating"
 }
 
 TRIGGERS = {
@@ -59,7 +61,7 @@ TRIGGERS = {
     0x08: "timer",
     0x09: "boot_timeout",
     0x0A: "heartbeat_timeout",
-    0xFF: "unknown",
+    0xFF: "unknown"
 }
 
 
@@ -68,12 +70,22 @@ log = logging.getLogger(__name__)
 
 class SPM2Conn(I2CConn):
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def heartbeat(self):
+        """
+        Send heartbeat.
+        """
+
         res = self.read_block(HEARTBEAT, 1)
 
         return res
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def status(self):
+        """
+        Get current status.
+        """
+
         res = self.read_block(STATUS, 5)
 
         ret = {
@@ -90,7 +102,12 @@ class SPM2Conn(I2CConn):
 
         return ret
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def stats(self):
+        """
+        Get life cycle statistics.
+        """
+
         res = self.read_block(STATS, 9)
 
         ret = {
@@ -104,12 +121,21 @@ class SPM2Conn(I2CConn):
 
         return ret
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def timer(self):
+        """
+        Get current timer value in milliseconds.
+        """
+
         res = self.read_block(TIMER, 4)
 
         return (res[3] << 24) + (res[2] << 16) + (res[1] << 8) + (res[0] << 0)
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def pins(self, toggle=None):
+        """
+        Get current pin states or toggle output pins.
+        """
 
         if toggle != None:
             val = 0
@@ -130,21 +156,81 @@ class SPM2Conn(I2CConn):
 
         return ret
 
+    #@retry(stop_max_attempt_number=3, wait_fixed=200)
     def voltage(self):
+        """
+        Read current voltage.
+        """
+
+        raise NotImplementedError()
+
         res = self.read_block(VOLTAGE, 2)
 
         return res
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def version(self):
+        """
+        Get firmware version.
+        """
+
         res = self.read_block(VERSION, 2)
 
         return "{:d}.{:d}".format(*res)
 
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
     def sleep_duration(self, value=None):
+        """
+        Set sleep duration in milliseconds.
+        """
 
-        if value == None:
-            res = self.read_block(SLEEP_DURATION, 4)
+        if value != None:
+            self.write_block(SLEEP_DURATION, [(value >> i * 8) & 0xFF for i in range(0, 4)])
+        
+        res = self.read_block(SLEEP_DURATION, 4)
 
-            return (res[3] << 24) + (res[2] << 16) + (res[1] << 8) + (res[0] << 0)
+        return (res[3] << 24) + (res[2] << 16) + (res[1] << 8) + (res[0] << 0)
 
-        self.write_block(SLEEP_DURATION, [(value >> i * 8) & 0xFF for i in range(0, 4)])
+    def sleep_interval(self, value=None):
+        """
+        Helper method to set sleep duration in seconds.
+        Added for backwards compatibility with SPM 1.0.
+        """
+
+        if value != None:
+
+            if not isinstance(value, int):
+                raise ValueError("Sleep interval must be an integer value")
+            elif value > 86400:
+                raise ValueError("Max sleep interval is 24 hours (86400 secs)")
+
+            log.info("Setting sleep interval to %d second(s)", value)
+
+            value *= 1000
+
+        res = self.sleep_duration(value=value)
+
+        return int(res / 1000)
+
+    def restart_3v3(self, toggle_delay=1):
+        """
+        Helper method to restart the 3V3 power supply.
+        """
+
+        # Check current state
+        res = self.pins()
+        if not res["output"]["sw_3v3"]:
+            raise Exception("The 3V3 power supply is currently switched off")
+
+        # Power off
+        res = self.pins(toggle="sw_3v3")
+        if res["output"]["sw_3v3"]:
+            raise Exception("The 3V3 power supply did not switch off")
+
+        # Wait for toggle delay
+        time.sleep(toggle_delay)
+
+        # Power on again
+        res = self.pins(toggle="sw_3v3")
+        if not res["output"]["sw_3v3"]:
+            raise Exception("The 3V3 power supply did not switch on again")
