@@ -579,6 +579,9 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         }
     }
 
+    if not os.path.isfile(file):
+        raise ValueError("File does not exist")
+
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
     config_parser.read(file)
 
