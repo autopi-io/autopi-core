@@ -123,7 +123,7 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
         log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
 
-        params = ["avrdude", "-p {:s}", "-c autopi", "-U flash:w:{:s}".format(part_id, hex_file)]
+        params = ["avrdude", "-p {:s}".format(part_id), "-c autopi", "-U flash:w:{:s}".format(hex_file)]
         if no_write:
             params.append("-n")
 
@@ -145,9 +145,6 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 
         log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
-
-        # Re-setup SPM connection
-        conn.setup() # TODO HN
 
     return ret
 

@@ -10,6 +10,7 @@ import math
 import obd
 import os
 import psutil
+import RPi.GPIO as gpio
 import salt.loader
 
 from binascii import unhexlify
@@ -578,6 +579,9 @@ def play_handler(file, delay=None, slice=None, filter=None, group="id", protocol
         }
     }
 
+    if not os.path.isfile(file):
+        raise ValueError("File does not exist")
+
     config_parser = ConfigParser.RawConfigParser(allow_no_value=True)
     config_parser.read(file)
 
@@ -1065,8 +1069,26 @@ def start(**settings):
         edmp.measure_stats = settings.get("measure_stats", False) 
 
         # Configure OBD connection
-        conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status)) 
+        conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
         conn.on_closing = lambda: edmp.worker_threads.do_all_for("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
+        # IMPORTANT: If the STN UART wake trigger is enabled remember to ensure the RPi does not accidentally re-awaken the STN during shutdown!
+        if "stn_state_pin" in settings:
+
+            # Prepare GPIO to listen on the STN state input pin
+            gpio.setmode(gpio.BOARD)
+            gpio.setup(settings["stn_state_pin"]["board"], gpio.IN)
+
+            def on_ensure_open(is_open):
+                if is_open:
+
+                    # Check if the STN is powered off/sleeping (might be due to low battery)
+                    if gpio.input(settings["stn_state_pin"]["board"]) != settings["stn_state_pin"]["level"]:
+                        log.warn("Closing OBD connection permanently because the STN has powered off")
+                        conn.close(permanent=True)
+
+                        raise Warning("OBD connection closed permanently because the STN has powered off")
+
+            conn.on_ensure_open = on_ensure_open
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
 
         # Start ELM327 proxy if configured
