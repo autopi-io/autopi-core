@@ -1,6 +1,6 @@
 import logging
 import uuid
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory, send_file, abort
 from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 from flask_api import FlaskAPI
@@ -8,7 +8,6 @@ from functools import wraps
 
 log = logging.getLogger(__name__)
 
-#app = Flask(__name__)
 app = FlaskAPI(__name__)
 
 # Allows OPTIONS requests everywhere.
@@ -95,6 +94,11 @@ def devices():
     devices = [{"unit_id": _minion_id(), "display": "Local device"}]
     return devices
 
+
+@app.route("/download_log/")
+def download_log():
+    file_name = request.args.get('file')
+    return send_from_directory('/var/log/', file_name, as_attachment=True)
 
 @app.route('/dongle/<uuid:unit_id>/execute/', methods=['POST'])
 def terminal_execute(unit_id):
