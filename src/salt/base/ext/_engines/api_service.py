@@ -11,7 +11,7 @@ log = logging.getLogger(__name__)
 app = FlaskAPI(__name__)
 
 # Allows OPTIONS requests everywhere.
-cors = CORS(app)
+cors = CORS(app, send_wildcard=True)
 
 # Default Flask settings
 flask_settings = {
