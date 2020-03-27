@@ -193,7 +193,11 @@ up ()
     [ $? -eq 0 ] && echoerr "[ERROR] uDHCP client process already running for interface '$INTERFACE'" && return $ERROR
 
     # Start uDHCP client
-    udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script 3>&1  # Fixes problem where this methods hangs when called from 'run' function
+    if [ $1 == "run" ]; then
+        udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script 3>&1  # Fixes problem where this methods hangs when called from 'run' function
+    else
+        udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script
+    fi
     [ $? -gt 0 ] && echoerr "[ERROR] Failed to start uDHCP client for interface '$INTERFACE'" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started uDHCP client for interface '$INTERFACE'"
 
@@ -312,7 +316,7 @@ run ()
             down
 
             # Try to bring up connection
-            STDERR=$(up 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
+            STDERR=$(up "run" 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
             if [ $? -eq $OK ]; then
 
                 # Check status to confirm connection is actually up
