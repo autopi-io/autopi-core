@@ -264,6 +264,7 @@ class MessageProcessor(object):
         args = message.get("args", [])
         kwargs = message.get("kwargs", {})
 
+        result = None
         try:
 
             # Call handler hook
@@ -309,6 +310,7 @@ class MessageProcessor(object):
         if found and error:
             raise Exception(error)
 
+        result = None
         try:
 
             # Call handler hook
