@@ -193,7 +193,7 @@ up ()
     [ $? -eq 0 ] && echoerr "[ERROR] uDHCP client process already running for interface '$INTERFACE'" && return $ERROR
 
     # Start uDHCP client
-    if [ $1 == "run" ]; then
+    if [ "$1" == "run" ]; then
         udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script 3>&1  # Fixes problem where this methods hangs when called from 'run' function
     else
         udhcpc -S -R -b -p /var/run/udhcpc.$INTERFACE.pid -i $INTERFACE -t 5 -s /etc/udhcpc/qmi.script
