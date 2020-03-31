@@ -5,7 +5,11 @@ country={{ salt['pillar.get']('locale:country_code', default='GB') }}
 {%- for network in salt['grains.get']('wpa_supplicant:networks', default=[]) or [] %}
 network={
 {%- for key, val in network.iteritems() %}
+    {%- if key == 'psk' and val == '' %}
+    key_mgmt=NONE
+    {%- else %}
     {{ key }}={{ val|tojson|safe }}
+    {%- endif %}
 {%- endfor %}
 }
 {%- endfor %}
