@@ -8,8 +8,10 @@ AMP_ON     = 31  # GPIO06
 
 RPI_PWR    = 7   # GPIO04
 
-STN_PWR    = 32  # GPIO12 on SPM 1.X (high = SPM on/awake, low = SPM off/sleeping)
-RPI_SHUTDN = 32  # GPIO12 on SPM 2.X (high = perform shutdown, low = keep running)
+STN_PWR    = 32  # GPIO12 only on SPM 1.X (high = SPM on/awake, low = SPM off/sleeping)
+RPI_SHUTDN = 22  # GPIO25 only on SPM 2.X (high = perform shutdown, low = keep running)
+
+LED        = 32  # GPIO12 only on SPM 2.X
 
 ACC_INT1   = 29  # GPIO05
 
