@@ -129,6 +129,9 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     # (it could get interrupted by another STN wake trigger)
     try:
         __salt__["system.shutdown"](int(delay / 60) + 2)
+
+        # Print reason to all terminals
+        __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
     except:
         log.exception("Failed to plan system shutdown")
 
