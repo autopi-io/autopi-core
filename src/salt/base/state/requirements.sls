@@ -1,4 +1,8 @@
 
+pending-packages-configured:
+  cmd.run:
+    - name: "dpkg --configure -a"
+
 packages-installed:
   pkg.installed:
     - pkgs:
