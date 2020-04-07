@@ -51,14 +51,14 @@ voltage-level-sleep-trigger:
 ext-wake-trigger:
   stn.power_trigger:
     - name: ext_wake
-    - enabled: True
+    - enable: True
     - rule: "HIGH FOR 500 ms"
 
 # Put STN to sleep from SPM 2.0
 ext-sleep-trigger:
   stn.power_trigger:
     - name: ext_sleep
-    - enabled: True
+    - enable: True
     - rule: "LOW FOR 3000 ms"
 
 {%- endif %}
