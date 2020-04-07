@@ -33,7 +33,7 @@ spm-test:
     - name: spm.query
     - args:
       - version
-    - validate: ret["value"] == "1.1.1.0"
+    - validate: ret["value"] in ["1.1.1.0", "2.0"]
 
 obd-test:
   test.module:
