@@ -130,7 +130,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     try:
         __salt__["system.shutdown"](int(delay / 60) + 2)
 
-        # Print reason to all terminals
+        # Broadcast reason to all terminals
         __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
     except:
         log.exception("Failed to plan system shutdown")
@@ -226,6 +226,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
         kwargs["confirm"] = True  # Ensure confirm is set
 
         now = datetime.utcnow()
+        expiry = now + timedelta(seconds=period)
 
         # Add fresh timer
         res = __salt__["schedule.add"](name,
@@ -237,7 +238,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             persist=False,  # Do not persist schedule (actually this is useless because all schedules might be persisted when modified later on)
             metadata={
                 "created": now.isoformat(),
-                "expires": (now + timedelta(seconds=period)).isoformat(),
+                "expires": expiry.isoformat(),
                 "transient": True,  # Enforce schedule is never persisted on disk and thereby not surviving minion restarts (see patch 'salt/utils/schedule.py.patch')
                 "revision": 2
             })
@@ -247,6 +248,12 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             {"reason": reason} if not name.endswith("/{:}".format(reason)) else {},
             "system/{:}/added".format(name.lstrip("_"))
         )
+
+        # Broadcast notification to all terminals
+        try:
+            __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nSleep timer added '{:}' that trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, add or reason, expiry))
+        except:
+            log.exception("Failed to broadcast sleep timer added notification")
 
     # Return all existing timer(s)
     return timers()
