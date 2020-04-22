@@ -32,6 +32,15 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
+def reset():
+    """
+    Reset/restart ATtiny. 
+    """
+
+    return client.send_sync(_msg_pack(_handler="reset"))
+
+
+
 def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90):
     """
     Flashes new SPM firmware to ATtiny.
@@ -54,6 +63,18 @@ def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90
         ret["output"] = res.get("output", None)
 
     return ret
+
+
+def led_pwm(**kwargs):
+    """
+    Change PWM frequency and/or duty cycle for LED.
+
+    Optional arguments:
+      - frequency (float): Change to frequency in Hz.
+      - duty_cycle (float): Change to duty cycle in percent.
+    """
+
+    return client.send_sync(_msg_pack(_handler="led_pwm", **kwargs))
 
 
 def manage(*args, **kwargs):

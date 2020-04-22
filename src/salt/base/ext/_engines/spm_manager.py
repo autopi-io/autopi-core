@@ -20,6 +20,9 @@ edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"handl
 # SPM connection is instantiated during start
 conn = None
 
+# PWM instance to control LED (only available for version 2.X)
+led_pwm = None
+
 
 @edmp.register_hook()
 def query_handler(cmd, **kwargs):
@@ -108,15 +111,44 @@ def heartbeat_handler():
 
 
 @edmp.register_hook()
+def  reset_handler():
+    """
+    Reset/restart ATtiny. 
+    """
+
+    ret = {}
+
+    try:
+
+        log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
+        gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
+
+        log.warn("Resetting ATtiny")
+        gpio.output(gpio_pin.SPM_RESET, gpio.LOW)
+
+        # Keep pin low for a while
+        time.sleep(.1)
+
+        gpio.output(gpio_pin.SPM_RESET, gpio.HIGH)
+
+    finally:
+
+        log.info("Sleeping for 1 sec to give ATtiny time to recover")
+        time.sleep(1)
+
+        log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
+        gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
+
+    return ret
+
+
+@edmp.register_hook()
 def flash_firmware_handler(hex_file, part_id, no_write=True):
     """
     Flashes new SPM firmware to ATtiny.
     """
 
     ret = {}
-
-    gpio.setmode(gpio.BOARD)
-    gpio.setup(gpio_pin.HOLD_PWR, gpio.OUT)
 
     try:
 
@@ -149,6 +181,27 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
     return ret
 
 
+@edmp.register_hook(synchronize=False)
+def led_pwm_handler(frequency=None, duty_cycle=None):
+    """
+    Change PWM frequency and/or duty cycle for LED.
+
+    Optional arguments:
+      - frequency (float): Change to frequency in Hz.
+      - duty_cycle (float): Change to duty cycle in percent.
+    """
+
+    ret = {}
+
+    if frequency != None:
+        led_pwm.ChangeFrequency(frequency)  # Hz
+
+    if duty_cycle != None:
+        led_pwm.ChangeDutyCycle(duty_cycle)  # %
+
+    return ret
+
+
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
@@ -157,14 +210,29 @@ def start(**settings):
         # Give process higher priority
         psutil.Process(os.getpid()).nice(-1)
 
+        # Initialize GPIO
+        gpio.setwarnings(False)
+        gpio.setmode(gpio.BOARD)
+
+        gpio.setup(gpio_pin.HOLD_PWR, gpio.OUT, initial=gpio.LOW)
+        gpio.setup(gpio_pin.SPM_RESET, gpio.OUT, initial=gpio.HIGH)
+
         # Initialize SPM connection
         global conn
-        if "i2c_conn" in settings:
+        if "i2c_conn" in settings:  # Version 2.X
             from spm2_conn import SPM2Conn
 
             conn = SPM2Conn()
             conn.init(settings["i2c_conn"])
-        else:
+
+            # Initialize LED GPIO
+            gpio.setup(gpio_pin.LED, gpio.OUT)
+
+            global led_pwm
+            led_pwm = gpio.PWM(gpio_pin.LED, settings.get("led_pwm", {}).get("frequency", 2))
+            led_pwm.start(settings.get("led_pwm", {}).get("duty_cycle", 50))
+
+        else:  # Version 1.X
             from spm_conn import SPMConn
 
             conn = SPMConn()
