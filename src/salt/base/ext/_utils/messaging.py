@@ -630,7 +630,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
                     # Check if keyword resolving is enabled
                     if reactor.get("keyword_resolve", False):
                         resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context})
-                        log.debug("Keyword resolved message: {:}".format(resolved_message))
+                        if log.isEnabledFor(logging.DEBUG):
+                            log.debug("Keyword resolved message: {:}".format(resolved_message))
 
                         # TODO: Figure out if we can improve performance by processing each message in a dedicated worker thread or process?
 

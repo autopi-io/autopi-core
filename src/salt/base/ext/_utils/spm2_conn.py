@@ -104,7 +104,6 @@ class SPM2Conn(I2CConn):
 
         return res
 
-
     @retry(stop_max_attempt_number=3, wait_fixed=200)
     def heartbeat(self):
         """

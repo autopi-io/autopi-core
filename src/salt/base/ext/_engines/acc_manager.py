@@ -278,6 +278,7 @@ def start(**settings):
         psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
 
         # Setup interrupt GPIO pin
+        gpio.setwarnings(False)
         gpio.setmode(gpio.BOARD)
         gpio.setup(gpio_pin.ACC_INT1, gpio.IN)
         gpio.add_event_detect(gpio_pin.ACC_INT1, gpio.FALLING, callback=lambda ch: interrupt_event.set())

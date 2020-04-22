@@ -33,6 +33,7 @@ class WorkerThread(threading.Thread):
         self.daemon = True
 
         # Additional attributes
+        #self.parent = threading.current_thread()
         self.target = target
         self.context = context
         self.loop = loop

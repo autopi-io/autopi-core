@@ -1075,6 +1075,7 @@ def start(**settings):
         if "stn_state_pin" in settings:
 
             # Prepare GPIO to listen on the STN state input pin
+            gpio.setwarnings(False)
             gpio.setmode(gpio.BOARD)
             gpio.setup(settings["stn_state_pin"]["board"], gpio.IN)
 
