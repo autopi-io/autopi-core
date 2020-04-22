@@ -1,14 +1,15 @@
 import logging
 
 from common_util import dict_get, dict_find, dict_filter
-from messaging import EventDrivenMessageProcessor
+from messaging import EventDrivenMessageProcessor, keyword_resolve
 
 
 log = logging.getLogger(__name__)
 
 context = {
     "cache.get": lambda *args, **kwargs: dict_get(context.get("cache", None), *args, **kwargs),
-    "cache.find": lambda *args, **kwargs: dict_find(context.get("cache", {}).values(), *args, **kwargs)
+    "cache.find": lambda *args, **kwargs: dict_find(context.get("cache", {}).values(), *args, **kwargs),
+    "result_cache.get": lambda *args, **kwargs: dict_get(context.get("result_cache", None), *args, **kwargs),
 }
 
 # Message processor
@@ -21,6 +22,12 @@ def module_handler(name, *args, **kwargs):
     Calls a Salt execution module from within minion process.
     """
 
+    # Resolve keyword arguments if available
+    if kwargs.pop("_keyword_resolve", False):
+        kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Keyword resolved arguments: {:}".format(kwargs))
+
     return __salt__["minionutil.run_job"](name, *args, **kwargs)
 
 
@@ -30,7 +37,30 @@ def module_direct_handler(name, *args, **kwargs):
     Calls a Salt execution module directy from this engine process.
     """
 
+    # Resolve keyword arguments if available
+    if kwargs.pop("_keyword_resolve", False):
+        kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Keyword resolved arguments: {:}".format(kwargs))
+
     return __salt__[name](*args, **kwargs)
+
+
+@edmp.register_hook()
+def module_result_cache_returner(message, result):
+    """
+    Stores/caches a module result in context.
+    """
+
+    if not message["handler"].startswith("module"):
+        log.warn("Skipping result for unsupported handler '{:}': {:}".format(message["handler"], result))
+
+        return
+
+    ctx = context.setdefault("result_cache", {})
+    cmd = message["args"][0]
+
+    ctx[cmd] = result
 
 
 @edmp.register_hook()
