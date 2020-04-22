@@ -40,3 +40,25 @@ def cache(**kwargs):
     """
 
     return client.send_sync(_msg_pack(_handler="cache", **kwargs))
+
+
+def manage(*args, **kwargs):
+    """
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'run <key>=<value>...'
+
+    Examples:
+      - 'obd.manage hook list'
+      - 'obd.manage worker list *'
+      - 'obd.manage worker show *'
+      - 'obd.manage worker start *'
+      - 'obd.manage worker pause *'
+      - 'obd.manage worker resume *'
+      - 'obd.manage worker kill *'
+    """
+
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
