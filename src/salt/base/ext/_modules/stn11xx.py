@@ -328,7 +328,7 @@ def volt_calibrate(value=0000):
     return res
 
 
-def volt_change_wake(enable=None, volts_diff="0.2", ms=1000, rule=None):
+def volt_change_wake(enable=None, volts_diff="+0.2", ms=1000, rule=None):
     """
     Voltage change wakeup trigger configuration.
     """
