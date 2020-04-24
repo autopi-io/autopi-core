@@ -6,8 +6,6 @@ import salt.exceptions
 log = logging.getLogger(__name__)
 
 
-
-
 def help():
     """
     Shows this help information.

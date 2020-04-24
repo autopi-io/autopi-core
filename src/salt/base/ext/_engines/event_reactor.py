@@ -1,7 +1,7 @@
 import logging
 
 from common_util import dict_get, dict_find, dict_filter
-from messaging import EventDrivenMessageProcessor, keyword_resolve
+from messaging import EventDrivenMessageProcessor
 
 
 log = logging.getLogger(__name__)
@@ -14,36 +14,6 @@ context = {
 
 # Message processor
 edmp = EventDrivenMessageProcessor("reactor", context=context)
-
-
-@edmp.register_hook()
-def module_handler(name, *args, **kwargs):
-    """
-    Calls a Salt execution module from within minion process.
-    """
-
-    # Resolve keyword arguments if available
-    if kwargs.pop("_keyword_resolve", False):
-        kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Keyword resolved arguments: {:}".format(kwargs))
-
-    return __salt__["minionutil.run_job"](name, *args, **kwargs)
-
-
-@edmp.register_hook()
-def module_direct_handler(name, *args, **kwargs):
-    """
-    Calls a Salt execution module directy from this engine process.
-    """
-
-    # Resolve keyword arguments if available
-    if kwargs.pop("_keyword_resolve", False):
-        kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Keyword resolved arguments: {:}".format(kwargs))
-
-    return __salt__[name](*args, **kwargs)
 
 
 @edmp.register_hook()
@@ -89,15 +59,6 @@ def context_handler(key=None, **kwargs):
         ret["values"] = {k: v for k, v in context.iteritems() if not "." in k}
 
     return ret
-
-
-@edmp.register_hook()
-def echo_handler(event):
-    """
-    Mainly for testing.
-    """
-
-    log.info("Echo: {:}".format(event))
 
 
 @edmp.register_hook()
