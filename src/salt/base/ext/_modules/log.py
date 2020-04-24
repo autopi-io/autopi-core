@@ -1,7 +1,11 @@
 import logging
+import re
+import salt.exceptions
 
 
 log = logging.getLogger(__name__)
+
+
 
 
 def help():
@@ -77,3 +81,82 @@ def query(file, begin="^", end="$", match=".*", count=0, reverse=False, before=0
         pipeline.append("tail -n{:d}".format(last))
 
     return __salt__["cmd.shell"](" | ".join(pipeline), output_loglevel="quiet")
+
+
+def kernel(level=None, facilities=[], clear=False):
+    """
+    Print and/or clear the kernel ring buffer.
+
+    Optional arguments:
+      - level (str): Restict output the the given level and higher.
+      - facilities (str): Restrict output to the given list (comma-separated) of facilities.
+      - clear (bool): Clear after reading.
+    """
+
+    DMESG_LEVELS = [
+        "emerg",   # System is unusable
+        "alert",   # Action must be taken immediately
+        "crit",    # Critical conditions
+        "err",     # Error conditions
+        "warn",    # Warning conditions
+        "notice",  # Normal but significant condition
+        "info",    # Informational
+        "debug"    # Debug-level messages
+    ]
+
+    DMESG_FACILITIES = [
+        "kern",    # Kernel messages
+        "user",    # Random user-level messages
+        "mail",    # Mail system
+        "daemon",  # System daemons
+        "auth",    # Security/authorization messages
+        "syslog",  # Messages generated internally by syslogd
+        "lpr",     # Line printer subsystem
+        "news"     # Network news subsystem
+    ]
+
+    ret = []
+
+    dmesg_args = ["--time-format iso", "-x"]
+
+    if level:
+        if not level in DMESG_LEVELS:
+            raise ValueError("Invalid level (supported levels are {:})".format(", ".join(DMESG_LEVELS)))
+
+        dmesg_args.append("-l {:}".format(",".join(DMESG_LEVELS[:DMESG_LEVELS.index(level) + 1])))
+
+    if facilities:
+        if isinstance(facilities, str):
+            facilities = facilities.split(",")
+
+        for facility in facilities:
+            if not facility in DMESG_FACILITIES:
+                raise ValueError("Invalid facility '{:}' (supported facilities are {:})".format(facility, ", ".join(DMESG_FACILITIES)))
+
+        dmesg_args.append("-f {:}".format(",".join(facilities)))
+
+    if clear:
+        dmesg_args.append("-c")
+
+    res = __salt__["cmd.shell"]("dmesg {:}".format(" ".join(dmesg_args)))
+
+    if not res:
+        return ret
+
+    # Compile regex here to avoid doing it when module is loaded
+    regex = re.compile(  # NOTE: Cached if called multiple times
+        "^(?P<facility>{facilities:}):(?P<level>{levels:}): (?P<timestamp>{time_format:}) (?P<message>.+?)(?=\Z|^({facilities:}):({levels:}): )".format(
+            levels="|".join(["{: <6}".format(l) for l in DMESG_LEVELS]),
+            facilities="|".join(["{: <6}".format(f) for f in DMESG_FACILITIES]),
+            time_format="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{6}\+[0-9]{4}"
+        ),
+        re.MULTILINE | re.DOTALL
+    )
+
+    for match in regex.finditer(res):
+        ret.append({k: v.rstrip() for k, v in match.groupdict().iteritems()})
+
+    if not ret:
+        raise salt.exceptions.CommandExecutionError("Failed to parse dmesg result with pattern: {:}".format(regex.pattern))
+
+    return ret
