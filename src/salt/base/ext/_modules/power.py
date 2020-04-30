@@ -136,6 +136,8 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         log.exception("Failed to plan system shutdown")
 
     # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
+    # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
+    #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
     __salt__["stn.sleep"](delay)
 
     if interval > 0:
