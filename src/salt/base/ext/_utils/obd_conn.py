@@ -60,8 +60,13 @@ class OBDConn(object):
         # Keep an up-to-date reference to protocol instance received from interface
         self.cached_protocol = None
 
+        # Flag indicating if filters are applied or not
+        self.has_filters = False
+
     def setup(self, **settings):
-        log.debug("Configuring OBD connection using settings: %s", settings)
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Configuring OBD connection using settings: %s", settings)
 
         if not "device" in settings:
             raise ValueError("Setting 'device' must be specified")
@@ -93,7 +98,9 @@ class OBDConn(object):
         # Reset flag
         self.is_permanently_closed = False
 
-        log.debug("Opening OBD connection")
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Opening OBD connection")
+
         try :
             self._obd = obd.OBD(
                 portstr=self._device,
@@ -203,6 +210,9 @@ class OBDConn(object):
             verify = True  # Force verify when autodetecting protocol
 
         self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
+
+        # When protocol is changed we assume that any existing filters are lost
+        self.has_filters = False
 
     @Decorators.ensure_open
     def ensure_protocol(self, ident, baudrate=None, verify=True):
@@ -347,11 +357,20 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def add_filter(self, *args, **kwargs):
-        return self._obd.interface.add_filter(*args, **kwargs)
+        self._obd.interface.add_filter(*args, **kwargs)
+
+        # Set flag indicating filters are present
+        self.has_filters = True
 
     @Decorators.ensure_open
     def clear_filters(self, *args, **kwargs):
-        return self._obd.interface.clear_filters(*args, **kwargs)
+        self._obd.interface.clear_filters(*args, **kwargs)
+
+        # Set flag indicating filters are absent
+        self.has_filters = False
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Cleared filters")
 
     @Decorators.ensure_open
     def sync_filters(self, can_db, continue_on_error=False):
@@ -377,17 +396,20 @@ class OBDConn(object):
                 if not continue_on_error:
                     raise Exception("Failed to add pass filter for CAN message '{:}': {:}".format(msg, ex))
 
+        log.info("Synced filters with CAN DB")
+
     def _enrich_monitor_entry(self, res):
         ret = {
             "_stamp": datetime.datetime.utcnow().isoformat()
         }
 
-        if res in self._obd.interface.ERRORS:
-            ret["error"] = self._obd.interface.ERRORS[res]
+        val = res.decode().rstrip()
+        if val in self._obd.interface.ERRORS:
+            ret["error"] = self._obd.interface.ERRORS[val]
         else:
             # No formatting
-            #ret["value"] = res.replace(" ", "#", 1).replace(" ", "")
-            ret["value"] = res
+            #ret["value"] = val.replace(" ", "#", 1).replace(" ", "")
+            ret["value"] = val
 
         return ret
 

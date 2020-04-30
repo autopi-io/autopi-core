@@ -62,6 +62,34 @@ proxy = elm327_proxy.ELM327Proxy()
 can_db_cache = {}
 
 
+def _can_db_for(protocol_id):
+    """
+    Helper function to find cached CAN database instance or load it from file.
+    The CAN database file (.dbc) is found on the local file system by the following path expression:
+
+        /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
+    """
+
+    ret = can_db_cache.get(protocol_id, None)
+    if not ret:
+        import cantools
+
+        # Check for override
+        path = os.path.join(home_dir, "can/db", "_protocol_{:}.dbc".format(protocol_id))
+        if os.path.isfile(path):
+            log.warning("Using overridden CAN database file '{:}'".format(path))
+        else:
+            path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol_id))
+
+        # Load file
+        ret = cantools.db.load_file(path)
+
+        # Put into cache
+        can_db_cache[protocol_id] = ret
+
+    return ret
+
+
 @edmp.register_hook(synchronize=False)
 def context_handler(key=None):
     """
@@ -375,7 +403,7 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
       - duration (float): How many seconds to monitor? If not set there is no limitation.
       - mode (int): The STN monitor mode. Default is '0'.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
-      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'.
+      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' in order to add filters based on the messages found in a CAN database file (.dbc).
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
@@ -389,7 +417,14 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
     # Ensure protocol
     conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
-    # Monitor until limit reached
+    # Ensure filters are added
+    if filtering and not conn.has_filters:
+        if filtering == "can":
+            conn.sync_filters(_can_db_for(conn.cached_protocol.ID))
+        else:
+            log.warning("Filtering is enabled but no filters are present")
+
+    # Monitor until limit is reached
     res = conn.monitor_continuously(wait=wait, limit=limit, duration=duration, mode=mode, auto_format=auto_format, filtering=filtering)
 
     # Update context with summary
@@ -785,30 +820,10 @@ def can_converter(result):
         /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
 
-    # Attempt to find cached CAN database instance or else load it from file
-    protocol_id = conn.cached_protocol.ID
-    can_db = can_db_cache.get(protocol_id, None)
-    if not can_db:
-        try:
-            import cantools
-
-            # Check for override
-            path = os.path.join(home_dir, "can/db", "_protocol_{:}.dbc".format(protocol_id))
-            if os.path.isfile(path):
-                log.warning("Using overridden CAN database file '{:}'".format(path))
-            else:
-                path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol_id))
-
-            # Load file
-            can_db = cantools.db.load_file(path)
-
-            # Put into cache
-            can_db_cache[protocol_id] = can_db
-
-        except:
-            log.exception("Skipping CAN conversion because failed to load CAN database for protocol '{:}'".format(protocol_id))
-
-            return
+    try:
+        can_db = _can_db_for(conn.cached_protocol.ID)
+    except:
+        log.exception("Skipping CAN conversion because no CAN database could be loaded for protocol '{:}'".format(conn.cached_protocol.ID))
 
     # Check for multiple values in result
     if "values" in result:
@@ -965,7 +980,7 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
                 if res.get("_type", None) != kind:
                     continue
 
-                rpm_engine_event_trigger(res)
+                rpm_engine_event_trigger(res, kind=kind, key=key)
 
             return
 
