@@ -20,5 +20,5 @@ spm-release-installed:
     {%- else %}
     - part_id: t24
     {%- endif %}
-    - version: {{ salt["pillar.get"]("power:firmware:version") }}
+    - version: "{{ salt["pillar.get"]("power:firmware:version") }}"
 {%- endif %}

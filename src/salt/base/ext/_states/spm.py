@@ -30,7 +30,7 @@ def firmware_flashed(name, part_id, version):
         return ret
 
     old = res["value"]
-    new = version
+    new = str(version)
 
     if old == new:
         ret["result"] = True
