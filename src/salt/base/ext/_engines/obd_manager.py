@@ -482,7 +482,7 @@ def filter_handler(action, **kwargs):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
+def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False, raw_response=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
     """
     Dumps all messages from bus to screen or file.
 
@@ -493,6 +493,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
     """
 
     ret = {}
@@ -504,7 +505,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
     __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
     try:
-        res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format)
+        res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format, raw_response=raw_response)
     finally:
 
         # Play sound to indicate recording has ended

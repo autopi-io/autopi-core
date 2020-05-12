@@ -246,6 +246,7 @@ def dump(**kwargs):
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
+      - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))
