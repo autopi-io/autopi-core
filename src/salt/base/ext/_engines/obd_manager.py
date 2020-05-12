@@ -506,7 +506,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
     __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
     try:
-        res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format, raw_response=raw_response)
+        res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format, raw_response=raw_response, format_response=format_response)
     finally:
 
         # Play sound to indicate recording has ended
