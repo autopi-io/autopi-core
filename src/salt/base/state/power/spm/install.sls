@@ -9,6 +9,7 @@ spm-release-distributed:
   file.managed:
     - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.hex
     - source: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.hex
+    - source_hash: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.hex.sha1
     - makedirs: True
 
 spm-release-installed:
