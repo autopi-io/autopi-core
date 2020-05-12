@@ -230,6 +230,12 @@ def update_release(force=False, dry_run=False, only_retry=False):
                 "system/release/{:}".format(new["state"])
             )
 
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nUpdate release initiated in state '{:}'.\n\n(Press ENTER to continue)\"".format(datetime.datetime.utcnow(), new["state"]))
+            except:
+                log.exception("Failed to broadcast update release initiated notification")
+
             # Ensure dynamic modules are updated (refresh of modules is done in highstate)
             res = __salt__["saltutil.sync_all"](refresh=False)
             ret["dynamic"] = res
@@ -267,6 +273,12 @@ def update_release(force=False, dry_run=False, only_retry=False):
                 },
                 "system/release/{:}".format(new["state"])
             )
+
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nUpdate release completed in state '{:}'.\n\n(Press ENTER to continue)\"".format(datetime.datetime.utcnow(), new["state"]))
+            except:
+                log.exception("Failed to broadcast update release completed notification")
 
         finally:
 
