@@ -247,6 +247,7 @@ def dump(**kwargs):
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
+      - format_response (bool): Format response messages by separating header and data with a hash sign? Default value is 'True'.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))

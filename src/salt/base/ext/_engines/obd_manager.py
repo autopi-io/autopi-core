@@ -482,7 +482,7 @@ def filter_handler(action, **kwargs):
 
 
 @edmp.register_hook()
-def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False, raw_response=False, protocol=None, baudrate=None, verify=False, file=None, description=None):
+def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False, raw_response=False, format_response=True, protocol=None, baudrate=None, verify=False, file=None, description=None):
     """
     Dumps all messages from bus to screen or file.
 
@@ -494,6 +494,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
+      - format_response (bool): Format response messages by separating header and data with a hash sign? Default value is 'True'.
     """
 
     ret = {}
