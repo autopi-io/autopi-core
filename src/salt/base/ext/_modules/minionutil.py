@@ -232,7 +232,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
 
             # Broadcast notification to all terminals
             try:
-                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nUpdate release initiated in state '{:}'.\nPlease do not power off the system until the update is completed...\n\n(Press ENTER to continue)\"".format(datetime.datetime.utcnow(), new["state"]))
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nUpdate release initiated in state '{:}'.\nPlease do not power off the system until the update is completed.\n\n(Press ENTER to continue)\"".format(datetime.datetime.utcnow(), new["state"]))
             except:
                 log.exception("Failed to broadcast update release initiated notification")
 

@@ -1,0 +1,6 @@
+319a320,322
+>     # A list of additional directories to search for salt engines in.
+>     'engines_dirs': list,
+> 
+1224a1228
+>     'engines_dirs': [],

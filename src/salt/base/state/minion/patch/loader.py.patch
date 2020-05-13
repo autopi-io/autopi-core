@@ -1,0 +1,4 @@
+300c300
+<         _module_dirs(opts, 'engines'),
+---
+>         _module_dirs(opts, 'engines', ext_type_dirs='engines_dirs'),
