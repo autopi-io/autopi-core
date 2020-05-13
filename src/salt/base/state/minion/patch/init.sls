@@ -183,7 +183,7 @@ config-script-patched:
     - source: salt://minion/patch/config/__init__.py.patch
     - hash: 5aee3a232231b656d06591964ffdf6b6397db3a1
     - watch_in:
-      - module: minion-restart-requested-immediately-after-patching
+      - module: minion-restart-requested-after-patching
 config-script-rolled-back:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/config/__init__.py
@@ -205,7 +205,7 @@ loader-script-patched:
     - source: salt://minion/patch/loader.py.patch
     - hash: aa05c84b5a3a22a8861c41d1e4b7029ea3f4a7ee
     - watch_in:
-      - module: minion-restart-requested-immediately-after-patching
+      - module: minion-restart-requested-after-patching
 loader-script-rolled-back:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/loader.py
