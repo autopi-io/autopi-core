@@ -27,6 +27,15 @@ conn = SerialConn()
 
 
 @edmp.register_hook(synchronize=False)
+def context_handler():
+    """
+    Gets current context.
+    """
+
+    return context
+
+
+@edmp.register_hook(synchronize=False)
 def status_handler():
     """
     Gets current status.

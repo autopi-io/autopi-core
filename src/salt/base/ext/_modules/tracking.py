@@ -26,6 +26,14 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
+def context(**kwargs):
+    """
+    Gets current context.
+    """
+
+    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+
+
 def status(**kwargs):
     """
     Gets current status.
