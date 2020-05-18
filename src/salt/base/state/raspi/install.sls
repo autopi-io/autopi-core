@@ -2,6 +2,7 @@
 include:
   - .optimize
   - .boot
+  - .kernel
   - .udev
   - .config
 
