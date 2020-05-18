@@ -81,13 +81,14 @@ def query(file, begin="^", end="$", match=".*", count=0, reverse=False, before=0
     return __salt__["cmd.shell"](" | ".join(pipeline), output_loglevel="quiet")
 
 
-def kernel(level=None, facilities=[], clear=False):
+def kernel(level="err", facilities=[], offset=None, clear=False):
     """
     Print and/or clear the kernel ring buffer.
 
     Optional arguments:
-      - level (str): Restict output the the given level and higher.
+      - level (str): Restict output the the given level and higher. Default is 'err'.
       - facilities (str): Restrict output to the given list (comma-separated) of facilities.
+      - offset (str): Offset regex to begin from.
       - clear (bool): Clear after reading.
     """
 
@@ -115,6 +116,8 @@ def kernel(level=None, facilities=[], clear=False):
 
     ret = []
 
+    pipeline = []
+
     dmesg_args = ["--time-format iso", "-x"]
 
     if level:
@@ -136,7 +139,12 @@ def kernel(level=None, facilities=[], clear=False):
     if clear:
         dmesg_args.append("-c")
 
-    res = __salt__["cmd.shell"]("dmesg {:}".format(" ".join(dmesg_args)))
+    pipeline.append("dmesg {:}".format(" ".join(dmesg_args)))
+
+    if offset != None:
+        pipeline.append("sed -n '/{:}/,/&/p'".format(offset))
+
+    res = __salt__["cmd.shell"](" | ".join(pipeline))
 
     if not res:
         return ret
@@ -156,5 +164,40 @@ def kernel(level=None, facilities=[], clear=False):
 
     if not ret:
         raise salt.exceptions.CommandExecutionError("Failed to parse dmesg result with pattern: {:}".format(regex.pattern))
+
+    return ret
+
+
+def kernel_iter(level="err", facilities=[], offset_key="timestamp", reset=False):
+    """
+    Helper function to retrieve new kernel log entries (based on cached offset value).
+
+    Optional arguments:
+      - level (str): Restict output the the given level and higher. Default is 'err'.
+      - facilities (str): Restrict output to the given list (comma-separated) of facilities.
+      - offset_key (str): Key to get value from result and use as offset. Default is 'timestamp'.
+      - reset (bool): Reset cached offset value and start over.
+    """
+
+    ret = []
+
+    ctx = __context__.setdefault("log.kernel_iter", {})
+
+    if reset:
+        ctx["offset"] = None
+
+    offset = ctx.get("offset", None)
+
+    res = kernel(level=level, facilities=facilities, offset=offset)
+    if res:
+
+        # Skip first log entry if offset was defined (bacause offset entry is included in result)
+        if offset != None:
+            ret = res[1:]
+        else:
+            ret = res
+
+        # Update offset using last log entry
+        ctx["offset"] = res[-1][offset_key]
 
     return ret
