@@ -1,4 +1,5 @@
 import logging
+import dateutil.parser
 
 from messaging import keyword_resolve
 
@@ -50,9 +51,25 @@ def kernel_error_event_trigger(result):
     if not result:
         return
 
+    ctx = __context__.setdefault("hooklib.kernel_error_event_trigger", {})
+
     for entry in result:
 
-        # Reuse timestamp for event
-        entry["_stamp"] = entry.get("timestamp")
+        last = ctx.get("last_recorded", {})
+        ctx["last_recorded"] = entry
 
+        # Only report when message changes (to avoid duplicates)
+        if entry["message"] == last.get("message", None):
+            span = dateutil.parser.parse(entry["timestamp"]) - dateutil.parser.parse(last["timestamp"])
+            if span.total_seconds() < 60:
+
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Skipping duplicate kernel error log entry ({:} seconds since the last occurrence): {:}".format(span.total_seconds(), entry))
+
+                continue
+
+        # Trigger kernel error event
         __salt__["minionutil.trigger_event"]("system/kernel/error", data=entry)
+
+        # Store last reported entry
+        ctx["last_reported"] = entry
