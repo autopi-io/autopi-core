@@ -326,6 +326,9 @@ class MMA8X5XConn(I2CConn):
     def open(self):
         super(MMA8X5XConn, self).open()
 
+        if self._settings.get("reset", False):
+            self.reset(value=True)
+
         self.configure(**self._settings)
 
     def mode(self):
@@ -556,6 +559,24 @@ class MMA8X5XConn(I2CConn):
             res = self.read_write(CTRL_REG2, CTRL_REG2_SLPE, val) & CTRL_REG2_SLPE
 
         ret = res == CTRL_REG2_SLPE
+
+        return ret
+
+    def reset(self, value=None):
+        """
+        When the reset is enabled, all registers are reset and are loaded with default values, no matter whether it is in active/wake, active/sleep, or standby mode.
+        The I2C communication system is reset to avoid accidental corrupted data access.
+        """
+
+        if value == None:
+            res = self.read(CTRL_REG2) & CTRL_REG2_RST
+        else:
+            log.info("Performing software reset of device")
+
+            val = CTRL_REG2_RST if bool(value) else 0
+            res = self.read_write(CTRL_REG2, CTRL_REG2_RST, val) & CTRL_REG2_RST
+
+        ret = res == CTRL_REG2_RST
 
         return ret
 
