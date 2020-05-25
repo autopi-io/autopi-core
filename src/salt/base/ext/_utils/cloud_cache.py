@@ -398,8 +398,6 @@ class NextCloudCache(CloudCache):
         # First check for cached batch
         batch_reversed, payload = self.upload_cache.pop(queue, (None, None))
         if batch_reversed:
-            # TODO HN
-            #if log.isEnabledFor(logging.DEBUG):
             log.info("Found cached batch with {:} entries for queue '{:}'".format(len(batch_reversed), queue))
 
             # Signal that upload of next batch should continue on success (needed because max batch size might not be met)

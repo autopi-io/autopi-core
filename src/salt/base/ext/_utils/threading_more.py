@@ -17,7 +17,7 @@ class WorkerThread(threading.Thread):
     Class to easily schedule and run worker threads.
     """
 
-    def __init__(self, name=None, target=None, context={}, loop=-1, delay=0, interval=0, registry=None):
+    def __init__(self, name=None, target=None, context={}, loop=-1, delay=0, interval=0, auto_start=False, registry=None):
 
         if target == None:
             raise ValueError("Target function must be defined")
@@ -39,6 +39,7 @@ class WorkerThread(threading.Thread):
         self.loop = loop
         self.delay = delay
         self.interval = interval
+        self.auto_start = auto_start
         self.registry = registry
         self.proceed_event = threading.Event()
         self.wake_event = threading.Event()
@@ -225,7 +226,7 @@ class ThreadRegistry(object):
                     if re.match(name.replace("*", ".*"), t.name)
             ]
 
-    def do_all_for(self, name, func, force_wildcard=False):
+    def do_for_all_by(self, name, func, force_wildcard=False):
         with self._lock:
             ret = []
 
@@ -237,6 +238,17 @@ class ThreadRegistry(object):
                     continue
 
                 func(t)
+
+                ret.append(t)
+
+            return ret
+
+    def do_for_all(self, filter_func, do_func):
+        with self._lock:
+            ret = []
+
+            for t in filter(filter_func, self._threads):
+                do_func(t)
 
                 ret.append(t)
 

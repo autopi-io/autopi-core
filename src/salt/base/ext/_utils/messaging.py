@@ -125,7 +125,7 @@ class MessageProcessor(object):
 
         # Check if we need to dequeue message from an existing worker thread
         if "dequeue" in settings:
-            threads = self.worker_threads.do_all_for(settings["dequeue"],
+            threads = self.worker_threads.do_for_all_by(settings["dequeue"],
                 lambda t: t.context["messages"].remove(message))
 
             return {
@@ -134,7 +134,7 @@ class MessageProcessor(object):
 
         # Check if we need to enqueue message to an existing worker thread
         if "enqueue" in settings:
-            threads = self.worker_threads.do_all_for(settings["enqueue"],
+            threads = self.worker_threads.do_for_all_by(settings["enqueue"],
                 lambda t: t.context["messages"].append(message))
 
             return {
@@ -229,8 +229,8 @@ class MessageProcessor(object):
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("Killed worker thread '{:}' upon successful run".format(thread.name))
 
-        # Auto start is default
-        auto_start = settings.pop("start", True)
+        # Start immediately is default
+        start = settings.pop("start", True)
 
         # Add new worker thread
         thread = threading_more.WorkerThread(
@@ -239,7 +239,7 @@ class MessageProcessor(object):
             registry=self.worker_threads,  # Registers thread in registry
             **settings)  # Pass additional settings
 
-        if auto_start:
+        if start:
             thread.start()
 
             return {
@@ -394,25 +394,25 @@ class MessageProcessor(object):
                 return self.dedicated_worker(None, **kwargs)
 
             elif args[1] == "start":
-                threads = self.worker_threads.do_all_for(args[2], lambda t: t.start())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.start())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "pause":
-                threads = self.worker_threads.do_all_for(args[2], lambda t: t.pause())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.pause())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "resume":
-                threads = self.worker_threads.do_all_for(args[2], lambda t: t.resume())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.resume())
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "kill":
-                threads = self.worker_threads.do_all_for(args[2], lambda t: t.kill())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.kill())
                 return {
                     "values": [t.name for t in threads]
                 }
@@ -684,8 +684,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
         Blocking method that processes all received events.
         """
 
-        # Ensure all worker threads are started
-        threads = self.worker_threads.do_all_for("*", lambda t: t.start(), force_wildcard=True)
+        # Ensure all worker threads with auto start enabled are started
+        threads = self.worker_threads.do_for_all(lambda t: t.auto_start, lambda t: t.start())
         if threads:
             log.info("Starting {:d} worker thread(s): {:s}".format(len(threads), ", ".join([t.name for t in threads])))
 
@@ -715,7 +715,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         finally:
 
             # Ensure all worker threads are killed
-            threads = self.worker_threads.do_all_for("*", lambda t: t.kill(), force_wildcard=True)
+            threads = self.worker_threads.do_for_all_by("*", lambda t: t.kill(), force_wildcard=True)
             if threads:
                 log.info("Killing all worker thread(s): {:s}".format(", ".join([t.name for t in threads])))
 
@@ -766,7 +766,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
                 return
 
-        log.info("Triggering event with tag '{:s}': {:}".format(tag, data))
+        log.info("Triggering event '{:s}': {:}".format(tag, data))
 
         with self._bus_lock:  # Synchronize just to be safe
             self._outgoing_bus.fire_event(data.copy(), tag)

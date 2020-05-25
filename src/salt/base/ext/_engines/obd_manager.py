@@ -1087,7 +1087,7 @@ def start(**settings):
 
         # Configure OBD connection
         conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
-        conn.on_closing = lambda: edmp.worker_threads.do_all_for("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
+        conn.on_closing = lambda: edmp.worker_threads.do_for_all_by("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
         # IMPORTANT: If the STN UART wake trigger is enabled remember to ensure the RPi does not accidentally re-awaken the STN during shutdown!
         if "stn_state_pin" in settings:
 
@@ -1125,7 +1125,7 @@ def start(**settings):
                     edmp.trigger_event({"client": "{:}:{:}".format(*addr)}, "system/elm327_proxy/connected")
 
                     if settings["elm327_proxy"].get("pause_workers", True):
-                        threads = edmp.worker_threads.do_all_for("*", lambda t: t.pause())
+                        threads = edmp.worker_threads.do_for_all_by("*", lambda t: t.pause())
                         log.info("Paused {:} worker(s) while ELM327 proxy is in use".format(len(threads)))
 
                 def on_disconnect(addr):
@@ -1138,7 +1138,7 @@ def start(**settings):
                             log.info("Performed cold reset after ELM327 proxy has been in use")
 
                         if settings["elm327_proxy"].get("pause_workers", True):
-                            threads = edmp.worker_threads.do_all_for("*", lambda t: t.resume())
+                            threads = edmp.worker_threads.do_for_all_by("*", lambda t: t.resume())
                             log.info("Resumed {:} worker(s) after ELM327 proxy has been in use".format(len(threads)))
 
                 proxy.on_command = _relay_handler
