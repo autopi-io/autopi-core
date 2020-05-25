@@ -273,8 +273,8 @@ def gnss_assist_data_valid(name, force=False, valid_mins=-1, expire_mins=180, ke
         ret["comment"] = "Failed to get state of GNSS assist data after update: {:}".format(res["error"])
         return ret
 
-    # Fire event to notify that GNSS assist data has been updated
-    __salt__["event.fire"]({}, "system/device/ec2x/gnss/assist_data_updated")
+    # Trigger event to notify that GNSS assist data has been updated
+    __salt__["minionutil.trigger_event"]("system/device/ec2x/gnss/assist_data_updated")
 
     new = res
 

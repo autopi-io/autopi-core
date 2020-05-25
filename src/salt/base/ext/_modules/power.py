@@ -145,14 +145,15 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     else:
         log.warn("Intentionally going to hibernate until next engine start because of reason '{:}'".format(reason))
 
-    # Fire a sleep or hibernate event
-    __salt__["event.fire"]({
+    # Trigger a sleep or hibernate event
+    __salt__["minionutil.trigger_event"](
+        "system/power/{:}".format("sleep" if interval > 0 else "hibernate"),
+        data={
             "delay": delay,
             "interval": interval,
             "reason": reason,
             "uptime": __salt__["status.uptime"]()["seconds"]
-        },
-        "system/power/{:}".format("sleep" if interval > 0 else "hibernate")
+        }
     )
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
@@ -210,12 +211,8 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
 
             res = __salt__["schedule.delete"](name)
 
-            # Fire a cleared event
-            __salt__["event.fire"]({
-                    "reason": reason,
-                },
-                "system/{:}/cleared".format(name.lstrip("_"))
-            )
+            # Trigger a cleared event
+            __salt__["minionutil.trigger_event"]("system/{:}/cleared".format(name.lstrip("_")), data={"reason": reason})
 
     if add != None or enable == True:
         name = "_sleep_timer/{:}".format(add or reason)
@@ -245,10 +242,10 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
                 "revision": 2
             })
 
-        # Fire an added event
-        __salt__["event.fire"](
-            {"reason": reason} if not name.endswith("/{:}".format(reason)) else {},
-            "system/{:}/added".format(name.lstrip("_"))
+        # Trigger an added event
+        __salt__["minionutil.trigger_event"](
+            "system/{:}/added".format(name.lstrip("_")),
+            data={"reason": reason} if not name.endswith("/{:}".format(reason)) else {}
         )
 
         # Broadcast notification to all terminals
@@ -286,12 +283,13 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
         if immediately:
             log.warn("Performing system reboot immediately because of reason '{:}'".format(reason))
 
-            # Fire a reboot event
-            __salt__["event.fire"]({
+            # Trigger a reboot event
+            __salt__["minionutil.trigger_event"](
+                "system/power/reboot",
+                data={
                     "reason": reason,
                     "uptime": __salt__["status.uptime"]()["seconds"]
-                },
-                "system/power/reboot"
+                }
             )
 
             # TODO: Delay reboot 10 secs to allow cloud upload of above event
@@ -331,7 +329,7 @@ def restart_3v3(confirm=False, reason="unknown"):
 
     ret = __salt__["spm.query"]("restart_3v3")
 
-    # Fire a 3V3 restarted event
-    __salt__["event.fire"]({"reason": reason}, "system/power/3v3/restarted")
+    # Trigger a 3V3 restarted event
+    __salt__["minionutil.trigger_event"]("system/power/3v3/restarted", data={"reason": reason})
 
     return ret

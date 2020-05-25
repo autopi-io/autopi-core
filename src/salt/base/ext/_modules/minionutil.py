@@ -5,6 +5,9 @@ import salt.utils.event
 import salt.utils.jid
 import time
 
+from salt.utils.network import host_to_ips as _host_to_ips
+from salt.utils.network import remote_port_tcp as _remote_port_tcp
+
 
 log = logging.getLogger(__name__)
 
@@ -15,6 +18,16 @@ def help():
     """
     
     return __salt__["sys.doc"]("minionutil")
+
+
+def trigger_event(tag, data={}):
+    """
+    Triggers an event on the minion event bus.
+    """
+
+    log.info("Triggering event '{:s}': {:}".format(tag, data))
+
+    return __salt__["event.fire"](data, tag)
 
 
 def run_job(name, *args, **kwargs):
@@ -93,12 +106,8 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
         if immediately:
             log.warn("Performing minion restart in {:} second(s) because of reason '{:}'".format(delay, reason))
 
-            # Fire a restart event
-            __salt__["event.fire"]({
-                    "reason": reason
-                },
-                "system/minion/restart"
-            )
+            # Trigger a restarting event
+            trigger_event("system/minion/restarting", data={"reason": reason})
 
             # Give some time for event to get cached
             time.sleep(delay)
@@ -223,12 +232,8 @@ def update_release(force=False, dry_run=False, only_retry=False):
             if not res:
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
-            # Fire a release event with initial state
-            __salt__["event.fire"]({
-                    "id": new["id"]
-                },
-                "system/release/{:}".format(new["state"])
-            )
+            # Trigger a release event with initial state
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"]})
 
             # Broadcast notification to all terminals
             try:
@@ -267,12 +272,8 @@ def update_release(force=False, dry_run=False, only_retry=False):
             if not res:
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
-            # Fire a release event with final state
-            __salt__["event.fire"]({
-                    "id": new["id"]
-                },
-                "system/release/{:}".format(new["state"])
-            )
+            # Trigger a release event with final state
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"]})
 
             # Broadcast notification to all terminals
             try:
@@ -329,6 +330,80 @@ def change_master(host, confirm=False):
     ret["restart"] = restart()
 
     return ret
+
+
+def master_status(master=None, **kwargs):
+    """
+    Get status of connection to master.
+    Implementation originates from the 'status.master' command but without the logic to trigger events.
+    """
+
+    ret = {
+        "online": False,
+        "ip": None
+    }
+
+    if master == None:
+        master = __salt__["config.get"]("master", default="hub")
+
+    master_ips = None
+    if master:
+        master_ips = _host_to_ips(master)
+
+    if not master_ips:
+        return ret
+
+    port = __salt__["config.get"]("publish_port", default=4505)
+    connected_ips = _remote_port_tcp(port)
+
+    # Get connection status for master
+    for master_ip in master_ips:
+        if master_ip in connected_ips:
+            ret["online"] = True
+            ret["ip"] = master_ip
+
+            break
+
+    return ret
+
+
+def status_schedule(name=None, **kwargs):
+    """
+    Dedicated to be called from schedule and trigger minion status events.
+    """
+
+    # Determine name of schedule
+    name = kwargs.get("__pub_schedule", name)
+    if not name:
+        raise salt.exceptions.CommandExecutionError("No schedule name could be determined")
+
+    # Get enabled schedule details
+    schedule = __salt__["schedule.is_enabled"](name)
+    if not schedule:
+        raise salt.exceptions.CommandExecutionError("No enabled schedule found by name '{:}'".format(name))
+
+    # Get previous status if available
+    old = schedule.get("metadata", {}).get("status", None)
+    if not old:
+
+        # Trigger a ready event
+        trigger_event("system/minion/ready")
+
+    # Get current status
+    new = master_status()
+    if not old or old["online"] != new["online"]:
+
+        # Update scheduled job with new status
+        schedule.setdefault("metadata", {})["status"] = new
+        schedule["run_on_start"] = False  # Prevents from running right after modify
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Modifing schedule: {:}".format(schedule))
+
+        __salt__["schedule.modify"](**dict(persist=False, **schedule))
+
+        # Trigger an online/offline event
+        trigger_event("system/minion/online" if new["online"] else "system/minion/offline")
 
 
 def log_files():

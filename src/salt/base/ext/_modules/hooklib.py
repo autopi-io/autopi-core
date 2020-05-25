@@ -55,4 +55,4 @@ def kernel_error_event_trigger(result):
         # Reuse timestamp for event
         entry["_stamp"] = entry.get("timestamp")
 
-        __salt__["event.fire"](entry, "system/kernel/error")
+        __salt__["minionutil.trigger_event"]("system/kernel/error", data=entry)
