@@ -1,0 +1,13 @@
+#!/bin/sh -e
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
+{% if not salt['pillar.get']('rpi:display_enabled', True) %}
+# Disable HDMI
+/usr/bin/tvservice -o
+{% endif %}
+# Print the IP address
+_IP=$(hostname -I) || true
+if [ "$_IP" ]; then
+  printf "My IP address is %s\n" "$_IP"
+fi
+
+exit 0
