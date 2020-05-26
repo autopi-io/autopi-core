@@ -46,3 +46,34 @@ def module(name, args=[], kwargs={}, validate=[]):
             ret["changes"].setdefault("eval", {})[expr] = str(ex)
 
     return ret
+
+
+def succeed_with_changes(name):
+    '''
+    Returns successful and changes is not empty
+    .. versionadded:: 2014.7.0
+    name:
+        A unique string.
+    '''
+    ret = {
+        'name': name,
+        'changes': {},
+        'result': True,
+        'comment': 'Success!'
+    }
+
+    # Following the docs as written here
+    # http://docs.saltstack.com/ref/states/writing.html#return-data
+    ret['changes'] = {
+        'testing': {
+            'old': 'Unchanged',
+            'new': 'Something pretended to change'
+        }
+    }
+
+    if __opts__['test']:
+        ret['result'] = None
+        ret['comment'] = ('If we weren\'t testing, this would be successful '
+                          'with changes')
+
+    return ret
