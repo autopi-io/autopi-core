@@ -15,3 +15,4 @@ rc-local-configured:
   file.managed:
     - name: /etc/rc.local
     - source: salt://raspi/rc.local.jinja
+    - template: jinja
