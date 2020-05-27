@@ -5,6 +5,7 @@ import salt.utils.event
 import salt.utils.jid
 import time
 
+from retrying import retry
 from salt.utils.network import host_to_ips as _host_to_ips
 from salt.utils.network import remote_port_tcp as _remote_port_tcp
 
@@ -367,6 +368,7 @@ def master_status(master=None, **kwargs):
     return ret
 
 
+@retry(stop_max_attempt_number=5, wait_fixed=1000)  # Commands 'schedule.*' are seen to have failed during startup
 def status_schedule(name=None, **kwargs):
     """
     Dedicated to be called from schedule and trigger minion status events.

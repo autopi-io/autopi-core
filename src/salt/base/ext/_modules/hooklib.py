@@ -1,5 +1,6 @@
 import logging
 import dateutil.parser
+import re
 
 from messaging import keyword_resolve
 
@@ -43,17 +44,53 @@ def module_direct_handler(name, *args, **kwargs):
     return __salt__[name](*args, **kwargs)
 
 
-def kernel_error_event_trigger(result):
+def kernel_error_blacklist_filter(result):
     """
-    Triggers 'system/kernel/error' events
+    Filters out blacklisted kernel errors.
     """
 
     if not result:
         return
 
-    ctx = __context__.setdefault("hooklib.kernel_error_event_trigger", {})
+    # Get blacklist from configuration file
+    pattern = "|".join(__opts__.get("kernel_error_blacklist", []))
+    if not pattern:
+        return result
+
+    ret = []
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Compiling regex for pattern: {:}".format(pattern))
+
+    regex = re.compile(pattern)
 
     for entry in result:
+        if regex.match(entry.get("message", "")):
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Skipping blacklisted kernel error log entry: {:}".format(entry))
+
+            continue
+
+        ret.append(entry)
+
+    return ret
+
+
+def kernel_error_event_trigger(result):
+    """
+    Triggers 'system/kernel/error' events.
+    """
+
+    # First filter out blacklisted entries
+    entries = kernel_error_blacklist_filter(result)
+
+    if not entries:
+        return
+
+    ctx = __context__.setdefault("hooklib.kernel_error_event_trigger", {})
+
+    for entry in entries:
 
         last = ctx.get("last_recorded", {})
         ctx["last_recorded"] = entry
