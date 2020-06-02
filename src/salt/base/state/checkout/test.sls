@@ -1,7 +1,8 @@
+
 audio-test:
   module.run:
     - name: audio.play
-    - audio_file: /usr/share/sounds/alsa/Front_Center.wav
+    - audio_file: /opt/autopi/audio/sound/coin.wav
 
 # Test modem as default unless none is specified in pillar
 {%- if salt['pillar.get']('setup:mpcie:module', 'ec2x') %}

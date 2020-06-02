@@ -1,13 +1,6 @@
 
 include:
-  - checkout.test
-
-# Simulate engine running event to prevent sleep timers
-fire-engine-running-event:
-  module.run:
-    - name: event.fire
-    - tag: 'vehicle/engine/running'
-    - data: {}
+  - .test
 
 # Calibrate STN voltage
 stn-voltage-calibrated:
@@ -30,7 +23,7 @@ restart-minion-if-pending-after-release-updated:
     - name: minionutil.request_restart
     - pending: false
     - immediately: true
-    - reason: changes_made_during_checkout
+    - reason: changes_during_checkout
 
 states-locally-cached:
   module.run:
@@ -74,3 +67,8 @@ redis-flushed:
   cmd.run
 "truncate -s 0 /var/log/salt/*":  # Salt
   cmd.run
+
+audio-checkout-done:
+  module.run:
+    - name: audio.play
+    - audio_file: /opt/autopi/audio/sound/notification.wav
