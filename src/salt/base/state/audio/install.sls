@@ -26,12 +26,12 @@ speak-event-folder-created:
 
 speak-event-system-minion-offline-generated:
   cmd.run:
-    - name: espeak "Autopi, system minion offline" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.offline.wav
+    - name: espeak "Autopi, system mineeon offline" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.offline.wav
     - unless: test -f /opt/autopi/audio/speak/event/system.minion.offline.wav
 
 speak-event-system-minion-restarting-generated:
   cmd.run:
-    - name: espeak "Autopi, system minion restarting" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.restarting.wav
+    - name: espeak "Autopi, system mineeon restarting" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.restarting.wav
     - unless: test -f /opt/autopi/audio/speak/event/system.minion.restarting.wav
 
 speak-event-system-network-wwan0-offline-generated:
@@ -51,7 +51,7 @@ speak-event-system-power-hibernate-generated:
 
 speak-event-system-power-reboot-generated:
   cmd.run:
-    - name: espeak "Autopi, system power reboot" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.power.reboot.wav
+    - name: espeak "Autopi, system power re-boot" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.power.reboot.wav
     - unless: test -f /opt/autopi/audio/speak/event/system.power.reboot.wav
 
 speak-event-system-power-sleep-generated:
