@@ -31,7 +31,7 @@ speak-event-system-minion-offline-generated:
 
 speak-event-system-minion-restarting-generated:
   cmd.run:
-    - name: espeak "Autopi, system mineeon restarting" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.restarting.wav
+    - name: espeak "Autopi, system mineeon re-starting" -v en-gb -p 50 -s 175 -g 10 -w /opt/autopi/audio/speak/event/system.minion.restarting.wav
     - unless: test -f /opt/autopi/audio/speak/event/system.minion.restarting.wav
 
 speak-event-system-network-wwan0-offline-generated:
