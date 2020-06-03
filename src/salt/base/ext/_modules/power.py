@@ -1,6 +1,7 @@
 import logging
 import salt.exceptions
 import salt_more
+import time
 
 from datetime import datetime, timedelta
 
@@ -65,7 +66,7 @@ def status():
     return ret
 
 
-def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, reason="unknown", allow_auto_update=True):
+def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
     """
     Power down system and put device into sleep state.
 
@@ -78,14 +79,40 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
       - reason (str): Reason code that tells why we decided to sleep. Default is 'unknown'.
     """
 
+    # Validate dynamic keyword arguments
+    if [k for k in kwargs.keys() if not k.startswith("__")]:
+        raise salt.exceptions.CommandExecutionError(
+            "Unsupported keyword argument(s): {:}".format(", ".join([k for k in kwargs.keys() if not k.startswith("__")]))
+        )
+
     if __salt__["saltutil.is_running"]("power.sleep"):
         raise salt.exceptions.CommandExecutionError("Sleep is already running")
 
-    if not confirm:
+    ret = {
+        "result": True,
+        "comment": ""
+    }
+
+    # Check if called from sleep timer scheduled job
+    schedule = kwargs.get("__pub_schedule", None)
+    if schedule and schedule.startswith("_sleep_timer"):
+        try:
+
+            # Check to bypass sleep timer
+            if __salt__["minionutil.run_job"]("pillar.get", "power:sleep_timer:bypass", default=False, _timeout=30):
+                log.warn("Intentionally bypassing sleep timer '{:}' according to pillar 'power:sleep_timer:bypass'".format(schedule))
+
+                ret["result"] = False
+                ret["comment"] = "Sleep timer bypassed"
+
+                return ret
+
+        except:
+            log.exception("Failed to get pillar 'power:sleep_timer:bypass'")
+
+    elif not confirm:
         raise salt.exceptions.CommandExecutionError(
             "This command will power down the system - add parameter 'confirm=true' to continue anyway")
-
-    ret = {}
 
     log.info("Preparing to sleep {:} in {:} second(s)".format(
         "{:} second(s)".format(interval) if interval > 0 else "infinite",
@@ -157,12 +184,11 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     )
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
-    ret["result"] = True
-
+    
     return ret
 
 
-def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True):
+def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
     """
     Power down system and put device into hibernate state.
 
@@ -172,7 +198,7 @@ def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True)
       - reason (str): Reason code that tells why we decided to hibernate. Default is 'unknown'.
     """
 
-    return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_auto_update=allow_auto_update)
+    return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_auto_update=allow_auto_update, **kwargs)
 
 
 def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
@@ -269,7 +295,7 @@ def reboot(reason="unknown"):
     return request_reboot(immediately=True, reason=reason)
 
 
-def request_reboot(pending=True, immediately=False, reason="unknown"):
+def request_reboot(pending=True, immediately=False, delay=10, reason="unknown"):
     """
     Request for a future system reboot.
 
@@ -292,10 +318,11 @@ def request_reboot(pending=True, immediately=False, reason="unknown"):
                 }
             )
 
-            # TODO: Delay reboot 10 secs to allow cloud upload of above event
-
             # Ensure a heatbeat has just been sent to prevent heartbeat timeout during reboot
             __salt__["spm.query"]("heartbeat")
+
+            if delay > 0:
+                 time.sleep(delay)
 
             # Perform reboot
             return __salt__["system.reboot"]()
