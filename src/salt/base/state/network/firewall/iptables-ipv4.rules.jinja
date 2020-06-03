@@ -23,6 +23,9 @@ COMMIT
 {%- for permit in salt['pillar.get']('firewall:permits', []) %}
 -A INPUT {% if permit.get('interface', 'uap0') == 'uap0' %}-s 192.168.4.0/24 {% endif %}-i {{ permit.get('interface', 'uap0') }} -p {{ permit.get('protocol', 'tcp') }} -m state --state NEW -m tcp --dport {{ permit.get('port') }} -j ACCEPT
 {%- endfor %}
+{%- for entry in salt['pillar.get']('firewall:entries', []) %}
+{{ entry }}
+{%- endfor %}
 #-A INPUT -m limit --limit 10/min -j LOG --log-prefix "iptables INPUT denied: " --log-level 7
 -A INPUT -s 192.168.4.0/24 -i uap0 -j REJECT --reject-with icmp-host-prohibited
 -A INPUT -j DROP
