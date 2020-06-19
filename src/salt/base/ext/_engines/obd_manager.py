@@ -18,7 +18,7 @@ import signal
 import subprocess
 
 from binascii import unhexlify
-from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering
+from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering, fromisoformat
 from obd.utils import OBDError
 from obd_conn import OBDConn
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
@@ -558,39 +558,39 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
 
 @edmp.register_hook()
-def export_handler(run=None, dir=None, filtering=False, read_timeout=1, nice=-2, protocol=None, baudrate=None, verify=False):
+def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=-2, protocol=None, baudrate=None, verify=False):
     """
-    TODO HN
+    Fast export to file.
     """
 
     ret = {}
 
     ctx = context.setdefault("export", {})
 
+    folder = folder or os.path.join(home_dir, "export")
+
     def spawn_subprocess():
 
         # Ensure protocol
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
-        # Increase baud rate of serial connection
-        # TODO HN: Do this automatically
-        conn.change_baudrate(1152000)
+        # Increase baud rate of serial connection for fast protocols
+        if getattr(conn.cached_protocol, "baudrate", 0) >= 500000:
+            conn.change_baudrate(1152000)
 
-        # TODO HN: Ensure dir is created
-        file = os.path.join(home_dir, "export", "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID))
-
-        # TODO HN: This is not required?
-        # Free up serial device
-        #conn.close()
+        # Ensure folder is created
+        if not os.path.exists(folder):
+            os.makedirs(folder)
 
         # Start external process
+        serial = conn.serial()
         cmd = [
             "/home/pi/stn-dump",  # TODO HN
-            "-d", conn.device,
-            "-b", str(1152000),  # TODO HN
+            "-d", serial.portstr,
+            "-b", str(serial.baudrate),
             "-c", "STM" if filtering else "STMA",
             "-t", str(read_timeout * 10),  # Converts from seconds to deciseconds
-            "-o", file
+            "-o", os.path.join(folder, "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID))
         ]
 
         if log.isEnabledFor(logging.DEBUG):
@@ -671,9 +671,9 @@ def export_handler(run=None, dir=None, filtering=False, read_timeout=1, nice=-2,
 # See: https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout/16782391
 #@edmp.register_hook(synchronize=import_lock, timeout=1)
 @edmp.register_hook(synchronize=False)
-def import_handler(folder=None, limit=500, cleanup=False, type="raw"):
+def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
     """
-    TODO
+    Fast import from file.
     """
 
     ret = {
@@ -728,9 +728,7 @@ def import_handler(folder=None, limit=500, cleanup=False, type="raw"):
                             # Try process line
                             try:
                                 parts = line.split(" ", 1)
-                                ret["values"].append({  
-
-                                    # TODO HN: Timestamp precision needs to be verified!!!
+                                ret["values"].append({
                                     "_stamp": datetime.datetime.fromtimestamp(float(parts[0])).isoformat(),
                                     "value": parts[1].rstrip()
                                 })
@@ -755,11 +753,12 @@ def import_handler(folder=None, limit=500, cleanup=False, type="raw"):
                         log.debug("File '{:}' is already fully imported".format(os.path.join(folder, filename)))
 
                     # Candidate for cleanup
-                    if cleanup:
+                    if cleanup_grace > 0:
 
-                        # TODO HN: Check if durations has passed
-                        #metadata[filename]["timestamp"]
-                        grace=30
+                        # Check if expired
+                        delta = datetime.datetime.utcnow() - fromisoformat(metadata[filename]["timestamp"])
+                        if delta.total_seconds() < cleanup_grace:
+                            continue
 
                         try:
                             os.remove(os.path.join(folder, filename))
@@ -778,7 +777,8 @@ def import_handler(folder=None, limit=500, cleanup=False, type="raw"):
             if log.isEnabledFor(logging.DEBUG):
                 log.info("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
 
-            metadata_file.seek(0)  # Ensures file pointer is at the begining to overwrite
+            metadata_file.seek(0)  # Ensures file pointer is at the begining
+            metadata_file.truncate()
             json.dump(metadata, metadata_file, indent=4, sort_keys=True)
 
     return ret

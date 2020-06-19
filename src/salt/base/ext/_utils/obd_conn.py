@@ -62,10 +62,6 @@ class OBDConn(object):
 
         # Flag indicating if filters are applied or not
         self.has_filters = False
-
-    @property
-    def device(self):
-        return self._device
     
     def setup(self, **settings):
 
@@ -161,6 +157,10 @@ class OBDConn(object):
                 self.on_closed()
             except:
                 log.exception("Error in 'on_closed' event handler")
+
+    @Decorators.ensure_open
+    def serial(self):
+        return self._obd.connection()
 
     @Decorators.ensure_open
     def status(self):

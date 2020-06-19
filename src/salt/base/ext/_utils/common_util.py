@@ -1,3 +1,4 @@
+import datetime
 import importlib
 import logging
 import logging.handlers
@@ -75,6 +76,14 @@ def load_func(qname):
     func = getattr(mod, func_name)
 
     return func
+
+
+def fromisoformat(date_string):
+    """
+    Inspired by: https://docs.python.org/3/library/datetime.html#datetime.date.fromisoformat
+    """
+
+    return datetime.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S")
 
 
 def factory_rendering(func):
