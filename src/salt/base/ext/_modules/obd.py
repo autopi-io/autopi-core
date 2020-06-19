@@ -293,6 +293,22 @@ def play(file, **kwargs):
     return client.send_sync(_msg_pack(file, _handler="play", **kwargs))
 
 
+def export(**kwargs):
+    """
+    TODO HN
+    """
+
+    return client.send_sync(_msg_pack(_handler="export", **kwargs))
+
+
+def imp0rt(**kwargs):
+    """
+    TODO HN
+    """
+
+    return client.send_sync(_msg_pack(_handler="import", **kwargs))
+
+
 def manage(*args, **kwargs):
     """
     Runtime management of the underlying service instance.

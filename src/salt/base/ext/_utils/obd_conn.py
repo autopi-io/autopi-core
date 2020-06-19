@@ -63,6 +63,10 @@ class OBDConn(object):
         # Flag indicating if filters are applied or not
         self.has_filters = False
 
+    @property
+    def device(self):
+        return self._device
+    
     def setup(self, **settings):
 
         if log.isEnabledFor(logging.DEBUG):

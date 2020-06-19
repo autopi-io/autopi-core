@@ -5,6 +5,8 @@ import ConfigParser
 import cProfile as profile
 import datetime
 import elm327_proxy
+import io
+import json
 import logging
 import math
 import obd
@@ -12,6 +14,8 @@ import os
 import psutil
 import RPi.GPIO as gpio
 import salt.loader
+import signal
+import subprocess
 
 from binascii import unhexlify
 from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering
@@ -46,6 +50,9 @@ context = {
             "min": -1,
             "max": -1
         }
+    },
+    "export": {
+        "state": "" 
     }
 }
 
@@ -60,6 +67,8 @@ proxy = elm327_proxy.ELM327Proxy()
 
 # Loaded CAN databases indexed by procotol ID
 can_db_cache = {}
+
+export_subprocess = None
 
 
 def _can_db_for(protocol_id):
@@ -548,6 +557,233 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
     return ret
 
 
+@edmp.register_hook()
+def export_handler(run=None, dir=None, filtering=False, read_timeout=1, nice=-2, protocol=None, baudrate=None, verify=False):
+    """
+    TODO HN
+    """
+
+    ret = {}
+
+    ctx = context.setdefault("export", {})
+
+    def spawn_subprocess():
+
+        # Ensure protocol
+        conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+
+        # Increase baud rate of serial connection
+        # TODO HN: Do this automatically
+        conn.change_baudrate(1152000)
+
+        # TODO HN: Ensure dir is created
+        file = os.path.join(home_dir, "export", "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID))
+
+        # TODO HN: This is not required?
+        # Free up serial device
+        #conn.close()
+
+        # Start external process
+        cmd = [
+            "/home/pi/stn-dump",  # TODO HN
+            "-d", conn.device,
+            "-b", str(1152000),  # TODO HN
+            "-c", "STM" if filtering else "STMA",
+            "-t", str(read_timeout * 10),  # Converts from seconds to deciseconds
+            "-o", file
+        ]
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Spawning export subprocess by running command: {:}".format(" ".join(cmd)))
+
+        return subprocess.Popen(cmd, 
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=lambda: os.nice(nice))
+
+    global export_subprocess
+    if export_subprocess == None and run:
+        export_subprocess = spawn_subprocess()
+
+    if export_subprocess != None:
+
+        # Check for return code and determine if running
+        return_code = export_subprocess.poll()
+        is_running = return_code == None
+
+        # Update timestamp
+        ctx["timestamp"] = datetime.datetime.utcnow().isoformat()
+
+        if is_running:
+
+            # Interrupt if requested
+            if run != None and not run:
+                log.info("Sending interrupt signal to export subprocess")
+                export_subprocess.send_signal(signal.SIGINT)
+
+                is_running = False
+
+        if not is_running:
+
+            # Wait for output
+            try:
+                stdout, stderr = export_subprocess.communicate()
+                if stdout:
+                    ret["lines"] = stdout.split("\n")
+                if stderr:
+                    ret["errors"] = stderr.split("\n")
+
+                    log.error("Error(s) received from export subprocess: {:}".format(ret["errors"]))
+
+                return_code = export_subprocess.returncode
+            finally:
+                export_subprocess = None
+
+        # Determine state
+        if is_running:
+            ctx["state"] = "running"
+        else:
+            if return_code == 0:
+                ctx["state"] = "completed"
+            else:
+                ctx["state"] = "failed"
+                ctx["return_code"] = return_code
+
+                log.error("Export subprocess failed with return code {:}".format(return_code))
+    else:
+        ctx["state"] = "stopped"
+
+    # Restart
+    if export_subprocess == None and run:
+        log.info("Restarting export subprocess")
+
+        export_subprocess = spawn_subprocess()
+
+        ctx["state"] = "restarted"
+
+    ret["state"] = ctx["state"]
+
+    return ret
+
+
+# TODO HN:
+#import_lock = threading.Lock()
+# See: https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout/16782391
+#@edmp.register_hook(synchronize=import_lock, timeout=1)
+@edmp.register_hook(synchronize=False)
+def import_handler(folder=None, limit=500, cleanup=False, type="raw"):
+    """
+    TODO
+    """
+
+    ret = {
+        "_type": type,
+        "values": []
+    }
+
+    # Determine working folder
+    folder = folder or os.path.join(home_dir, "export")
+    if not os.path.isdir(folder):
+        raise Exception("Folder '{:}' does not exist".format(folder))
+
+    # Open metadata JSON file
+    with open(os.path.join(folder, ".import"), "r+" if os.path.isfile(os.path.join(folder, ".import")) else "w+") as metadata_file:
+        metadata = {}
+        if os.path.getsize(metadata_file.name) > 0:
+            metadata = json.load(metadata_file)
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Loaded import metadata from file '{:}': {:}".format(etadata_file.name, metadata))
+
+        try:
+            count = 0
+            files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and f.endswith(".log")]
+
+            # Remove file entries from metadata without a corresponding file in the file system
+            for filename in [f for f in metadata.keys() if not f in files]:
+                metadata.pop(filename)
+                log.info("Removed unaccompanied file entry '{:}' from import metadata", filename)
+
+            # Iterate over found files sorted by oldest first
+            for filename in sorted(files):
+
+                # Initialize metadata, if not already
+                metadata.setdefault(filename, {})
+
+                offset = metadata[filename].get("offset", 0)
+                size = os.path.getsize(os.path.join(folder, filename))
+                if offset < size:
+                    with open(os.path.join(folder, filename), "r") as file:
+                        if offset > 0:
+                            file.seek(offset)
+
+                            log.info("File '{:}' is partially imported - continuing from offset {:}".format(file.name, offset))
+                        
+                        # Read first line
+                        line = file.readline()
+                        while line:
+                            count += 1
+                            offset += len(line)
+
+                            # Try process line
+                            try:
+                                parts = line.split(" ", 1)
+                                ret["values"].append({  
+
+                                    # TODO HN: Timestamp precision needs to be verified!!!
+                                    "_stamp": datetime.datetime.fromtimestamp(float(parts[0])).isoformat(),
+                                    "value": parts[1].rstrip()
+                                })
+
+                            except:
+                                log.exception("Failed to import line {:}: {:}".format(count, repr(line)))
+
+                            # Stop if limit is reached
+                            if count >= limit:
+                                break
+
+                            # Read next line
+                            line = file.readline()
+
+                        metadata[filename]["offset"] = offset
+
+                        # Update timestamp
+                        metadata[filename]["timestamp"] = datetime.datetime.utcnow().isoformat()
+
+                else:
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("File '{:}' is already fully imported".format(os.path.join(folder, filename)))
+
+                    # Candidate for cleanup
+                    if cleanup:
+
+                        # TODO HN: Check if durations has passed
+                        #metadata[filename]["timestamp"]
+                        grace=30
+
+                        try:
+                            os.remove(os.path.join(folder, filename))
+                            metadata.pop(filename)
+
+                            log.info("Cleaned up imported file '{:}'", os.path.join(folder, filename))
+
+                        except:
+                            log.exception("Failed to cleanup imported file '{:}'".format(os.path.join(folder, filename)))
+
+                    continue
+
+            log.info("Imported {:} lines".format(count))
+
+        finally:
+            if log.isEnabledFor(logging.DEBUG):
+                log.info("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
+
+            metadata_file.seek(0)  # Ensures file pointer is at the begining to overwrite
+            json.dump(metadata, metadata_file, indent=4, sort_keys=True)
+
+    return ret
+
+
 @edmp.register_hook(synchronize=False)
 def recordings_handler(path=None):
     """
@@ -791,6 +1027,9 @@ def _decode_can_frame(can_db, res):
     """
 
     ret = []
+
+    if res["value"].startswith("NO"):  # Skips 'NO DATA'
+        return ret
 
     try:
         header, data = res["value"].split(" ", 1)
@@ -1105,6 +1344,9 @@ def start(**settings):
                         conn.close(permanent=True)
 
                         raise Warning("OBD connection closed permanently because the STN has powered off")
+
+                    if export_subprocess:
+                        raise Warning("OBD connection is currently used by export subprocess")
 
             conn.on_ensure_open = on_ensure_open
         conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
