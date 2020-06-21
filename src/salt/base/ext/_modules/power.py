@@ -162,26 +162,29 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     except:
         log.exception("Failed to plan system shutdown")
 
-    # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
-    # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
-    #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
-    __salt__["stn.sleep"](delay)
+    try:
+        # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
+        # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
+        #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
+        __salt__["stn.sleep"](delay)
 
-    if interval > 0:
-        log.warn("Intentionally going to sleep for {:} second(s) because of reason '{:}'".format(interval, reason))
-    else:
-        log.warn("Intentionally going to hibernate until next engine start because of reason '{:}'".format(reason))
+    finally:  # If STN command fails we still want to send below event
 
-    # Trigger a sleep or hibernate event
-    __salt__["minionutil.trigger_event"](
-        "system/power/{:}".format("sleep" if interval > 0 else "hibernate"),
-        data={
-            "delay": delay,
-            "interval": interval,
-            "reason": reason,
-            "uptime": __salt__["status.uptime"]()["seconds"]
-        }
-    )
+        if interval > 0:
+            log.warn("Intentionally going to sleep for {:} second(s) because of reason '{:}'".format(interval, reason))
+        else:
+            log.warn("Intentionally going to hibernate until next engine start because of reason '{:}'".format(reason))
+
+        # Trigger a sleep or hibernate event
+        __salt__["minionutil.trigger_event"](
+            "system/power/{:}".format("sleep" if interval > 0 else "hibernate"),
+            data={
+                "delay": delay,
+                "interval": interval,
+                "reason": reason,
+                "uptime": __salt__["status.uptime"]()["seconds"]
+            }
+        )
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
     

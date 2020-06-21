@@ -163,6 +163,10 @@ class OBDConn(object):
         return self._obd.connection()
 
     @Decorators.ensure_open
+    def interface(self):
+        return self._obd.interface
+
+    @Decorators.ensure_open
     def status(self):
         serial = self._obd.connection()
 

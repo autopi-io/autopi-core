@@ -12,6 +12,7 @@ import math
 import obd
 import os
 import psutil
+import re
 import RPi.GPIO as gpio
 import salt.loader
 import signal
@@ -558,7 +559,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
 
 @edmp.register_hook()
-def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=-2, protocol=None, baudrate=None, verify=False):
+def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=0, can_auto_format=False, read_timeout=1, serial_baudrate=None, process_nice=-2, protocol=None, baudrate=None, verify=False):
     """
     Fast export to file.
     """
@@ -574,13 +575,27 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
         # Ensure protocol
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
-        # Increase baud rate of serial connection for fast protocols
-        if getattr(conn.cached_protocol, "baudrate", 0) >= 500000:
-            conn.change_baudrate(1152000)
+        # Ensure filters are added
+        if monitor_filtering and not conn.has_filters:
+            if monitor_filtering == "can":
+                conn.sync_filters(_can_db_for(conn.cached_protocol.ID))
+            else:
+                log.warning("Monitor filtering is enabled but no filters are present")
 
-        # Ensure folder is created
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        # Setup CAN monitoring mode
+        conn.interface().set_can_monitor_mode(monitor_mode)
+
+        # Setup CAN automatic formatting
+        conn.interface().set_can_auto_format(can_auto_format)
+
+        # Set baud rate of serial connection
+        if serial_baudrate:
+            conn.change_baudrate(serial_baudrate)
+
+        # Ensure protocol folder is created
+        protocol_folder = os.path.join(folder, "protocol_{:}".format(conn.cached_protocol.ID))
+        if not os.path.exists(protocol_folder):
+            os.makedirs(protocol_folder)
 
         # Start external process
         serial = conn.serial()
@@ -588,9 +603,9 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
             "/home/pi/stn-dump",  # TODO HN
             "-d", serial.portstr,
             "-b", str(serial.baudrate),
-            "-c", "STM" if filtering else "STMA",
+            "-c", "STM" if monitor_filtering else "STMA",
             "-t", str(read_timeout * 10),  # Converts from seconds to deciseconds
-            "-o", os.path.join(folder, "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID)),
+            "-o", os.path.join(protocol_folder, "{:%Y%m%d%H%M}.log".format(datetime.datetime.utcnow())),
             "-q",  # Quiet mode
         ]
 
@@ -600,7 +615,7 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
         return subprocess.Popen(cmd, 
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=lambda: os.nice(nice))
+            preexec_fn=lambda: os.nice(process_nice))
 
     global export_subprocess
     if export_subprocess == None and run:
@@ -616,13 +631,14 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
         ctx["timestamp"] = datetime.datetime.utcnow().isoformat()
 
         if is_running:
+            if run != None:
+                if run:
+                    log.info("Export subprocess is already running")
+                else:
+                    log.info("Sending interrupt signal to export subprocess")
+                    export_subprocess.send_signal(signal.SIGINT)
 
-            # Interrupt if requested
-            if run != None and not run:
-                log.info("Sending interrupt signal to export subprocess")
-                export_subprocess.send_signal(signal.SIGINT)
-
-                is_running = False
+                    is_running = False
 
         if not is_running:
 
@@ -675,7 +691,7 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
 # See: https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout/16782391
 #@edmp.register_hook(synchronize=import_lock, timeout=1)
 @edmp.register_hook(synchronize=False)
-def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
+def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_nice=0, type="raw"):
     """
     Fast import of exported files.
     """
@@ -686,9 +702,18 @@ def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
     }
 
     # Determine working folder
-    folder = folder or os.path.join(home_dir, "export")
+    folder = folder or os.path.join(home_dir, "export", "protocol_{:}".format(conn.cached_protocol.ID) if conn.cached_protocol else ".")
     if not os.path.isdir(folder):
-        raise Exception("Folder '{:}' does not exist".format(folder))
+        raise Warning("Folder '{:}' does not exist".format(folder))
+
+    # Try determine protocol from folder path
+    match = re.search(r"protocol_(?P<id>[0-9A]{1,2})", folder)
+    if match:
+        ret["protocol"] = match.group("id")
+
+    # Set process priority
+    if process_nice != None and process_nice != psutil.Process(os.getpid()).nice():
+        psutil.Process(os.getpid()).nice(process_nice)
 
     # Open metadata JSON file
     with open(os.path.join(folder, ".import"), "r+" if os.path.isfile(os.path.join(folder, ".import")) else "w+") as metadata_file:
@@ -706,17 +731,23 @@ def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
             # Remove file entries from metadata without a corresponding file in the file system
             for filename in [f for f in metadata.keys() if not f in files]:
                 metadata.pop(filename)
-                log.info("Removed unaccompanied file entry '{:}' from import metadata", filename)
+                log.info("Removed unaccompanied file entry '{:}' from import metadata".format(filename))
 
             # Iterate over found files sorted by oldest first
             for filename in sorted(files):
 
-                # Initialize metadata, if not already
+                # Initialize metadata for file, if not already
                 metadata.setdefault(filename, {})
 
+                # Compare offset with size
                 offset = metadata[filename].get("offset", 0)
                 size = os.path.getsize(os.path.join(folder, filename))
                 if offset < size:
+
+                    # Continue to next file if limit is already reached
+                    if count >= limit:
+                        continue
+
                     with open(os.path.join(folder, filename), "r") as file:
                         if offset > 0:
                             file.seek(offset)
@@ -732,6 +763,7 @@ def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
                             # Try process line
                             try:
                                 parts = line.split(" ", 1)
+
                                 ret["values"].append({
                                     "_stamp": datetime.datetime.fromtimestamp(float(parts[0])).isoformat(),
                                     "value": parts[1].rstrip()
@@ -768,17 +800,15 @@ def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
                             os.remove(os.path.join(folder, filename))
                             metadata.pop(filename)
 
-                            log.info("Cleaned up imported file '{:}'", os.path.join(folder, filename))
+                            log.info("Cleaned up imported file '{:}'".format(os.path.join(folder, filename)))
 
                         except:
                             log.exception("Failed to cleanup imported file '{:}'".format(os.path.join(folder, filename)))
 
-                    continue
-
             if count > 0:
                 log.info("Imported {:} line(s)".format(count))
             else:
-                log.info("No lines found to import")
+                raise Warning("No lines found to import")
 
         finally:
             if log.isEnabledFor(logging.DEBUG):
@@ -1035,25 +1065,28 @@ def _decode_can_frame(can_db, res):
 
     ret = []
 
-    if res["value"].startswith("NO"):  # Skips 'NO DATA'
+    if res["value"][:2] in ["?", "NO", "BU"]:
+        if res["value"].startswith("NO DATA"):
+            log.info("Skipping line 'NO DATA'")
+        elif res["value"].startswith("BUFFER FULL"):
+            log.error("Skipping line 'BUFFER FULL' - try increase baud rate of serial connection to prevent buffer overflow")
+        else:
+            log.info("Skipping invalid line '{:}'".format(res["value"]))
+
         return ret
 
+    header, data = res["value"].split(" ", 1)
+
+    # Find message by header
     try:
-        header, data = res["value"].split(" ", 1)
+         msg = can_db.get_message_by_frame_id(int(header, 16))
+    except KeyError:  # Unknown message
 
-        # Find message by header
-        try:
-             msg = can_db.get_message_by_frame_id(int(header, 16))
-        except KeyError:  # Unknown message
+        return ret
 
-            return ret
-
-        # Decode data using found message
-        for key, val in msg.decode(unhexlify(data.replace(" ", "")), True, True).iteritems():
-            ret.append(dict(res, _type=key.lower(), value=val))
-
-    except:
-        log.exception("Failed to decode raw CAN frame result as CAN message: {:}".format(res))
+    # Decode data using found message
+    for key, val in msg.decode(unhexlify(re.sub(" |\x00", "", data)), True, True).iteritems():
+        ret.append(dict(res, _type=key.lower(), value=val))
 
     return ret
 
@@ -1068,23 +1101,35 @@ def can_converter(result):
         /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
 
+    protocol = result.pop("protocol", conn.cached_protocol.ID if conn.cached_protocol else None)  # NOTE: If key not popped the cloud returner is unable to split into separate results
     try:
-        can_db = _can_db_for(conn.cached_protocol.ID)
+        can_db = _can_db_for(protocol)
     except:
-        log.exception("Skipping CAN conversion because no CAN database could be loaded for protocol '{:}'".format(conn.cached_protocol.ID))
+        log.exception("Skipping CAN conversion because no CAN database could be loaded for protocol '{:}'".format(protocol))
 
     # Check for multiple values in result
     if "values" in result:
 
         # Try to decode CAN messages and add to list
         res = []
+        fail_count = 0
         for val in result["values"]:
-            res.extend(_decode_can_frame(can_db,
-                val if isinstance(val, dict) else {"value": val}))
+            val = val if isinstance(val, dict) else {"value": val}
+            try:
+                res.extend(_decode_can_frame(can_db, val))
+            except Exception as ex:
+                log.info("Failed to decode raw CAN frame result '{:}' as a CAN message: {:}".format(val, ex))
+
+                # Count failed
+                fail_count += 1
+
+        # Report if any failed
+        if fail_count:
+            log.error("{:} out of {:} raw CAN frame(s) in result failed to be decoded as CAN message(s)".format(fail_count, len(result["values"])))
 
         # Skip if none decoded
         if not res:
-            log.warning("No CAN frames in result was decoded: {:}".format(result))
+            log.warning("No raw CAN frame(s) out of {:} value(s) in result was decoded as CAN messages".format(len(result["values"])))
 
             return
 
@@ -1098,11 +1143,15 @@ def can_converter(result):
     elif "value" in result:
 
         # Try to decode CAN messages
-        res = _decode_can_frame(can_db, result)
+        res = None
+        try:
+            res = _decode_can_frame(can_db, result)
+        except Exception as ex:
+            log.error("Failed to decode raw CAN frame result '{:}' as a CAN message(s): {:}".format(result, ex))
 
         # Skip if none decoded
         if not res:
-            log.warning("No CAN frames in result was decoded: {:}".format(result))
+            log.warning("No raw CAN frame in result was decoded as CAN message(s)")
 
             return
 
@@ -1405,7 +1454,7 @@ def start(**settings):
         # Run message processor
         edmp.run()
 
-    except Exception:
+    except:
         log.exception("Failed to start OBD manager")
 
         raise
@@ -1413,14 +1462,21 @@ def start(**settings):
     finally:
         log.info("Stopping OBD manager")
 
-        # First stop ELM327 proxy if running
+        # Terminate subprocess
+        if export_subprocess:
+            try:
+                export_subprocess.terminate()
+            except:
+                log.exception("Failed to terminate export subprocess")
+
+        # Stop ELM327 proxy if running
         if proxy.is_alive():
             try:
                 proxy.stop()
             except:
                 log.exception("Failed to stop ELM327 proxy")
 
-        # Then close OBD connection if open
+        # Close OBD connection if open
         if conn.is_open():
             try:
                 conn.close()
