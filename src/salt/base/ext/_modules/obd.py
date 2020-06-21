@@ -293,17 +293,17 @@ def play(file, **kwargs):
     return client.send_sync(_msg_pack(file, _handler="play", **kwargs))
 
 
-def export(**kwargs):
+def file_export(**kwargs):
     """
-    TODO HN
+    Fast export to file.
     """
 
     return client.send_sync(_msg_pack(_handler="export", **kwargs))
 
 
-def imp0rt(**kwargs):
+def file_import(**kwargs):
     """
-    TODO HN
+    Fast import of exported files.
     """
 
     return client.send_sync(_msg_pack(_handler="import", **kwargs))

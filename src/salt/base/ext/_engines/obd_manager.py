@@ -590,7 +590,8 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
             "-b", str(serial.baudrate),
             "-c", "STM" if filtering else "STMA",
             "-t", str(read_timeout * 10),  # Converts from seconds to deciseconds
-            "-o", os.path.join(folder, "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID))
+            "-o", os.path.join(folder, "{:%Y%m%d%H%M}_protocol_{:}.log".format(datetime.datetime.utcnow(), conn.cached_protocol.ID)),
+            "-q",  # Quiet mode
         ]
 
         if log.isEnabledFor(logging.DEBUG):
@@ -629,7 +630,10 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
             try:
                 stdout, stderr = export_subprocess.communicate()
                 if stdout:
+                    # TODO: Improvement would be to parse individual warnings using 'parsing.into_dict_parser'
                     ret["lines"] = stdout.split("\n")
+
+                    log.warning("Output received from export subprocess: {:}".format(ret["lines"]))
                 if stderr:
                     ret["errors"] = stderr.split("\n")
 
@@ -673,7 +677,7 @@ def export_handler(run=None, folder=None, filtering=False, read_timeout=1, nice=
 @edmp.register_hook(synchronize=False)
 def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
     """
-    Fast import from file.
+    Fast import of exported files.
     """
 
     ret = {
