@@ -131,6 +131,9 @@ class WorkerThread(threading.Thread):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Resuming worker thread '%s'...", self.name)
 
+        # Disallow wake to enforce sleep interval again
+        self.wake_event.clear()
+
         # Allow to proceed
         self.proceed_event.set()
 

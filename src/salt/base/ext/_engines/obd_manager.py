@@ -775,11 +775,14 @@ def import_handler(folder=None, limit=500, cleanup_grace=60, type="raw"):
 
                     continue
 
-            log.info("Imported {:} lines".format(count))
+            if count > 0:
+                log.info("Imported {:} line(s)".format(count))
+            else:
+                log.info("No lines found to import")
 
         finally:
             if log.isEnabledFor(logging.DEBUG):
-                log.info("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
+                log.debug("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
 
             metadata_file.seek(0)  # Ensures file pointer is at the begining
             metadata_file.truncate()
