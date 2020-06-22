@@ -707,7 +707,7 @@ def export_handler(run=None, wait_timeout=0, folder=None, monitor_filtering=Fals
 # See: https://stackoverflow.com/questions/16740104/python-lock-with-statement-and-timeout/16782391
 #@edmp.register_hook(synchronize=import_lock, timeout=1)
 @edmp.register_hook(synchronize=False)
-def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_nice=0, type="raw"):
+def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, process_nice=0, type="raw"):
     """
     Fast import of exported files.
     """
@@ -823,11 +823,6 @@ def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_n
                         except:
                             log.exception("Failed to cleanup imported file '{:}'".format(os.path.join(folder, filename)))
 
-            if count > 0:
-                log.info("Imported {:} line(s) in {:}".format(count, timer() - start))
-            else:
-                raise Warning("No data to import")
-
         finally:
             if log.isEnabledFor(logging.DEBUG):
                 log.debug("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
@@ -835,6 +830,17 @@ def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_n
             metadata_file.seek(0)  # Ensures file pointer is at the begining
             metadata_file.truncate()
             json.dump(metadata, metadata_file, indent=4, sort_keys=True)
+
+        if count > 0:
+            log.info("Imported {:} line(s) in {:}".format(count, timer() - start))
+        else:
+
+            if idle_sleep > 0:
+                log.info("No data to import - sleeping for {:} second(s)".format(idle_sleep))
+
+                time.sleep(idle_sleep)
+
+            raise Warning("No data to import")
 
     return ret
 
