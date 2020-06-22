@@ -17,6 +17,7 @@ import RPi.GPIO as gpio
 import salt.loader
 import signal
 import subprocess
+import time
 
 from binascii import unhexlify
 from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering, fromisoformat
@@ -559,7 +560,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
 
 @edmp.register_hook()
-def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=0, can_auto_format=False, read_timeout=1, serial_baudrate=None, process_nice=-2, protocol=None, baudrate=None, verify=False):
+def export_handler(run=None, wait_timeout=0, folder=None, monitor_filtering=False, monitor_mode=0, can_auto_format=False, read_timeout=1, serial_baudrate=None, process_nice=-2, protocol=None, baudrate=None, verify=False):
     """
     Fast export to file.
     """
@@ -570,6 +571,7 @@ def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=
 
     folder = folder or os.path.join(home_dir, "export")
 
+    spawn_count = 0
     def spawn_subprocess():
 
         # Ensure protocol
@@ -600,7 +602,7 @@ def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=
         # Start external process
         serial = conn.serial()
         cmd = [
-            "/home/pi/stn-dump",  # TODO HN
+            "/usr/bin/stn-dump",
             "-d", serial.portstr,
             "-b", str(serial.baudrate),
             "-c", "STM" if monitor_filtering else "STMA",
@@ -608,9 +610,8 @@ def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=
             "-o", os.path.join(protocol_folder, "{:%Y%m%d%H%M}.log".format(datetime.datetime.utcnow())),
             "-q",  # Quiet mode
         ]
-
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Spawning export subprocess by running command: {:}".format(" ".join(cmd)))
+        
+        log.info("Spawning export subprocess by running command: {:}".format(" ".join(cmd)))
 
         return subprocess.Popen(cmd, 
             stdout=subprocess.PIPE,
@@ -620,11 +621,25 @@ def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=
     global export_subprocess
     if export_subprocess == None and run:
         export_subprocess = spawn_subprocess()
+        spawn_count += 1
+
+        # Enforce wait for completion
+        if wait_timeout < read_timeout + 1:
+            wait_timeout = read_timeout + 1
 
     if export_subprocess != None:
 
-        # Check for return code and determine if running
+        # Check for return code once or until wait timeout reached
         return_code = export_subprocess.poll()
+        for i in range(0, wait_timeout * 10):  # Converts from seconds to deciseconds
+            return_code = export_subprocess.poll()
+            if return_code != None:
+                break
+
+            if wait_timeout > 0:
+                time.sleep(0.1)  # Sleep one decisecond
+
+        # Determine if running
         is_running = return_code == None
 
         # Update timestamp
@@ -673,11 +688,12 @@ def export_handler(run=None, folder=None, monitor_filtering=False, monitor_mode=
     else:
         ctx["state"] = "stopped"
 
-    # Restart
-    if export_subprocess == None and run:
+    # Restart if not spawned in this call
+    if export_subprocess == None and run and spawn_count == 0:
         log.info("Restarting export subprocess")
 
         export_subprocess = spawn_subprocess()
+        spawn_count += 1
 
         ctx["state"] = "restarted"
 
@@ -725,6 +741,8 @@ def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_n
             log.debug("Loaded import metadata from file '{:}': {:}".format(etadata_file.name, metadata))
 
         try:
+            start = timer()
+
             count = 0
             files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f)) and f.endswith(".log")]
 
@@ -806,9 +824,9 @@ def import_handler(folder=None, limit=5000, delay=0, cleanup_grace=60, process_n
                             log.exception("Failed to cleanup imported file '{:}'".format(os.path.join(folder, filename)))
 
             if count > 0:
-                log.info("Imported {:} line(s)".format(count))
+                log.info("Imported {:} line(s) in {:}".format(count, timer() - start))
             else:
-                raise Warning("No lines found to import")
+                raise Warning("No data to import")
 
         finally:
             if log.isEnabledFor(logging.DEBUG):
@@ -1067,11 +1085,11 @@ def _decode_can_frame(can_db, res):
 
     if res["value"][:2] in ["?", "NO", "BU"]:
         if res["value"].startswith("NO DATA"):
-            log.info("Skipping line 'NO DATA'")
+            log.info("CAN decoder is skipping line 'NO DATA'")
         elif res["value"].startswith("BUFFER FULL"):
-            log.error("Skipping line 'BUFFER FULL' - try increase baud rate of serial connection to prevent buffer overflow")
+            log.error("CAN decoder is skipping line 'BUFFER FULL' - try increase baud rate of serial connection to prevent buffer overflow")
         else:
-            log.info("Skipping invalid line '{:}'".format(res["value"]))
+            log.info("CAN decoder is skipping invalid line '{:}'".format(res["value"]))
 
         return ret
 
@@ -1101,6 +1119,8 @@ def can_converter(result):
         /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
 
+    start = timer()
+
     protocol = result.pop("protocol", conn.cached_protocol.ID if conn.cached_protocol else None)  # NOTE: If key not popped the cloud returner is unable to split into separate results
     try:
         can_db = _can_db_for(protocol)
@@ -1127,11 +1147,13 @@ def can_converter(result):
         if fail_count:
             log.error("{:} out of {:} raw CAN frame(s) in result failed to be decoded as CAN message(s)".format(fail_count, len(result["values"])))
 
-        # Skip if none decoded
         if not res:
             log.warning("No raw CAN frame(s) out of {:} value(s) in result was decoded as CAN messages".format(len(result["values"])))
 
+            # Skip if none decoded
             return
+        else:
+            log.info("Converted {:}/{:} raw CAN frame(s) into {:} CAN signals in {:}".format(len(result["values"]) - fail_count, len(result["values"]), len(res), timer() - start))
 
         result["values"] = res
 

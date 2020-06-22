@@ -12,6 +12,7 @@ base:
     - network.wlan.client.config
     - network.wlan.hotspot.install
     - network.firewall.config
+    - obd.install
     - audio.install
     - redis.server
 {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
