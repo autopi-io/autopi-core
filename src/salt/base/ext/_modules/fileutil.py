@@ -40,3 +40,20 @@ def line_count(file):
 
     return ret
     
+
+def upload(path, gzip=True, service=None, **kwargs):
+    """
+    TODO: Add documentation
+    """
+
+    ret = {}
+
+    if service == "dropbox":
+        token = kwargs.get("token", None)
+        if not token:
+            raise salt.exceptions.CommandExecutionError("Dropbox token is mandatory")
+
+
+    # TODO: Implement
+    
+    return ret
