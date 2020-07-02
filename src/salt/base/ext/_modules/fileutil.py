@@ -1,3 +1,5 @@
+import os
+import requests
 import logging
 import salt.exceptions
 import salt.utils.event
@@ -43,17 +45,62 @@ def line_count(file):
 
 def upload(path, gzip=True, service=None, **kwargs):
     """
-    TODO: Add documentation
+    Uploads a file (by default gzipped) to a service.
+
+    Arguments:
+      - path (str): Path to the file.
+
+    Optional arguments:
+      - gzip (bool): Gzip it? Default is 'True'.
+      - service (str): The service to be used (Possible: 'dropbox'). Default is None.
     """
 
+    # setup
     ret = {}
+    _, tail = os.path.split(path)
+    filename, ext = os.path.splitext(tail)
+    path_to_upload = path
+    gzip_path = '/tmp'
 
+    # zip file
+    if gzip:
+        log.debug('Gzipping file')
+
+        os.system('gzip --keep -f {:} --stdout > {:}'.format(path, os.path.join(gzip_path, filename + '.gz')))
+        path_to_upload = os.path.join(gzip_path, filename + '.gz')
+        ext = '.gz'
+
+    # upload file
+    log.info('Uploading files using {:} service'.format(service))
     if service == "dropbox":
         token = kwargs.get("token", None)
         if not token:
             raise salt.exceptions.CommandExecutionError("Dropbox token is mandatory")
 
+        log.debug('Opening file')
+        with open(path_to_upload, 'rb') as file:
+            dropbox_url = 'https://content.dropboxapi.com/2/files/upload'
+            dropbox_api_arg = '{{"path": "/{:}{:}", "mode": "overwrite"}}'.format(filename, ext)
+            headers = {
+                'Dropbox-API-Arg': dropbox_api_arg,
+                'Content-Type': 'application/octet-stream',
+                'Authorization': 'Bearer ' + token,
+            }
 
-    # TODO: Implement
+            log.debug('Sending upload request')
+            response = requests.post(dropbox_url, headers=headers, data=file)
+
+        # cleanup
+        if gzip:
+            log.debug('Cleaning up gzip files')
+            os.remove(os.path.join(gzip_path, filename + ext))
+
+        ret = {
+            "success": response.status_code >= 200 and response.status_code <= 299,
+            "status_code": response.status_code,
+            "text": response.text,
+        }
+    else:
+        raise salt.exceptions.CommandExecutionError("You need to specify a service to use")
     
     return ret
