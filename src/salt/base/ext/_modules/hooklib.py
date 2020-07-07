@@ -27,7 +27,14 @@ def module_handler(name, *args, **kwargs):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Keyword resolved arguments: {:}".format(kwargs))
 
-    return __salt__["minionutil.run_job"](name, *args, **kwargs)
+    kind = kwargs.pop("_type", None)
+
+    ret = __salt__["minionutil.run_job"](name, *args, **kwargs)
+
+    if kind != None and isinstance(ret, dict):
+        ret["_type"] = kind
+
+    return ret
 
 
 def module_direct_handler(name, *args, **kwargs):
@@ -41,7 +48,14 @@ def module_direct_handler(name, *args, **kwargs):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Keyword resolved arguments: {:}".format(kwargs))
 
-    return __salt__[name](*args, **kwargs)
+    kind = kwargs.pop("_type", None)
+
+    ret = __salt__[name](*args, **kwargs)
+
+    if kind != None and isinstance(ret, dict):
+        ret["_type"] = kind
+
+    return ret
 
 
 def kernel_error_blacklist_filter(result):
