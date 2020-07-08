@@ -58,6 +58,21 @@ def module_direct_handler(name, *args, **kwargs):
     return ret
 
 
+def skip_empty_filter(result):
+    """
+    Filters out empty results.
+    """
+
+    if not result:
+        return
+
+    if isinstance(result, dict):
+        if not [v for k, v in result.iteritems() if not k.startswith("_") and v]:
+            return
+
+    return result
+
+
 def kernel_error_blacklist_filter(result):
     """
     Filters out blacklisted kernel errors.
