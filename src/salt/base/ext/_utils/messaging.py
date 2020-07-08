@@ -394,25 +394,25 @@ class MessageProcessor(object):
                 return self.dedicated_worker(None, **kwargs)
 
             elif args[1] == "start":
-                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.start())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.start(**kwargs))
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "pause":
-                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.pause())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.pause(**kwargs))
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "resume":
-                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.resume())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.resume(**kwargs))
                 return {
                     "values": [t.name for t in threads]
                 }
 
             elif args[1] == "kill":
-                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.kill())
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.kill(**kwargs))
                 return {
                     "values": [t.name for t in threads]
                 }

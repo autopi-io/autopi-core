@@ -44,6 +44,7 @@ class WorkerThread(threading.Thread):
         self.proceed_event = threading.Event()
         self.wake_event = threading.Event()
         self.terminate = False
+        self.run_on_terminate = False
 
         if registry and not registry.add(self):
             raise ValueError("Worker thread '{:s}' already added to registry".format(name))
@@ -103,6 +104,15 @@ class WorkerThread(threading.Thread):
             raise
 
         finally:
+
+            if self.run_on_terminate:
+                log.info("Running worker thread '%s' one last time before being terminated", self.name)
+
+                try:
+                    self.target(self, self.context)
+                except:
+                    log.exception("Failed to run worker thread '%s' one last time before being terminated", self.name)
+
             log.info("Worker thread '%s' terminated", self.name)
 
             if self.registry and self.registry.remove(self):
@@ -137,12 +147,15 @@ class WorkerThread(threading.Thread):
         # Allow to proceed
         self.proceed_event.set()
 
-    def kill(self):
+    def kill(self, run=False):
         if self.terminate:
             return
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Killing worker thread '%s'...", self.name)
+
+        # Set flag that decide whether to run one last time
+        self.run_on_terminate = run
 
         # Raise the white flag
         self.terminate = True
