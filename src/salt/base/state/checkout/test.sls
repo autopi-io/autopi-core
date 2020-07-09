@@ -73,3 +73,7 @@ power-test:
     - validate: '"rpi" in ret'
     - validate: '"spm" in ret'
     - validate: '"stn" in ret'
+
+rtc-test:
+  cmd.run:
+    - name: "hwclock -r"
