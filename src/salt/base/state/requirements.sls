@@ -1,4 +1,8 @@
 
+salt-source-repo-file-removed:
+  file.absent:
+    - name: /etc/apt/sources.list.d/saltstack.list
+
 pending-packages-configured:
   cmd.run:
     - name: "dpkg --configure -a"
