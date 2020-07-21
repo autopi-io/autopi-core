@@ -536,6 +536,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         self._event_matchers = []
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
+        self._reactors = []
 
     def init(self, __salt__, __opts__, hooks=[], workers=[], reactors=[]):
         """
@@ -661,10 +662,18 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 continue  # Skip reactor
 
             # Register event matcher using above function
-            self.register_event_matcher(reactor[match_type], on_event, match_type=match_type)
+            self.register_reactor(reactor, on_event, match_type=match_type)
 
     def _custom_match_tag_regex(self, event_tag, search_tag):
         return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)
+
+    def register_reactor(self, reactor, func, match_type="startswith"):
+        """
+        Register a reactor and register it as an event matcher. A wrapper function for register_event_matcher.
+        """
+
+        self._reactors.append(reactor)
+        self.register_event_matcher(reactor[match_type], func, match_type=match_type)
 
     def register_event_matcher(self, tag, func, match_type="startswith"):
         """
@@ -678,6 +687,36 @@ class EventDrivenMessageProcessor(MessageProcessor):
             "func": func,
         }
         self._event_matchers.append(em)
+
+    def manage_workflow(self, message):
+        """
+        Administration workflow to query and manage this processor instance.
+
+        Supported commands:
+            - reactor list|show <name>
+        """
+
+        args = message.get('args', [])
+        kwargs = message.get('kwargs', {})
+
+        if len(args) > 1 and args[0] == 'reactor':
+            if args[1] == 'list':
+                return {
+                    "values": [r['name'] for r in self._reactors],
+                }
+            elif args[1] == 'show':
+                if len(args) > 2 and args[2] != '*':
+                    reactors = [r for r in self._reactors if args[2] in r['name']]
+                else:
+                    reactors = [r for r in self._reactors]
+
+                return {
+                    "value": {r['name']: r for r in reactors}
+                }
+
+        else:
+            return super(EventDrivenMessageProcessor, self).manage_workflow(message)
+
 
     def run(self):
         """

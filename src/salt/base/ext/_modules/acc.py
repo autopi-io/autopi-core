@@ -92,6 +92,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -103,6 +104,8 @@ def manage(*args, **kwargs):
       - 'acc.manage worker pause *'
       - 'acc.manage worker resume *'
       - 'acc.manage worker kill *'
+      - 'acc.manage reactor list'
+      - 'acc.manage reactor show *'
       - 'acc.manage run handler="query" args="[\"xyz\"]" returner="cloud"'
     """
 

@@ -316,6 +316,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -327,6 +328,8 @@ def manage(*args, **kwargs):
       - 'obd.manage worker pause *'
       - 'obd.manage worker resume *'
       - 'obd.manage worker kill *'
+      - 'obd.manage reactor list'
+      - 'obd.manage reactor show *'
       - 'obd.manage run handler="query" args="[\"ELM_VOLTAGE\"]" converter="battery" returner="cloud"'
     """
 
