@@ -2,6 +2,7 @@ from __future__ import division
 
 import datetime
 import logging
+import time
 
 from common_util import dict_key_by_value
 from i2c_conn import I2CConn
@@ -335,6 +336,9 @@ class MMA8X5XConn(I2CConn):
             # Reset if requested
             if self._settings.get("reset", False):
                 self.reset(value=True)
+
+                # Give time to recover after reset
+                time.sleep(.1)
 
             self.configure(**self._settings)
         except:
