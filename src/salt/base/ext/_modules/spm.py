@@ -84,6 +84,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -95,6 +96,8 @@ def manage(*args, **kwargs):
       - 'spm.manage worker pause *'
       - 'spm.manage worker resume *'
       - 'spm.manage worker kill *'
+      - 'spm.manage reactor list'
+      - 'spm.manage reactor show *'
       - 'spm.manage run handler="query" args="[\"status\"]"'
     """
 

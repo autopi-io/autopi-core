@@ -49,16 +49,19 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
-      - 'obd.manage hook list'
-      - 'obd.manage worker list *'
-      - 'obd.manage worker show *'
-      - 'obd.manage worker start *'
-      - 'obd.manage worker pause *'
-      - 'obd.manage worker resume *'
-      - 'obd.manage worker kill *'
+      - 'reactor.manage hook list'
+      - 'reactor.manage worker list *'
+      - 'reactor.manage worker show *'
+      - 'reactor.manage worker start *'
+      - 'reactor.manage worker pause *'
+      - 'reactor.manage worker resume *'
+      - 'reactor.manage worker kill *'
+      - 'reactor.manage reactor list'
+      - 'reactor.manage reactor show *'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

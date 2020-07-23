@@ -49,6 +49,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -60,6 +61,8 @@ def manage(*args, **kwargs):
       - 'tracking.manage worker pause *'
       - 'tracking.manage worker resume *'
       - 'tracking.manage worker kill *'
+      - 'tracking.manage reactor list'
+      - 'tracking.manage reactor show *'
       - 'tracking.manage run handler="gnss_query" args="[\"location\"]" converter="gnss_location_to_position" returner="cloud"'
     """
 

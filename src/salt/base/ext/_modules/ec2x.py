@@ -934,6 +934,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -945,6 +946,8 @@ def manage(*args, **kwargs):
       - 'ec2x.manage worker pause *'
       - 'ec2x.manage worker resume *'
       - 'ec2x.manage worker kill *'
+      - 'ec2x.manage reactor list'
+      - 'ec2x.manage reactor show *'
       - 'ec2x.manage run handler="exec" args="[\"ATI\"]" returner="cloud"' 
     """
 

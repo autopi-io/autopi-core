@@ -64,6 +64,7 @@ def manage(*args, **kwargs):
     Supported commands:
       - 'hook list|call <name> [argument]... [<key>=<value>]...'
       - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
       - 'run <key>=<value>...'
 
     Examples:
@@ -75,6 +76,8 @@ def manage(*args, **kwargs):
       - 'cloud.manage worker pause *'
       - 'cloud.manage worker resume *'
       - 'cloud.manage worker kill *'
+      - 'cloud.manage reactor list'
+      - 'cloud.manage reactor show *'
       - 'cloud.manage run handler="cache" args="[\"list_queues\"]"'
     """
 
