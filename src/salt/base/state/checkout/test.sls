@@ -55,6 +55,13 @@ acc-test:
       - round(ret["y"], 1) == 0.0
       - round(ret["z"], 1) == 1.0
 
+acc-interrupt-timeout-check:
+  test.module:
+    - name: acc.context
+    - validate:
+      - ret["interrupt"]["timeout"] <= 1
+      - ret["interrupt"]["total"] > 0
+
 rpi-test:
   test.module:
     - name: rpi.temp
