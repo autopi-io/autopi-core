@@ -292,6 +292,10 @@ class MMA8X5XConn(I2CConn):
         return self._settings
 
     def configure(self, **settings):
+        """
+        Applies specific settings.
+        """
+
         try:
 
             # Ensure in standby mode
@@ -326,10 +330,20 @@ class MMA8X5XConn(I2CConn):
     def open(self):
         super(MMA8X5XConn, self).open()
 
-        if self._settings.get("reset", False):
-            self.reset(value=True)
+        try:
 
-        self.configure(**self._settings)
+            # Reset if requested
+            if self._settings.get("reset", False):
+                self.reset(value=True)
+
+            self.configure(**self._settings)
+        except:
+            log.exception("Failed to configure after opening connection")
+
+            # Ensure connection is closed again
+            self.close()
+
+            raise
 
     def mode(self):
         """
