@@ -16,7 +16,7 @@ rtc-pcf8523-module-updated:
   file.managed:
     - name: /lib/modules/{{ salt['grains.get']('kernelrelease') }}/kernel/drivers/rtc/rtc-pcf8523.ko
     - source: salt://raspi/kernel/{{ salt['grains.get']('kernelrelease') }}/drivers/rtc/rtc-pcf8523.ko
-    - hash: c51ccd940bc06a97769e8c12a7bec9fe9141b572
+    - hash: 615986eb32b6d12e51f6d1f23a5b976728f51f60
     - watch_in:
       - module: reboot-requested-after-kernel-changes
 {%- else %}
