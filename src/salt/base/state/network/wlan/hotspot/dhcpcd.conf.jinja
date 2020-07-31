@@ -65,9 +65,9 @@ interface uap0
 static ip_address=192.168.4.1/24
 metric 100
 nohook wpa_supplicant
-{%- for interface, settings in pillar.get('dhcpcd:interfaces', {}).iteritems() %}
+{%- for name, settings in salt['pillar.get']('dhcpcd:interfaces', {}).iteritems() %}
 
-interface {{ interface }}
+interface {{ name }}
 {%- for line in settings %}
 {{ line }}
 {%- endfor %}
