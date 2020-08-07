@@ -314,12 +314,12 @@ def gnss_assist_data_reset(name, type=3):
     return ret
 
 
-def gnss_set_fix_frequency(value):
+def gnss_set_fix_frequency(name, value):
     """
     """
 
     ret = {
-        "value": value,
+        "name": name,
         "result": None,
         "changes": {},
         "comment": ""
