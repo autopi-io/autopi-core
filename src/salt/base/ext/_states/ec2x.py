@@ -312,3 +312,66 @@ def gnss_assist_data_reset(name, type=3):
     ret["comment"] = "Sucessfully reset GNSS assist data"
     ret["changes"]["reset"] = True
     return ret
+
+
+def gnss_set_fix_frequency(value):
+    """
+    """
+
+    ret = {
+        "value": value,
+        "result": None,
+        "changes": {},
+        "comment": ""
+    }
+
+
+    res = salt_more.call_error_safe(__salt__["ec2x.gnss_fix_frequency"])
+    if "error" in res:
+        ret["result"] = False
+        ret["comment"] = "Failed to get current GNSS fix frequency: {:}".format(res["error"])
+        return ret
+
+    old_fixfreq = res["fixfreq"]
+    if res["fixfreq"] == value:
+        ret["result"] = True
+        ret["comment"] = "GNSS fix frequency already set to {:}".format(value)
+        return ret
+
+    if __opts__["test"]:
+        ret["result"] = True
+        ret["comment"] = "GNSS fix frequency will be set to {:}".format(value)
+        return ret
+
+    res = salt_more.call_error_safe(__salt__["ec2x.gnss_fix_frequency"], value=value)
+    if "error" in res:
+        ret["result"] = False
+        ret["comment"] = "Failed to set GNSS fix frequency: {:}".format(res["error"])
+        return ret
+
+    # do we need to restart GNSS engine?
+    res = salt_more.call_error_safe(__salt__["ec2x.gnss"])
+    if "error" in res:
+        ret["result"] = False
+        ret["comment"] = "Failed to get GNSS power state: {:}".format(res["error"])
+        return ret
+
+    if res["value"] == "on":
+        # yes we do
+        res = salt_more.call_error_safe(__salt__["ec2x.gnss"], enable=False)
+        if "error" in res:
+            ret["result"] = False
+            ret["comment"] = "Failed to restart GNSS: {:}".format(ret["error"])
+            return ret
+
+        res = salt_more.call_error_safe(__salt__["ec2x.gnss"], enable=True)
+        if "error" in res:
+            ret["result"] = False
+            ret["comment"] = "Failed to restart GNSS: {:}".format(ret["error"])
+            return ret
+
+    ret["result"] = True
+    ret["comment"] = "Sucessfully set GNSS fix frequency"
+    ret["changes"]["old"] = old_fixfreq
+    ret["changes"]["new"] = value
+    return ret

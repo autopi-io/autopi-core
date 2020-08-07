@@ -17,3 +17,7 @@ gnss-nmea-gps-output-configured:
     - name: ec2x.gnss_nmea_output_gps
     - kwargs:
         value: 31
+
+gnss-set-fix-frequency:
+  ec2x.gnss_set_fix_frequency:
+    - value: {{ salt['pillar.get']('ec2x:gnss:fix_frequency') }}

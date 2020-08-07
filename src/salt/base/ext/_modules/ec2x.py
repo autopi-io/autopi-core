@@ -40,7 +40,7 @@ def help():
     """
     Shows this help information.
     """
-    
+
     return __salt__["sys.doc"]("ec2x")
 
 
@@ -57,7 +57,7 @@ def connection(**kwargs):
     Manages current connection.
 
     Optional arguments:
-      - close (bool): Close serial connection? Default value is 'False'. 
+      - close (bool): Close serial connection? Default value is 'False'.
 
     Examples:
       - 'ec2x.connection'
@@ -411,7 +411,7 @@ def gnss_nmea_port(value=None):
     Configure the output port of NMEA sentences, and the configuration parameter will be automatically saved to NVRAM.
 
     Port options:
-      - 'none' = Close NMEA sentence output 
+      - 'none' = Close NMEA sentence output
       - 'usbnmea' = Output via USB NMEA port
       - 'uartdebug' = Output via UART debug port
     """
@@ -759,6 +759,43 @@ def gnss_assist(enable=None):
     return res
 
 
+def gnss_fix_frequency(value=None):
+    """
+    Gets or sets the fix frequency of the GNSS engine.
+
+    NOTE: When changing the fix frequency, the GNSS engine needs to be restarted
+    for changes to take effect.
+
+    The fix frequency of the GNSS engine corresponds to how often will the position
+    (latitude and longitude) update. Possible values (Hz):
+    - None (default): returns the current fix_frequency of the GNSS engine
+    - 1
+    - 2
+    - 5
+    - 10
+    """
+
+    if value == None:
+        res = query('AT+QGPSCFG="fixfreq"')
+        if "data" in res:
+            # example res - data: '+QGPSCFG: "fixfreq",5'
+            res["fixfreq"] = int(_parse_dict(res.pop("data"))["+QGPSCFG"].split(',')[1])
+
+        return res
+
+    # possible values
+    if value not in [1, 2, 5, 10]:
+        raise ValueError("{} is not a supported value".format(value))
+
+    res = {}
+    # query returns nothing for this command
+    query('AT+QGPSCFG="fixfreq",{}'.format(value))
+
+    # if no exceptions occur, this will execute
+    res['success'] = True
+    return res
+
+
 def gnss_assist_time(timestamp=datetime.datetime.utcnow(), operation=0, utc=True, force=False, uncertainty_ms=0):
     """
     This command can be used to inject gpsOneXTRA time to GNSS engine. Before using it,
@@ -948,7 +985,7 @@ def manage(*args, **kwargs):
       - 'ec2x.manage worker kill *'
       - 'ec2x.manage reactor list'
       - 'ec2x.manage reactor show *'
-      - 'ec2x.manage run handler="exec" args="[\"ATI\"]" returner="cloud"' 
+      - 'ec2x.manage run handler="exec" args="[\"ATI\"]" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
