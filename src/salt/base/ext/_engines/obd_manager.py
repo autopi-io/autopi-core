@@ -560,9 +560,23 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
 
 @edmp.register_hook()
-def export_handler(run=None, wait_timeout=0, folder=None, monitor_filtering=False, monitor_mode=0, can_auto_format=False, read_timeout=1, serial_baudrate=None, process_nice=-2, protocol=None, baudrate=None, verify=False):
+def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=False, monitor_mode=0, can_auto_format=False, read_timeout=1, serial_baudrate=None, process_nice=-2, protocol=None, baudrate=None, verify=False):
     """
-    Fast export to file.
+    Fast export of all messages on a bus to a log file.
+
+    Optional arguments:
+      - run (bool): Specify if subprocess should be running or not. If not defined the current state will be queried.
+      - folder (str): Custom folder to place export log files.
+      - wait_timeout (int): Maximum time in seconds to wait for subprocess to complete. Default value is '0'.
+      - monitor_filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' in order to add filters based on the messages found in a CAN database file (.dbc).
+      - monitor_mode (int): The STN monitor mode. Default is '0'.
+      - can_auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
+      - read_timeout (int): How long time in seconds should the subprocess wait for data on the serial port? Default value is '1'.
+      - serial_baudrate (int): Specify a custom baud rate to use for the serial connection to the STN.
+      - process_nice (int): Process nice value that controls the priority of the subprocess. Default value is '-2'.
+      - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
+      - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
+      - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
     """
 
     ret = {}
@@ -688,15 +702,6 @@ def export_handler(run=None, wait_timeout=0, folder=None, monitor_filtering=Fals
     else:
         ctx["state"] = "stopped"
 
-    # Restart if not spawned in this call
-    if export_subprocess == None and run and spawn_count == 0:
-        log.info("Restarting export subprocess")
-
-        export_subprocess = spawn_subprocess()
-        spawn_count += 1
-
-        ctx["state"] = "restarted"
-
     ret["state"] = ctx["state"]
 
     return ret
@@ -709,7 +714,15 @@ def export_handler(run=None, wait_timeout=0, folder=None, monitor_filtering=Fals
 @edmp.register_hook(synchronize=False)
 def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, process_nice=0, type="raw"):
     """
-    Fast import of exported files.
+    Fast import of exported log files containing messages from a bus.
+
+    Optional arguments:
+      - folder (str): Custom folder to import log files from.
+      - limit (int): The maximum number of lines/messages to read each time. Default value is '5000'.
+      - idle_sleep (int): Pause in seconds if there is no lines/messages to import. Default value is '0'.
+      - cleanup_grace (int): Grace period in seconds before a fully imported log file is deleted. Default value is '60'.
+      - process_nice (int): Process nice value that controls the priority of the service. Default value is '0'.
+      - type (str): Specify a name of the type of the result. Default is 'raw'.
     """
 
     ret = {

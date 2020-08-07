@@ -103,12 +103,14 @@ static int pcf8523_voltage_low(struct i2c_client *client)
 static int pcf8523_load_capacitance(struct i2c_client *client)
 {
 	u32 load;
-	u8 value;
+	u8 old_value, new_value;
 	int err;
 
-	err = pcf8523_read(client, REG_CONTROL1, &value);
+	err = pcf8523_read(client, REG_CONTROL1, &old_value);
 	if (err < 0)
 		return err;
+
+	new_value = old_value;
 
 	load = 7000; // Default is 7 pF
 	of_property_read_u32(client->dev.of_node, "quartz-load-femtofarads",
@@ -120,30 +122,37 @@ static int pcf8523_load_capacitance(struct i2c_client *client)
 			 load);
 		/* fall through */
 	case 12500:
-		value |= REG_CONTROL1_CAP_SEL;
+		new_value |= REG_CONTROL1_CAP_SEL;
 		break;
 	case 7000:
-		value &= ~REG_CONTROL1_CAP_SEL;
+		new_value &= ~REG_CONTROL1_CAP_SEL;
 		break;
 	}
 
-	err = pcf8523_write(client, REG_CONTROL1, value);
+	if (old_value != new_value) {
+		dev_warn(&client->dev, "changing load capacitance (CAP_SEL in Control_1 register is changing from 0x%x to 0x%x)", old_value, new_value);
+	}
+
+	err = pcf8523_write(client, REG_CONTROL1, new_value);
 
 	return err;
 }
 
 static int pcf8523_set_pm(struct i2c_client *client, u8 pm)
 {
-	u8 value;
+	u8 old_value, new_value;
 	int err;
 
-	err = pcf8523_read(client, REG_CONTROL3, &value);
+	err = pcf8523_read(client, REG_CONTROL3, &old_value);
 	if (err < 0)
 		return err;
 
-	value = (value & ~REG_CONTROL3_PM_MASK) | pm;
+	new_value = (old_value & ~REG_CONTROL3_PM_MASK) | pm;
+	if (old_value != new_value) {
+		dev_warn(&client->dev, "changing power management mode (PM in Control_3 register is changing from 0x%x to 0x%x)", old_value, new_value);
+	}
 
-	err = pcf8523_write(client, REG_CONTROL3, value);
+	err = pcf8523_write(client, REG_CONTROL3, new_value);
 	if (err < 0)
 		return err;
 
