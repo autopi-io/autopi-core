@@ -1,4 +1,7 @@
+from __future__ import division
 
+
+DEFAULT_NOMINAL_VOLTAGE = 12
 DEFAULT_CRITICAL_LIMIT = 12.3
 
 CHARGING_STATE       = "charging"
@@ -22,7 +25,10 @@ ERROR_STATES = [
 ]
 
 
-def state_for(voltage, critical_limit=DEFAULT_CRITICAL_LIMIT):
+def state_for(voltage, nominal_voltage=DEFAULT_NOMINAL_VOLTAGE, critical_limit=DEFAULT_CRITICAL_LIMIT):
+    if nominal_voltage != DEFAULT_NOMINAL_VOLTAGE:
+        voltage = voltage * (DEFAULT_NOMINAL_VOLTAGE / nominal_voltage)
+
     if voltage <= critical_limit:
         return CRITICAL_LEVEL_STATE
     elif critical_limit < voltage <= 12.8:
@@ -41,7 +47,10 @@ def is_error_state(state):
     return state in ERROR_STATES
 
 
-def charge_percentage_for(voltage):
+def charge_percentage_for(voltage, nominal_voltage=DEFAULT_NOMINAL_VOLTAGE):
+    if nominal_voltage != DEFAULT_NOMINAL_VOLTAGE:
+        voltage = voltage * (DEFAULT_NOMINAL_VOLTAGE / nominal_voltage)
+
     if voltage >= 12.6:
         return 100
     elif 12.6 > voltage >= 12.5:

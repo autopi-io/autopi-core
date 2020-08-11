@@ -41,7 +41,8 @@ context = {
             "unknown": 0,
             battery_util.CRITICAL_LEVEL_STATE: 180
         },
-        "critical_limit": 0
+        "critical_limit": 0,
+        "nominal_voltage": 0
     },
     "readout": {},
     "monitor": {
@@ -1224,8 +1225,8 @@ def battery_converter(result):
     voltage = result.get("value", None)
     ret = {
         "_type": "bat",
-        "level": battery_util.charge_percentage_for(voltage),
-        "state": battery_util.state_for(voltage, critical_limit=context["battery"]["critical_limit"]),
+        "level": battery_util.charge_percentage_for(voltage, nominal_voltage=context["battery"]["nominal_voltage"]),
+        "state": battery_util.state_for(voltage, nominal_voltage=context["battery"]["nominal_voltage"], critical_limit=context["battery"]["critical_limit"]),
         "voltage": voltage,
     }
 
@@ -1413,6 +1414,7 @@ def start(**settings):
         context["battery"]["critical_limit"] = battery_critical_level.get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Battery critical limit is {:}V in {:} sec(s)".format(context["battery"]["critical_limit"], context["battery"]["event_thresholds"][battery_util.CRITICAL_LEVEL_STATE]))
+        context["battery"]["nominal_voltage"] = settings.get("battery_nominal_voltage", battery_util.DEFAULT_NOMINAL_VOLTAGE)
 
         # Initialize message processor
         edmp.init(__salt__, __opts__,
