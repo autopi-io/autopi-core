@@ -4,6 +4,7 @@ import battery_util
 import ConfigParser
 import cProfile as profile
 import datetime
+import _strptime  # Attempt to avoid: Failed to import _strptime because the import lockis held by another thread
 import elm327_proxy
 import io
 import json
