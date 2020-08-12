@@ -750,10 +750,17 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
     with open(os.path.join(folder, ".import"), "r+" if os.path.isfile(os.path.join(folder, ".import")) else "w+") as metadata_file:
         metadata = {}
         if os.path.getsize(metadata_file.name) > 0:
-            metadata = json.load(metadata_file)
+            try:
+                metadata = json.load(metadata_file)
 
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Loaded import metadata from file '{:}': {:}".format(etadata_file.name, metadata))
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Loaded import metadata from JSON file '{:}': {:}".format(metadata_file.name, metadata))
+
+            except:
+                metadata_file.seek(0)  # Ensures file pointer is at the begining
+                log.exception("Failed to load import metadata from JSON file '{:}': {:}".format(metadata_file.name, metadata_file.read()))
+
+                log.warning("Skipped any progress that was stored in the invalid import metadata JSON file '{:}'".format(metadata_file.name))
 
         try:
             start = timer()
@@ -840,7 +847,7 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
 
         finally:
             if log.isEnabledFor(logging.DEBUG):
-                log.debug("Saving import metadata to file '{:}': {:}".format(metadata_file.name, metadata))
+                log.debug("Saving import metadata to JSON file '{:}': {:}".format(metadata_file.name, metadata))
 
             metadata_file.seek(0)  # Ensures file pointer is at the begining
             metadata_file.truncate()
