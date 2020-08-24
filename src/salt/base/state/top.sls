@@ -19,5 +19,6 @@ base:
     - ec2x.config
 {%- endif %}
     - ui.install
+    - power.sleep_timer.config
     - power.stn.config
     - power.spm.install  # Highest risk last

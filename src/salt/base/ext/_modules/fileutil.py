@@ -5,6 +5,7 @@ import salt.exceptions
 import salt.utils.event
 import salt.utils.jid
 import subprocess
+import yaml
 
 
 log = logging.getLogger(__name__)
@@ -104,3 +105,16 @@ def upload(path, gzip=True, service=None, **kwargs):
         raise salt.exceptions.CommandExecutionError("You need to specify a service to use")
     
     return ret
+
+
+def load_yaml(file, default={}):
+    """
+    Load a file as YAML or return default.
+    """
+
+    if not os.path.isfile(file):
+        return default
+
+    with open(file, "r") as f:
+        return yaml.load(f, Loader=yaml.CLoader) or default
+

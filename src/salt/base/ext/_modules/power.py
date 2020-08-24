@@ -1,8 +1,10 @@
+import croniter
 import logging
 import salt.exceptions
 import salt_more
 import time
 
+from common_util import dict_get, fromisoformat 
 from datetime import datetime, timedelta
 
 
@@ -204,7 +206,7 @@ def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True,
     return sleep(interval=0, delay=delay, acc_off=True, confirm=confirm, reason=reason, allow_auto_update=allow_auto_update, **kwargs)
 
 
-def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
+def sleep_timer(enable=None, period=1800, add=None, clear=None, refresh=None, **kwargs):
     """
     Setup sleep timer to schedule power off upon inactivity.
 
@@ -226,10 +228,18 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
     # Helper function to get all scheduled sleep timers
     def timers():
         res = __salt__["schedule.list"](return_yaml=False)
-        ret = {k: dict(v, _stamp=datetime.utcnow().isoformat()) for k, v in res.iteritems() if k.startswith("_sleep_timer")}
+        ret = {k: dict(v, _stamp=datetime.utcnow().isoformat(), job_args=v.pop("args", []), job_kwargs=v.pop("kwargs", {})) for k, v in res.iteritems() if k.startswith("_sleep_timer")}
 
         return ret
 
+    # Load configuration file if present
+    config = {}
+    try:
+        config = __salt__["fileutil.load_yaml"]("/opt/autopi/power/sleep_timer.yml")
+    except:
+        log.exception("Failed to load sleep timer configuration file")
+
+    # Clear timer(s) if requested
     if clear != None or enable == False:
 
         # Clear matching timers
@@ -243,6 +253,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
             # Trigger a cleared event
             __salt__["minionutil.trigger_event"]("system/{:}/cleared".format(name.lstrip("_")), data={"reason": reason})
 
+    # Add timer if requested
     if add != None or enable == True:
         name = "_sleep_timer/{:}".format(add or reason)
 
@@ -271,17 +282,113 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, **kwargs):
                 "revision": 2
             })
 
-        # Trigger an added event
-        __salt__["minionutil.trigger_event"](
-            "system/{:}/added".format(name.lstrip("_")),
-            data={"reason": reason} if not name.endswith("/{:}".format(reason)) else {}
-        )
+        if res.get("result", False):
 
-        # Broadcast notification to all terminals
-        try:
-            __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nSleep timer added '{:}' that trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, add or reason, expiry))
-        except:
-            log.exception("Failed to broadcast sleep timer added notification")
+            # Ensure to adjust
+            if refresh == None:
+                refresh = add or reason
+
+            # Trigger an added event
+            __salt__["minionutil.trigger_event"](
+                "system/{:}/added".format(name.lstrip("_")),
+                data={"reason": reason} if not name.endswith("/{:}".format(reason)) else {}
+            )
+
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nSleep timer '{:}' added which is scheduled to trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, name[name.rindex("/")+1:], expiry))
+            except:
+                log.exception("Failed to broadcast sleep timer added notification")
+
+        else:
+            log.error("Failed to add sleep timer '{:}': {:}".format(name, res))
+
+    # Refresh timer(s) if requested
+    if refresh != None:
+
+        boot_delay = dict_get(config, "suppress", "boot_delay", default=60)
+
+        # Loop through all matching sleep timers
+        for name, schedule in timers().iteritems():
+            if refresh not in [None, "*"]:
+                if "_sleep_timer/{:}".format(refresh) != name:
+                    continue
+
+            # Adjust according to suppress schedules
+            for entry in dict_get(config, "suppress", "schedule", default=[]):
+                try:
+                    expression, duration = entry.split(" | ")
+
+                    # Generate suppress start and end times 
+                    expiry = fromisoformat(schedule["metadata"]["expires"])
+                    for suppress_start in [croniter.croniter(expression, expiry).get_prev(datetime), croniter.croniter(expression, expiry).get_next(datetime)]:
+                        # NOTE: If a datetime is given to croniter which exactly matches the expression, the same datetime will be returned for both get_prev and get_next.
+                        suppress_end = suppress_start + timedelta(seconds=int(duration))
+
+                        # Caluclate sleep start and end times
+                        sleep_start = expiry
+                        sleep_end = expiry + timedelta(seconds=schedule["job_kwargs"].get("interval", 86400) + boot_delay)  # Also add time for booting
+
+                        # Proceed if we have an overlap
+                        if sleep_start < suppress_end and sleep_end > suppress_start:
+                            log.info("Sleep timer '{:}' sleep period from {:} to {:} overlaps with sleep suppress period from {:} to {:}".format(name, sleep_start, sleep_end, suppress_start, suppress_end))
+
+                            now = datetime.utcnow()
+
+                            # Is it possible to reduce sleeping time?
+                            if schedule["job_kwargs"].get("interval", 0) > 0 and sleep_start < suppress_start and (suppress_start - sleep_start).total_seconds() > boot_delay:
+                                state = "reduced"
+
+                                old_interval = schedule["job_kwargs"]["interval"]
+                                new_interval = int((suppress_start - sleep_start).total_seconds() - boot_delay)  # Subtract time for booting from the sleeping time
+                                log.warning("Reducing sleeping time of sleep timer '{:}' from {:} to {:} seconds due to suppress schedule: {:}".format(name, old_interval, new_interval, entry))
+
+                                # Set reduced sleeping time
+                                schedule["job_kwargs"]["interval"] = new_interval
+
+                                # Also update fire time to match originally scheduled
+                                schedule["seconds"] = (expiry - now).total_seconds()
+
+                            # Or must sleep be postponed?
+                            else:
+                                state = "postponed"
+
+                                old_period = schedule["seconds"]
+                                new_period = (suppress_end - now).total_seconds()
+                                log.warning("Postponing sleep timer '{:}' from {:} to {:} seconds due to suppress schedule: {:}".format(name, old_period, new_period, entry))
+
+                                # Set postponed fire time
+                                schedule["seconds"] = new_period
+                            
+                            # Calculate expiry time (may be unchanged)
+                            expiry = now + timedelta(seconds=schedule["seconds"])
+
+                            # Update metadata
+                            schedule["metadata"]["updated"] = now.isoformat()
+                            schedule["metadata"]["expires"] = expiry.isoformat()
+                            
+                            # Modify existing timer
+                            res = __salt__["schedule.modify"](**schedule)
+                            if res.get("result", False):
+
+                                # Trigger an modified event
+                                __salt__["minionutil.trigger_event"](
+                                    "system/{:}/{:}".format(name.lstrip("_"), state)
+                                )
+
+                                # Broadcast notification to all terminals
+                                try:
+                                    __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nSleep timer '{:}' has been {:} due to sleep suppress rule and is scheduled to trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, name[name.rindex("/")+1:], state, expiry))
+                                except:
+                                    log.exception("Failed to broadcast sleep timer modified notification")
+                            else:
+                                log.error("Failed to modify sleep timer '{:}': {:}".format(name, res))
+
+                        elif log.isEnabledFor(logging.DEBUG):
+                            log.debug("Sleep timer '{:}' does not overlap with suppress schedule: {:}".format(name, entry))
+
+                except:
+                    log.exception("Failed to process suppress schedule for sleep timer '{:}': {:}".format(name, entry))
 
     # Return all existing timer(s)
     return timers()

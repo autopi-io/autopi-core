@@ -83,7 +83,10 @@ def fromisoformat(date_string):
     Inspired by: https://docs.python.org/3/library/datetime.html#datetime.date.fromisoformat
     """
 
-    return datetime.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S.%f")
+    try:
+        return datetime.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S.%f")
+    except ValueError:
+        return datetime.datetime.strptime(date_string, "%Y-%m-%dT%H:%M:%S")
 
 
 def factory_rendering(func):
