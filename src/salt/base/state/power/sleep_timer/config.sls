@@ -1,6 +1,6 @@
 
 sleep-timer-configured:
-  {%- if salt['pillar.get']('power:sleep_timer') %}
+  {%- if salt["pillar.get"]("power:sleep_timer") %}
   file.serialize:
     - name: /opt/autopi/power/sleep_timer.yml
     - dataset_pillar: power:sleep_timer
@@ -16,4 +16,4 @@ sleep-timer-configured:
 sleep-timers-refreshed-after-configure:
   module.wait:
     - name: power.sleep_timer
-    - refresh: *
+    - refresh: "*"
