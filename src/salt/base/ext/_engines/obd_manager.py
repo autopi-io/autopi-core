@@ -56,7 +56,7 @@ context = {
         }
     },
     "export": {
-        "state": "" 
+        "state": ""
     }
 }
 
@@ -793,7 +793,7 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
                             file.seek(offset)
 
                             log.info("File '{:}' is partially imported - continuing from offset {:}".format(file.name, offset))
-                        
+
                         # Read first line
                         line = file.readline()
                         while line:
@@ -830,13 +830,15 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
 
                     # Candidate for cleanup
                     if cleanup_grace > 0:
-
-                        # Check if expired
-                        delta = datetime.datetime.utcnow() - fromisoformat(metadata[filename]["timestamp"])
-                        if delta.total_seconds() < cleanup_grace:
-                            continue
-
                         try:
+
+                            # Check if expired
+                            if "timestamp" in metadata[filename]:
+                                delta = datetime.datetime.utcnow() - fromisoformat(metadata[filename]["timestamp"])
+                                if delta.total_seconds() < cleanup_grace:
+                                    continue
+
+                            # Go ahead and delete
                             os.remove(os.path.join(folder, filename))
                             metadata.pop(filename)
 
