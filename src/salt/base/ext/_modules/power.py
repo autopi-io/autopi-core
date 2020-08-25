@@ -317,13 +317,16 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, refresh=None, **
             # Adjust according to suppress schedules
             for entry in dict_get(config, "suppress", "schedule", default=[]):
                 try:
-                    expression, duration = entry.split(" | ")
+                    if not "|" in entry:
+                        raise ValueError("No pipe sign separator found in schedule entry")
+
+                    expression, duration = entry.split("|")
 
                     # Generate suppress start and end times 
                     expiry = fromisoformat(schedule["metadata"]["expires"])
-                    for suppress_start in [croniter.croniter(expression, expiry).get_prev(datetime), croniter.croniter(expression, expiry).get_next(datetime)]:
+                    for suppress_start in [croniter.croniter(expression.strip(), expiry).get_prev(datetime), croniter.croniter(expression.strip(), expiry).get_next(datetime)]:
                         # NOTE: If a datetime is given to croniter which exactly matches the expression, the same datetime will be returned for both get_prev and get_next.
-                        suppress_end = suppress_start + timedelta(seconds=int(duration))
+                        suppress_end = suppress_start + timedelta(seconds=int(duration.strip()))
 
                         # Caluclate sleep start and end times
                         sleep_start = expiry
