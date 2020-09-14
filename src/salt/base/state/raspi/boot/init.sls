@@ -21,7 +21,7 @@ gpio-shutdown-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-shutdown.*$"
-    {%- if salt["pillar.get"]("power:firmware:version") in ["2.0"] %}
+    {%- if salt["pillar.get"]("power:firmware:version").startswith("2.") %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=25,gpio_pull=down,active_low=n"
     {%- else %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=12,gpio_pull=up"

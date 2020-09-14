@@ -15,7 +15,7 @@ spm-release-distributed:
 spm-release-installed:
   spm.firmware_flashed:
     - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.hex
-    {%- if salt["pillar.get"]("power:firmware:version") in ["2.0"] %}
+    {%- if salt["pillar.get"]("power:firmware:version").startswith("2.") %}
     - part_id: t88
     {%- else %}
     - part_id: t24

@@ -15,13 +15,14 @@ REG_VERSION         = 0x05
 REG_WAKE_FLAGS      = 0x06
 REG_PINS            = 0x0A
 REG_SLEEP_DURATION  = 0x0B
+REG_EXT_PINS        = 0x0C
 
 # Wake flags
 WAKE_FLAG_UNKNOWN  = (1 << 0x00)
 WAKE_FLAG_STN      = (1 << 0x01)
 WAKE_FLAG_RTC      = (1 << 0x02)
 WAKE_FLAG_ACC      = (1 << 0x03)
-WAKE_FLAG_GYRO     = (1 << 0x04)
+WAKE_FLAG_EXT      = (1 << 0x04)
 WAKE_FLAG_MODEM    = (1 << 0x05)
 
 # Pins
@@ -33,6 +34,13 @@ PIN_OUT_RPI_SHUTDN   = (1 << 0x04)
 PIN_OUT_STN_SLEEP    = (1 << 0x05)
 PIN_OUT_STN_RESET    = (1 << 0x06)
 PIN_OUT_MODEM_DTR    = (1 << 0x07)
+
+# Ext pins
+EXT_PIN_IN_WAKE      = (1 << 0x00)
+EXT_PIN_OUT_SW_3V3   = (1 << 0x01)
+EXT_PIN_OUT_SW_5V    = (1 << 0x02)
+EXT_PIN_OUT_MISC1    = (1 << 0x03)
+EXT_PIN_OUT_MISC2    = (1 << 0x04)
 
 # Status register
 STATES = {
@@ -51,7 +59,7 @@ TRIGGERS = {
     0x03: "stn",
     0x04: "rtc",
     0x05: "acc",
-    0x06: "gyro",
+    0x06: "ext",
     0x07: "modem",
     0x08: "timer",
     0x09: "boot_timeout",
@@ -64,22 +72,33 @@ WAKE_FLAGS = {
     "stn": WAKE_FLAG_STN,
     "rtc": WAKE_FLAG_RTC,
     "acc": WAKE_FLAG_ACC,
-    "gyro": WAKE_FLAG_GYRO,
+    "ext": WAKE_FLAG_EXT,
     "modem": WAKE_FLAG_MODEM
 }
 
-INPUT_PINS = {
+PINS_IN = {
     "rpi_pwr":       PIN_IN_RPI_PWR,
     "stn_pwr_ctrl":  PIN_IN_STN_PWR_CTRL
 }
 
-OUTPUT_PINS = {
+PINS_OUT = {
     "sw_5v":       PIN_OUT_SW_5V,
     "sw_3v3":      PIN_OUT_SW_3V3,
     "rpi_shutdn":  PIN_OUT_RPI_SHUTDN,
     "stn_sleep":   PIN_OUT_STN_SLEEP,
     "stn_reset":   PIN_OUT_STN_RESET,
     "modem_dtr":   PIN_OUT_MODEM_DTR
+}
+
+EXT_PINS_IN = {
+    "ext_wake":  EXT_PIN_IN_WAKE
+}
+
+EXT_PINS_OUT = {
+    "ext_sw_3v3":  EXT_PIN_OUT_SW_3V3,
+    "ext_sw_5v":   EXT_PIN_OUT_SW_5V,
+    "ext_misc1":   EXT_PIN_OUT_MISC1,
+    "ext_misc2":   EXT_PIN_OUT_MISC2
 }
 
 
@@ -186,18 +205,43 @@ class SPM2Conn(I2CConn):
         if toggle != None:
             val = 0
             for pin in toggle.split(","):
-                if not pin in OUTPUT_PINS:
+                if not pin in PINS_OUT:
                     raise ValueError("Invalid output pin '{:}'".format(pin))
 
-                val |= OUTPUT_PINS[pin]
+                val |= PINS_OUT[pin]
 
             self.write_block(REG_PINS, [val])
 
         res = self.read_block(REG_PINS, 1)
 
         ret = {
-            "input": {k: bool(res[0] & v) for k, v in INPUT_PINS.iteritems()},
-            "output": {k: bool(res[0] & v) for k, v in OUTPUT_PINS.iteritems()}
+            "input": {k: bool(res[0] & v) for k, v in PINS_IN.iteritems()},
+            "output": {k: bool(res[0] & v) for k, v in PINS_OUT.iteritems()}
+        }
+
+        return ret
+
+    @retry(stop_max_attempt_number=3, wait_fixed=200)
+    def ext_pins(self, toggle=None):
+        """
+        Get current extension pin states or toggle output extension pins.
+        """
+
+        if toggle != None:
+            val = 0
+            for pin in toggle.split(","):
+                if not pin in EXT_PINS_OUT:
+                    raise ValueError("Invalid output extension pin '{:}'".format(pin))
+
+                val |= EXT_PINS_OUT[pin]
+
+            self.write_block(REG_EXT_PINS, [val])
+
+        res = self.read_block(REG_EXT_PINS, 1)
+
+        ret = {
+            "input": {k: bool(res[0] & v) for k, v in EXT_PINS_IN.iteritems()},
+            "output": {k: bool(res[0] & v) for k, v in EXT_PINS_OUT.iteritems()}
         }
 
         return ret

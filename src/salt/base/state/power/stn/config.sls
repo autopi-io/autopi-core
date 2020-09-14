@@ -3,8 +3,8 @@
 uart-wake-trigger:
   stn.power_trigger:
     - name: uart_wake
-    {%- if salt["pillar.get"]("power:firmware:version") in ["2.0"] %}
-    # The SPM 2.0 will power on STN during boot with 'ext_wake' trigger
+    {%- if salt["pillar.get"]("power:firmware:version").startswith("2.") %}
+    # The SPM 2.X will power on STN during boot with 'ext_wake' trigger
     - enable: False
     {%- else %}
     # We need to be able to wake up STN through UART when waking up by timer
@@ -45,16 +45,16 @@ voltage-level-sleep-trigger:
     - enable: True
     - rule: "<{{ salt['pillar.get']('power:safety_cut-out:voltage', default='12.20') }}V FOR {{ salt['pillar.get']('power:safety_cut-out:duration', default='300') }} s"
 
-{%- if salt["pillar.get"]("power:firmware:version") in ["2.0"] %}
+{%- if salt["pillar.get"]("power:firmware:version").startswith("2.") %}
 
-# Wake STN from SPM 2.0
+# Wake STN from SPM 2.X
 ext-wake-trigger:
   stn.power_trigger:
     - name: ext_wake
     - enable: True
     - rule: "HIGH FOR 500 ms"
 
-# Put STN to sleep from SPM 2.0
+# Put STN to sleep from SPM 2.X
 ext-sleep-trigger:
   stn.power_trigger:
     - name: ext_sleep
