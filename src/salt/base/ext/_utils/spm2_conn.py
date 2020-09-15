@@ -197,7 +197,7 @@ class SPM2Conn(I2CConn):
         return ret
 
     @retry(stop_max_attempt_number=3, wait_fixed=200)
-    def pins(self, toggle=None):
+    def pins(self, toggle=None, low=None, high=None):
         """
         Get current pin states or toggle output pins.
         """
@@ -212,8 +212,35 @@ class SPM2Conn(I2CConn):
 
             self.write_block(REG_PINS, [val])
 
-        res = self.read_block(REG_PINS, 1)
+        if low != None:
+            res = self.read_block(REG_PINS, 1)
+            val = 0
+            for pin in low.split(","):
+                if not pin in PINS_OUT:
+                    raise ValueError("Invalid output pin '{:}'".format(pin))
 
+                # Only toggle if already high
+                if res[0] & PINS_OUT[pin] > 0:
+                    val |= PINS_OUT[pin]
+
+            if val > 0:
+                self.write_block(REG_PINS, [val])
+
+        if high != None:
+            res = self.read_block(REG_PINS, 1)
+            val = 0
+            for pin in high.split(","):
+                if not pin in PINS_OUT:
+                    raise ValueError("Invalid output pin '{:}'".format(pin))
+
+                # Only toggle if already low
+                if res[0] & PINS_OUT[pin] == 0:
+                    val |= PINS_OUT[pin]
+
+            if val > 0:
+                self.write_block(REG_PINS, [val])
+
+        res = self.read_block(REG_PINS, 1)
         ret = {
             "input": {k: bool(res[0] & v) for k, v in PINS_IN.iteritems()},
             "output": {k: bool(res[0] & v) for k, v in PINS_OUT.iteritems()}
@@ -222,7 +249,7 @@ class SPM2Conn(I2CConn):
         return ret
 
     @retry(stop_max_attempt_number=3, wait_fixed=200)
-    def ext_pins(self, toggle=None):
+    def ext_pins(self, toggle=None, low=None, high=None):
         """
         Get current extension pin states or toggle output extension pins.
         """
@@ -237,8 +264,35 @@ class SPM2Conn(I2CConn):
 
             self.write_block(REG_EXT_PINS, [val])
 
-        res = self.read_block(REG_EXT_PINS, 1)
+        if low != None:
+            res = self.read_block(REG_EXT_PINS, 1)
+            val = 0
+            for pin in low.split(","):
+                if not pin in EXT_PINS_OUT:
+                    raise ValueError("Invalid output extension pin '{:}'".format(pin))
 
+                # Only toggle if already high
+                if res[0] & EXT_PINS_OUT[pin] > 0:
+                    val |= EXT_PINS_OUT[pin]
+
+            if val > 0:
+                self.write_block(REG_EXT_PINS, [val])
+
+        if high != None:
+            res = self.read_block(REG_EXT_PINS, 1)
+            val = 0
+            for pin in high.split(","):
+                if not pin in EXT_PINS_OUT:
+                    raise ValueError("Invalid output extension pin '{:}'".format(pin))
+
+                # Only toggle if already low
+                if res[0] & EXT_PINS_OUT[pin] == 0:
+                    val |= EXT_PINS_OUT[pin]
+
+            if val > 0:
+                self.write_block(REG_EXT_PINS, [val])
+
+        res = self.read_block(REG_EXT_PINS, 1)
         ret = {
             "input": {k: bool(res[0] & v) for k, v in EXT_PINS_IN.iteritems()},
             "output": {k: bool(res[0] & v) for k, v in EXT_PINS_OUT.iteritems()}
