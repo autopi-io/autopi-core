@@ -1,2 +1,2 @@
 # ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
-ACTION=="add", SUBSYSTEM=="usb", DRIVER=="usb", KERNELS=="1-1.3", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb/devices/1-1.3/bConfigurationValue'"
+ACTION=="add", SUBSYSTEM=="usb", DRIVER=="usb", ATTRS{bMaxPower}!="0mA", RUN+="/bin/sh -c 'echo 1 > /sys/bus/usb/devices/$kernel/bConfigurationValue'"
