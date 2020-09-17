@@ -3,9 +3,13 @@ include:
   - .config
 
 libqmi:
+  {%- if salt['grains.get']('osmajorrelease') < 10 %}
   pkg.installed:
     - sources:
       - libqmi: salt://network/wwan/qmi/libqmi_1.18.2-1_armhf.deb
+  {%- else %}
+  pkg.installed
+  {%- endif %}
 
 udhcpc:
   pkg.installed
