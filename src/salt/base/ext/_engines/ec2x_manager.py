@@ -200,6 +200,42 @@ def sync_time_handler(force=False):
       - force (bool): Default is 'False'.
     """
 
+    def get_clock_status():
+        """
+        Ensures following keys for return value:
+
+        clock_synced: boolean
+        npt_enabled: boolean
+        """
+
+        ret = {}
+
+        res = __salt__["clock.status"]()
+
+        # Try old values first (Raspbian 9)
+        if "ntp_synchronized" in res:
+            # actually assign value
+            ret["clock_synced"] = res["ntp_synchronized"] == "yes":
+
+        # Try new value now (RPi OS 10)
+        elif "system_clock_synchronized" in res:
+            # actually assign value
+            ret["clock_synced"] = res["system_clock_synchronized"] == "yes"
+
+        else:
+            raise KeyError("Could not find clock synchronization key-value pair")
+
+        # Repeat as above
+        if "network_time_on" in res:
+            ret["ntp_enabled"] = res["network_time_on"] == "yes":
+        elif "ntp_service" in res:
+            ret["ntp_enabled"] = res["ntp_service"] == "active":
+        else:
+            raise KeyError("Could not find NTP service key-value pair")
+
+        return ret
+
+
     ret = {}
 
     ctx = context["time"]
@@ -211,8 +247,8 @@ def sync_time_handler(force=False):
         return ret
 
     # Check if system time is already NTP synchronized
-    status = __salt__["clock.status"]()
-    if not force and status["ntp_synchronized"] == "yes":
+    status = get_clock_status()
+    if not force and status["clock_synced"]:
         log.info("System time is already NTP synchronized")
 
         ret["source"] = "ntp"
@@ -222,12 +258,12 @@ def sync_time_handler(force=False):
     else:
 
         # We do not want below log when force
-        if status["ntp_synchronized"] == "no":
+        if not status["clock_synced"]:
             log.info("System time is not NTP synchronized")
 
         # Disable automatic time synchronization 
         # NOTE: This is done now to minimize time between get network time and adjust system clock 
-        if status["network_time_on"] == "yes":
+        if status["ntp_enabled"]:
             __salt__["clock.ntp"](enable=False)
 
         try:
