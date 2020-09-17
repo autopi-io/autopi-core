@@ -16,3 +16,7 @@ rc-local-configured:
     - name: /etc/rc.local
     - source: salt://raspi/rc.local.jinja
     - template: jinja
+
+timezone-configured:
+  timezone.system:
+    - name: UTC
