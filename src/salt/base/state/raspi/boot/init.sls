@@ -6,7 +6,7 @@ reboot-requested-after-boot-config-changed:
 kernel-arguments-configured:
   file.managed:
     - name: /boot/cmdline.txt
-    - source: salt://raspi/boot/cmdline.txt
+    - source: salt://raspi/boot/cmdline.txt.jinja
     - template: jinja
 
 gpio-poweroff-enabled:
