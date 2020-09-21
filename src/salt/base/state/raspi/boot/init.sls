@@ -7,6 +7,7 @@ kernel-arguments-configured:
   file.managed:
     - name: /boot/cmdline.txt
     - source: salt://raspi/boot/cmdline.txt
+    - template: jinja
 
 gpio-poweroff-enabled:
   file.replace:
