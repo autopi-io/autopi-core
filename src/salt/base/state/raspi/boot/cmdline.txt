@@ -1,2 +1,2 @@
 # ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
-dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet logo.nologo
+dwc_otg.lpm_enable=0 root=/dev/mmcblk0p2 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait logo.nologo{% if salt['pillar.get']('rpi:boot:quiet', default=True) %} quiet{%endif %}
