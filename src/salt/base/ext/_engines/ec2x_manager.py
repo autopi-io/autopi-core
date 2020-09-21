@@ -215,7 +215,7 @@ def sync_time_handler(force=False):
         # Try old values first (Raspbian 9)
         if "ntp_synchronized" in res:
             # actually assign value
-            ret["clock_synced"] = res["ntp_synchronized"] == "yes":
+            ret["clock_synced"] = res["ntp_synchronized"] == "yes"
 
         # Try new value now (RPi OS 10)
         elif "system_clock_synchronized" in res:
@@ -227,9 +227,9 @@ def sync_time_handler(force=False):
 
         # Repeat as above
         if "network_time_on" in res:
-            ret["ntp_enabled"] = res["network_time_on"] == "yes":
+            ret["ntp_enabled"] = res["network_time_on"] == "yes"
         elif "ntp_service" in res:
-            ret["ntp_enabled"] = res["ntp_service"] == "active":
+            ret["ntp_enabled"] = res["ntp_service"] == "active"
         else:
             raise KeyError("Could not find NTP service key-value pair")
 
