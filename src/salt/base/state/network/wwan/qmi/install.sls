@@ -2,15 +2,15 @@
 include:
   - .config
 
-{%- if salt['grains.get']('osmajorrelease') < 10 %}
-libqmi:
+libqmi-installed:
   pkg.installed:
+    {%- if salt['grains.get']('osmajorrelease') < 10 %}
+    - name: libqmi
     - sources:
       - libqmi: salt://network/wwan/qmi/libqmi_1.18.2-1_armhf.deb
-{%- else %}
-libqmi-utils:
-  pkg.installed
-{%- endif %}
+    {%- else %}
+    - name: libqmi-utils
+    {%- endif %}
 
 udhcpc:
   pkg.installed
@@ -56,7 +56,7 @@ qmi-network-script-installed:
     - user: root
     - group: root
     - require:
-      - pkg: libqmi
+      - pkg: libqmi-installed
 
 qmi-manager-script-installed:
   file.managed:
@@ -66,7 +66,7 @@ qmi-manager-script-installed:
     - user: root
     - group: root
     - require:
-      - pkg: libqmi
+      - pkg: libqmi-installed
 
 qmi-manager-service-configured:
   file.managed:
