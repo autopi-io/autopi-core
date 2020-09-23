@@ -964,6 +964,46 @@ def list_sms():
     return res
 
 
+def roaming(value=None):
+    """
+    Retrieves the current roaming configuration. If value parameter is set, it'll set the roaming service to that value.
+
+    Possible values:
+      - 1 - Roaming is disabled
+      - 2 - Roaming is enabled
+      - 255 - Roaming is set to Auto mode
+    """
+
+    DISABLED=1
+    ENABLED=2
+    AUTO=255
+
+    # query for data if no value is set
+    if value == None:
+        res = query('AT+QCFG="roamservice"')
+        roaming_value = int(_parse_dict(res.pop("data"))["+QCFG"].split(",")[1])
+
+        if roaming_value == DISABLED:
+            res["value"] = "disabled"
+        elif roaming_value == ENABLED:
+            res["value"] = "enabled"
+        elif roaming_value == AUTO:
+            res["value"] = "auto"
+        else:
+            # be sure to catch all cases
+            raise ValueError("Got unknown roaming value of '{}'".format(roaming_value))
+
+        return res
+
+    # ensure value is valid
+    if value != 1 and value != 2 and value != 255:
+        raise ValueError("Value of {} is not supported by this function".format(value))
+
+    # apply new config
+    res = query('AT+QCFG="roamservice",{},1'.format(value))
+    return res
+
+
 def manage(*args, **kwargs):
     """
     Runtime management of the underlying service instance.
