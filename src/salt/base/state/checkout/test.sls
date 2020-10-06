@@ -59,7 +59,7 @@ acc-interrupt-timeout-check:
   test.module:
     - name: acc.context
     - validate:
-      - ret["interrupt"]["timeout"] <= 1
+      - ret["interrupt"]["timeout"] <= 2
       - ret["interrupt"]["total"] > 0
 
 rpi-test:
