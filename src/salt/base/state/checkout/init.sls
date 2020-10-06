@@ -62,11 +62,20 @@ redis-flushed:
 
 # Truncate log files
 "truncate -s 0 /var/log/*.log":  # First level
-  cmd.run
+  cmd.run:
+    - require:
+      - sls: checkout.test
+      - module: force-release-updated
 "truncate -s 0 /var/log/**/*.log":  # Nested folders
-  cmd.run
+  cmd.run:
+    - require:
+      - sls: checkout.test
+      - module: force-release-updated
 "truncate -s 0 /var/log/salt/*":  # Salt
-  cmd.run
+  cmd.run:
+    - require:
+      - sls: checkout.test
+      - module: force-release-updated
 
 audio-checkout-done:
   module.run:
