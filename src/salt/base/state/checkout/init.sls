@@ -16,6 +16,8 @@ force-release-updated:
   module.run:
     - name: minionutil.update_release
     - force: true
+    - require:
+      - sls: checkout.test
 
 # Restart minion if restart is pending (after running pending SLS or update release)
 restart-minion-if-pending-after-release-updated:
