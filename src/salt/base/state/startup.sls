@@ -19,6 +19,7 @@ startup-module-{{loop.index}}-executed:
     {%- endfor %}
 {%- endfor %}
 
+{%- if salt["pillar.get"]("state", default="REGISTERED") == "REGISTERED" %}
 # Ensure release is installed
 auto-update-release-during-startup:
   module.run:
@@ -27,6 +28,7 @@ auto-update-release-during-startup:
     # Always retry update of release if failed or pending
     - only_retry: true
     {%- endif %}
+{%- endif %}
 
 # Restart minion if restart is pending (after running pending SLS or update release)
 restart-minion-if-pending:
