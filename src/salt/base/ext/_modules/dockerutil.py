@@ -292,7 +292,6 @@ NOTSET = object()
 # Define the module's virtual name and alias
 __virtualname__ = "dockerutil"
 
-__proxyenabled__ = ["docker"]
 __outputter__ = {
     "sls": "highstate",
     "apply_": "highstate",
