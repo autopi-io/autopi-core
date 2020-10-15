@@ -5,7 +5,8 @@ reboot-requested-after-usb-udev-rules-changed:
 
 /etc/udev/rules.d/99-usb.rules:
   file.managed:
-    - source: salt://raspi/udev/usb.rules
+    - source: salt://raspi/udev/usb.rules.jinja
+    - template: jinja
     - watch_in:
       - module: reboot-requested-after-usb-udev-rules-changed
 
