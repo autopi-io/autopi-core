@@ -171,7 +171,7 @@ class SerialConn(object):
         while True:
             char = self._serial.read()
             if not char:
-                log.error("Read timeout after waiting %f second(s)")
+                log.error("Read timeout after waiting %f second(s)", self._serial.timeout)
                 # TODO: Mark timeout occured and next read might be false?
 
                 ret["error"] = "Timeout"
