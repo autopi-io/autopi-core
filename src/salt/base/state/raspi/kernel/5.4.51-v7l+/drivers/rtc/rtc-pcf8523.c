@@ -118,7 +118,7 @@ static int pcf8523_load_capacitance(struct i2c_client *client)
 
 	switch (load) {
 	default:
-		dev_warn(&client->dev, "unknown quartz-load-femtofarads value %d - assuming 7000",
+		dev_warn(&client->dev, "unknown quartz-load-femtofarads value %d - assuming 7000\n",
 			 load);
 		/* fall through */
 	case 12500:
@@ -130,7 +130,7 @@ static int pcf8523_load_capacitance(struct i2c_client *client)
 	}
 
 	if (old_value != new_value) {
-		dev_warn(&client->dev, "changing load capacitance (CAP_SEL in Control_1 register is changing from 0x%x to 0x%x)", old_value, new_value);
+		dev_warn(&client->dev, "changing load capacitance (CAP_SEL in Control_1 register is changing from 0x%x to 0x%x)\n", old_value, new_value);
 	}
 
 	err = pcf8523_write(client, REG_CONTROL1, new_value);
@@ -149,7 +149,7 @@ static int pcf8523_set_pm(struct i2c_client *client, u8 pm)
 
 	new_value = (old_value & ~REG_CONTROL3_PM_MASK) | pm;
 	if (old_value != new_value) {
-		dev_warn(&client->dev, "changing power management mode (PM in Control_3 register is changing from 0x%x to 0x%x)", old_value, new_value);
+		dev_warn(&client->dev, "changing power management mode (PM in Control_3 register is changing from 0x%x to 0x%x)\n", old_value, new_value);
 	}
 
 	err = pcf8523_write(client, REG_CONTROL3, new_value);
@@ -325,7 +325,13 @@ static int pcf8523_rtc_set_time(struct device *dev, struct rtc_time *tm)
 		return err;
 	}
 
-	dev_info(dev, "time set\n");
+	dev_info(dev, "time set %02d-%02d-%02d %02d:%02d:%02d\n",
+		tm->tm_year - 100,
+		tm->tm_mon + 1,
+		tm->tm_mday,
+		tm->tm_hour,
+		tm->tm_min,
+		tm->tm_sec);
 
 	return pcf8523_start_rtc(client);
 }
@@ -347,7 +353,7 @@ static int pcf8523_rtc_ioctl(struct device *dev, unsigned int cmd,
 		if (ret)
 			// Below constant is not yet introduced in this version
 			// #define RTC_VL_BACKUP_LOW	BIT(1) /* Backup voltage is low */
-			//ret = RTC_VL_BACKUP_LOW;  
+			//ret = RTC_VL_BACKUP_LOW;
 			ret = BIT(1);
 
 		return put_user(ret, (unsigned int __user *)arg);
@@ -413,6 +419,7 @@ static int pcf8523_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
 	struct rtc_device *rtc;
+	struct rtc_time tm;
 	int err;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
@@ -420,12 +427,25 @@ static int pcf8523_probe(struct i2c_client *client,
 
 	err = pcf8523_load_capacitance(client);
 	if (err < 0)
-		dev_warn(&client->dev, "failed to set xtal load capacitance due to error %d",
+		dev_warn(&client->dev, "failed to set xtal load capacitance due to error %d\n",
 			 err);
 
 	err = pcf8523_set_pm(client, 0);
 	if (err < 0)
 		return err;
+
+	err = pcf8523_rtc_read_time(&client->dev, &tm);
+	if (err < 0)
+		dev_warn(&client->dev, "failed to read time due to error %d\n",
+			 err);
+	else
+		dev_info(&client->dev, "initial time read %02d-%02d-%02d %02d:%02d:%02d\n",
+			tm.tm_year - 100,
+			tm.tm_mon + 1,
+			tm.tm_mday,
+			tm.tm_hour,
+			tm.tm_min,
+			tm.tm_sec);
 
 	rtc = devm_rtc_device_register(&client->dev, DRIVER_NAME,
 				       &pcf8523_rtc_ops, THIS_MODULE);
