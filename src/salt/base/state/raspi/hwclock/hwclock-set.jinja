@@ -30,11 +30,11 @@ if [ -f /etc/default/hwclock ] ; then
 fi
 
 if [ yes = "$BADYEAR" ] ; then
-    /sbin/hwclock --rtc=$dev --hctosys --badyear
-    /usr/bin/logger "hwclock set (badyear)"
+#    /sbin/hwclock --rtc=$dev --systz --badyear
+    /sbin/hwclock --rtc=$dev --hctosys --badyear && /usr/bin/logger "hwclock set (badyear)"
 else
-    /sbin/hwclock --rtc=$dev --hctosys
-    /usr/bin/logger "hwclock set"
+#    /sbin/hwclock --rtc=$dev --systz
+    /sbin/hwclock --rtc=$dev --hctosys && /usr/bin/logger "hwclock set"
 fi
 
 # Note 'touch' may not be available in initramfs

@@ -4,6 +4,7 @@ include:
   - .boot
   - .kernel
   - .udev
+  - .hwclock
   - .config
 
 hosts-file-configured:
