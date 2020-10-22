@@ -1,11 +1,4 @@
 
-# Delete unused packages including configuration files
-unused-pkgs-purged:
-  pkg.purged:
-    - pkgs:
-      - xkb-data
-      - triggerhappy
-
 # Delete unused packages exclusive configuration files
 unused-pkgs-removed:
   pkg.removed:
