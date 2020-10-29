@@ -1,0 +1,27 @@
+617c617,620
+<             __context__['docker.client'].reload_config()
+---
+>             if "docker.config" in __opts__:
+>                 __context__['docker.client'].reload_config(__opts__["docker.config"])
+>             else:
+>                 __context__['docker.client'].reload_config()
+1033c1036
+<             cmd = ['docker', 'login', '-u', username, '-p', password]
+---
+>             cmd = [__opts__.get('docker.exec', 'docker'), 'login', '-u', username, '-p', password]
+2753c2756
+<     cmd = ['docker', 'cp', src_path, dest_dir]
+---
+>     cmd = [__opts__.get('docker.exec', 'docker'), 'cp', src_path, dest_dir]
+3494c3497
+<     cmd = ['docker', 'load', '-i', local_path]
+---
+>     cmd = [__opts__.get('docker.exec', 'docker'), 'load', '-i', local_path]
+3545c3548
+<     cmd = ['docker', 'history', '-q', name]
+---
+>     cmd = [__opts__.get('docker.exec', 'docker'), 'history', '-q', name]
+3948c3951
+<     cmd = ['docker', 'save', '-o', saved_path, image_to_save]
+---
+>     cmd = [__opts.get('docker.exec', 'docker'), 'save', '-o', saved_path, image_to_save]

@@ -213,3 +213,25 @@ loader-script-rolled-back:
     - force: true
     - onfail:
       - file: loader-script-patched
+
+modules-dockermod-script-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/dockermod.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/modules/dockermod.py
+    - force: true
+    - prereq:
+      - file: modules-dockermod-script-patched
+modules-dockermod-script-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/dockermod.py
+    - source: salt://minion/patch/modules/dockermod.py.patch
+    - hash: 61aa034a35139aa3646f7a6a2a3ffe6e2e50ea4f
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+modules-dockermod-script-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/dockermod.py
+    - source: /usr/lib/python2.7/dist-packages/salt/modules/dockermod.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: modules-dockermod-script-patched
