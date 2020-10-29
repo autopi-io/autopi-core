@@ -277,21 +277,21 @@ class MessageProcessor(object):
 
         finally:
 
-            # Always call trigger, also on error or empty result
+            # Always call trigger hook(s), also on error or empty result
             try:
-                self._call_hook_for(message, "trigger", result)
+                self._call_hooks_for(message, "trigger", result)
             except:
-                log.exception("Error in simple workflow when calling trigger for message: {:}".format(message))
+                log.exception("Error in simple workflow when calling trigger hook(s) for message: {:}".format(message))
 
-        # Call filter hook if there is a result
+        # Call filter hook (chain) if there is a result
         if result:
-            found, filtered_result = self._call_hook_for(message, "filter", result)
+            found, filtered_result = self._call_hook_chain_for(message, "filter", result)
             if found:
                 result = filtered_result
 
-        # Call returner hook if there is a result
+        # Call returner hook(s) if there is a result
         if result:
-            self._call_hook_for(message, "returner", message, result)
+            self._call_hooks_for(message, "returner", message, result)
 
         return result
 
@@ -305,8 +305,8 @@ class MessageProcessor(object):
         args = message.get("args", [])
         kwargs = message.get("kwargs", {})
 
-        # Call validator hook
-        found, error = self._call_hook_for(message, "validator", *args, **kwargs)
+        # Call validator hook (chain)
+        found, error = self._call_hook_chain_for(message, "validator", *args, **kwargs)
         if found and error:
             raise Exception(error)
 
@@ -316,9 +316,9 @@ class MessageProcessor(object):
             # Call handler hook
             _, result = self._call_hook_for(message, "handler", *args, **kwargs)
 
-            # Call converter hook if there is a result
+            # Call converter hook (chain) if there is a result
             if result:
-                found, converted_result = self._call_hook_for(message, "converter", result)
+                found, converted_result = self._call_hook_chain_for(message, "converter", result)
                 if found:
                     result = converted_result
 
@@ -329,27 +329,27 @@ class MessageProcessor(object):
 
         finally:
 
-            # Always call trigger, also on error or empty result
+            # Always call trigger hook(s), also on error or empty result
             try:
-                self._call_hook_for(message, "trigger", result)
+                self._call_hooks_for(message, "trigger", result)
             except:
-                log.exception("Error in extended workflow when calling trigger for message: {:}".format(message))
+                log.exception("Error in extended workflow when calling trigger hook(s) for message: {:}".format(message))
 
-        # Call filter hook if there is a result
+        # Call filter hook (chain) if there is a result
         if result:
-            found, filtered_result = self._call_hook_for(message, "filter", result)
+            found, filtered_result = self._call_hook_chain_for(message, "filter", result)
             if found:
                 result = filtered_result
 
-        # Call enricher hook if there is a result
+        # Call enricher hook (chain) if there is a result
         if result:
-            found, enriched_result = self._call_hook_for(message, "enricher", result)
+            found, enriched_result = self._call_hook_chain_for(message, "enricher", result)
             if found:
                 result = enriched_result
 
-        # Call returner hook if there is a result
+        # Call returner hook(s) if there is a result
         if result:
-            self._call_hook_for(message, "returner", message, result)
+            self._call_hooks_for(message, "returner", message, result)
 
         return result
 
@@ -427,10 +427,33 @@ class MessageProcessor(object):
 
     #region Private helpers
 
+    def _call_hooks_for(self, message, kinds, *args, **kwargs):
+        ret = (False, None)
+
+        for kind in [k.strip() for k in kinds.split(",")]:
+            found, result = self._call_hook_for(message, kind, *args, **kwargs)
+            if found:
+                ret = (found, result)
+
+        return ret
+
+    def _call_hook_chain_for(self, message, kinds, *args, **kwargs):
+        ret = (False, None)
+
+        for kind in [k.strip() for k in kinds.split(",")]:
+            found, result = self._call_hook_for(message, kind, *args, **kwargs)
+            if found:
+                ret = (found, result)
+                if result != None:
+                    return ret
+
+        return ret
+
     def _call_hook_for(self, message, kind, *args, **kwargs):
         func = self._get_hook_for(message, kind)
         if func:
             return True, func(*args, **kwargs)
+
         return False, None
 
     def _get_hook_for(self, message, kind, parse_settings=False):
