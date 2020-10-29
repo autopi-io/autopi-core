@@ -1,6 +1,5 @@
 #!/bin/sh
 
-tag="v17.12.0"
 tag=$(echo "$tag" | sed 's|+|.|g')
 
 machine=$(uname -m)
