@@ -15,6 +15,11 @@ base:
     - obd.install
     - audio.install
     - redis.server
+{%- if salt["pillar.get"]("docker", default=False) %}
+    - docker.install
+{%- else %}
+    - docker.uninstall
+{%- endif %}
 {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
     - ec2x.config
 {%- endif %}
