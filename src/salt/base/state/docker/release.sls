@@ -33,6 +33,13 @@ container-{{ container['project'] }}-{{ container['name'] }}-running:
 
 {%- endfor %}
 
+{%- for container_name in salt['pillar.get']('docker:obsolete_containers', default=[]) %}
+container-cleanup-{{ container_name }}-removed:
+  docker_container.absent:
+    - name: {{ container_name }}
+    - force: true
+{%- endfor %}
+
 # if success
     # Clean data directories if required
     # Remove all containers
