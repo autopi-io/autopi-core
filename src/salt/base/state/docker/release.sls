@@ -44,7 +44,7 @@ docker-container-{{ cont['qname'] }}-running:
     - onfail_in:
       - docker_container: docker-container-{{ cont['qname'] }}-stopped-after-release-failure
     - require_in:
-      - docker_container: docker-project-{{ proj['name'] }}-released
+      - docker_container: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 
 # Ensure container is stopped if start failed for some reason
 docker-container-{{ cont['qname'] }}-stopped-after-release-failure:
@@ -54,17 +54,19 @@ docker-container-{{ cont['qname'] }}-stopped-after-release-failure:
 
 {%- endfor %}
 
-docker-project-{{ proj['name'] }}-released:
-  test.succeed_with_changes:
-    - comment: {{ proj['version'] }}
+docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released:
+  test.succeed_without_changes:
+    - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
 
 # On project release success remove obsolete containers
+{%- if proj.get('obsolete_containers', []) }
 docker-project-{{ proj['name'] }}-obsolete-containers-removed:
   docker_container.absent:
     - names: {{ proj.get('obsolete_containers', [])|tojson }}
     - force: true
     - require:
-      - test: docker-project-{{ proj['name'] }}-released
+      - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
+{%- endif %}
 
 # On release failure restart obsolete containers that were stopped
 {%- for qname in proj.get('obsolete_containers', []) %}
@@ -74,7 +76,7 @@ docker-obsolete-container-{{ qname }}-started-after-release-failure:
     - onchanges:
       - docker_container: docker-obsolete-container-{{ qname }}-stopped
     - onfail:
-      - test: docker-project-{{ proj['name'] }}-released
+      - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 {%- endfor %}
 
 {%- endfor %}

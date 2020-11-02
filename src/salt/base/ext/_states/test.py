@@ -48,6 +48,22 @@ def module(name, args=[], kwargs={}, validate=[]):
     return ret
 
 
+def succeed_without_changes(name, comment='Success!'):
+    '''
+    Returns successful.
+    .. versionadded:: 2014.7.0
+    name
+        A unique string.
+    '''
+    ret = {
+        'name': name,
+        'changes': {},
+        'result': True,
+        'comment': comment
+    }
+    return ret
+
+
 def succeed_with_changes(name, comment='Success!', changes={}):
     '''
     Returns successful and changes is not empty
