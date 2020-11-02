@@ -48,7 +48,7 @@ def module(name, args=[], kwargs={}, validate=[]):
     return ret
 
 
-def succeed_with_changes(name):
+def succeed_with_changes(name, comment='Success!', changes={}):
     '''
     Returns successful and changes is not empty
     .. versionadded:: 2014.7.0
@@ -59,12 +59,12 @@ def succeed_with_changes(name):
         'name': name,
         'changes': {},
         'result': True,
-        'comment': 'Success!'
+        'comment': comment
     }
 
     # Following the docs as written here
     # http://docs.saltstack.com/ref/states/writing.html#return-data
-    ret['changes'] = {
+    ret['changes'] = changes or {
         'testing': {
             'old': 'Unchanged',
             'new': 'Something pretended to change'

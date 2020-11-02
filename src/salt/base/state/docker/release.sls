@@ -1,47 +1,80 @@
-{%- for container in salt['pillar.get']('docker:containers', default=[]) %}
 
-# Pull required images
-image-{{ container['project'] }}-{{ container['name'] }}-basetag-{{ container['tag'] }}-present:
-  docker_image.present:
-    - name: {{ container['image_full'] }}:{{ container['tag'] }}
+docker-registries-logged-in:
+  module.run:
+    - name: docker.login
 
-{%- for tag in container.required_tags %}
-image-{{ container['project'] }}-{{ container['name'] }}-{{ tag }}-present:
-  docker_image.present:
-    - name: {{ container['image_full'] }}:{{ tag }}
+{%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
+
+# First ensure all obsolete containers are stopped
+{%- for qname in proj.get('obsolete_containers', []) %}
+docker-obsolete-container-{{ qname }}-stopped:
+  docker_container.stopped:
+    - name: {{ qname }}
+    - error_on_absent: false
 {%- endfor %}
 
-# Clean old container
-container-{{ container['project'] }}-{{ container['name'] }}-removed:
-  docker_container.absent:
-    - name: {{ container['name'] }}
-    - force: true
+# Ensure all containers in release are running
+{%- for cont in proj.get('containers', []) %}
 
-# Start new containers
-container-{{ container['project'] }}-{{ container['name'] }}-running:
+# Ensure required images are pulled
+docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
+  docker_image.present:
+    - name: {{ cont['image_full'] }}:{{ cont['tag'] }}
+
+{%- for tag in cont.required_tags %}
+docker-image-{{ cont['qname'] }}-tag-{{ tag }}-present:
+  docker_image.present:
+    - name: {{ cont['image_full'] }}:{{ tag }}
+{%- endfor %}
+
+# Ensure container is started/running
+docker-container-{{ cont['qname'] }}-running:
   docker_container.running:
-    - name: {{ container['name'] }}
-    - image: {{ container['image_full'] }}:{{ container['tag'] }}
-    {%- for key, val in container['startup_parameters'].iteritems() %}
+    - name: {{ cont['qname'] }}
+    - image: {{ cont['image_full'] }}:{{ cont['tag'] }}
+    {%- for key, val in cont['startup_parameters'].iteritems() %}
     - {{ key }}: {{ val|tojson }}
     {%- endfor %}
     - require:
-      - docker_image: {{ container['image_full'] }}:{{ container['tag'] }}
+      - docker_image: {{ cont['image_full'] }}:{{ cont['tag'] }}
+      # Always require previous container is running
+      {%- if loop.index > 1 %}
+      - docker_container: docker-container-{{ proj['containers'][loop.index0 - 1]['qname'] }}-running
+      {%- endif %}
+    - onfail_in:
+      - docker_container: docker-container-{{ cont['qname'] }}-stopped-after-release-failure
+    - require_in:
+      - docker_container: docker-project-{{ proj['name'] }}-released
 
-# TODO: Move data directory to "*_backup_DATE" or something
-# container-{{ container['project'] }}-{{ container['name'] }}-backup-data:
+# Ensure container is stopped if start failed for some reason
+docker-container-{{ cont['qname'] }}-stopped-after-release-failure:
+  docker_container.stopped:
+    - name: {{ cont['qname'] }}
+    - error_on_absent: false
 
 {%- endfor %}
 
-{%- for container_name in salt['pillar.get']('docker:obsolete_containers', default=[]) %}
-container-cleanup-{{ container_name }}-removed:
+docker-project-{{ proj['name'] }}-released:
+  test.succeed_with_changes:
+    - comment: {{ proj['version'] }}
+
+# On project release success remove obsolete containers
+docker-project-{{ proj['name'] }}-obsolete-containers-removed:
   docker_container.absent:
-    - name: {{ container_name }}
+    - names: {{ proj.get('obsolete_containers', [])|tojson }}
     - force: true
+    - require:
+      - test: docker-project-{{ proj['name'] }}-released
+
+# On release failure restart obsolete containers that were stopped
+{%- for qname in proj.get('obsolete_containers', []) %}
+docker-obsolete-container-{{ qname }}-started-after-release-failure:
+  docker_container.running:
+    - name: {{ qname }}
+    - onchanges:
+      - docker_container: docker-obsolete-container-{{ qname }}-stopped
+    - onfail:
+      - test: docker-project-{{ proj['name'] }}-released
 {%- endfor %}
 
-# if success
-    # Clean data directories if required
-    # Remove all containers
-# Fallback?
-# Remove unreferenced images
+{%- endfor %}
