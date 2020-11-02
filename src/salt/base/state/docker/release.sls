@@ -59,7 +59,7 @@ docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released:
     - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
 
 # On project release success remove obsolete containers
-{%- if proj.get('obsolete_containers', []) }
+{%- if proj.get('obsolete_containers', []) %}
 docker-project-{{ proj['name'] }}-obsolete-containers-removed:
   docker_container.absent:
     - names: {{ proj.get('obsolete_containers', [])|tojson }}
