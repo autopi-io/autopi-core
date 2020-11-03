@@ -56,7 +56,7 @@ docker-container-{{ cont['qname'] }}-stopped-after-release-failure:
 
 docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released:
   test.succeed_without_changes:
-    - name: {{ proj['name'] }}@{{ proj['version'] }}
+    - name: 'docker:{{ proj['name'] }}@{{ proj['version'] }}'
     - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
 
 # On project release success remove obsolete containers
