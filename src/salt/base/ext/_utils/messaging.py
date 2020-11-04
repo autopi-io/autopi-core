@@ -281,7 +281,7 @@ class MessageProcessor(object):
             try:
                 self._call_hooks_for(message, "trigger", result)
             except:
-                log.exception("Error in simple workflow when calling trigger hook(s) for message: {:}".format(message))
+                pass  # Already logged
 
         # Call filter hook (chain) if there is a result
         if result:
@@ -333,7 +333,7 @@ class MessageProcessor(object):
             try:
                 self._call_hooks_for(message, "trigger", result)
             except:
-                log.exception("Error in extended workflow when calling trigger hook(s) for message: {:}".format(message))
+                pass  # Already logged
 
         # Call filter hook (chain) if there is a result
         if result:
@@ -348,7 +348,7 @@ class MessageProcessor(object):
                 result = enriched_result
 
         # Call returner hook(s) if there is a result
-        if result:
+        if result:  # TODO HN: How if returner fails if multiple?
             self._call_hooks_for(message, "returner", message, result)
 
         return result
@@ -427,34 +427,40 @@ class MessageProcessor(object):
 
     #region Private helpers
 
-    def _call_hooks_for(self, message, kinds, *args, **kwargs):
-        ret = (False, None)
-
-        for kind in [k.strip() for k in kinds.split(",")]:
-            found, result = self._call_hook_for(message, kind, *args, **kwargs)
-            if found:
-                ret = (found, result)
-
-        return ret
-
-    def _call_hook_chain_for(self, message, kinds, *args, **kwargs):
-        ret = (False, None)
-
-        for kind in [k.strip() for k in kinds.split(",")]:
-            found, result = self._call_hook_for(message, kind, *args, **kwargs)
-            if found:
-                ret = (found, result)
-                if result != None:
-                    return ret
-
-        return ret
-
     def _call_hook_for(self, message, kind, *args, **kwargs):
         func = self._get_hook_for(message, kind)
         if func:
             return True, func(*args, **kwargs)
 
         return False, None
+
+    def _call_hooks_for(self, message, kind, *args, **kwargs):
+        errors = []
+
+        funcs = self._get_hooks_for(message, kind)
+        for func in funcs:
+            try:
+                func(*args, **kwargs)
+            except Exception as ex:
+                log.exception("Error when calling {:} hook for message: {:}".format(kind, message))
+
+                errors.append(ex)
+
+        # Raise if error(s)
+        if errors:
+            raise Exception("Failed to call {:}/{:} {:} hook(s) for message: {:}".format(len(errors), len(funcs), kind, message))
+
+    def _call_hook_chain_for(self, message, kind, *args, **kwargs):
+        ret = (False, None)
+
+        for func in self._get_hooks_for(message, kind):
+            res = func(*args, **kwargs)
+            ret = (True, res)
+
+            if res != None:
+                break
+
+        return ret
 
     def _get_hook_for(self, message, kind, parse_settings=False):
         url = self._get_hook_url_for(message, kind)
@@ -478,6 +484,26 @@ class MessageProcessor(object):
             return (func, settings)
         else:
             return func
+
+    def _get_hooks_for(self, message, kind):
+        ret = []
+
+        url = self._get_hook_url_for(message, kind)
+        if not url:
+            return ret
+
+        for name in url.split(","):
+
+            # Get hook function by name
+            func = self._get_func("{:s}_{:s}".format(name, kind))
+
+            # Wrap hook function in order to measure statistics
+            if self._measure_stats:
+                func = self._stats_wrapper_for(message, kind, func)
+
+            ret.append(func)
+
+        return ret
 
     def _stats_wrapper_for(self, message, kind, func):
         def stats_wrapper(*args, **kwargs):
