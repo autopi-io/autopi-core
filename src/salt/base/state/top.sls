@@ -15,6 +15,7 @@ base:
     - obd.install
     - audio.install
     - redis.server
+    - mosquitto
 {%- if salt["pillar.get"]("docker", default=False) %}
     - docker.install
 {%- else %}

@@ -7,3 +7,6 @@
 [submodule "src/salt/base/formula/dnsmasq-formula"]
 	path = src/salt/base/formula/dnsmasq-formula
 	url = https://github.com/autopi-io/dnsmasq-formula.git
+[submodule "src/salt/base/formula/mosquitto-formula"]
+	path = src/salt/base/formula/mosquitto-formula
+	url = https://github.com/autopi-io/mosquitto-formula.git
