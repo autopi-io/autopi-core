@@ -6,6 +6,11 @@ try:
     HAS_MQTT = True
 except ImportError:
     HAS_MQTT = False
+try:
+    import ssl
+    HAS_SSL = True
+except ImportError:
+    HAS_SSL = False
 
 from salt.returners import get_returner_options
 
@@ -20,6 +25,9 @@ def __virtual__():
     if not HAS_MQTT:
         return False, "Could not import mqtt returner; " \
                       "paho mqtt client is not installed."
+    if not HAS_SSL:
+        return False, "Could not import mqtt returner; " \
+                      "ssl is not installed."
 
     return __virtualname__
 
@@ -88,7 +96,7 @@ def _get_client_for(ret):
         client = mqtt.Client(
             client_id=options["client_id"],
             clean_session=options["clean_session"],
-            protocol=getattr(mqtt, options["protocol"], mqtt.MQTTv311),
+            protocol=getattr(mqtt, options["protocol"], mqtt.MQTTv311),  # Resolve MQTT constant
             transport=options["transport"])
 
         if options["username"]:
@@ -96,7 +104,17 @@ def _get_client_for(ret):
 
         # Setup TLS if defined
         if options["tls"]:
-            client.tls_set(**options["tls"])
+
+            tls_kwargs = {}
+            for key, val in options["tls"].iteritems():
+
+                # Resolve SSL constants
+                if key in ["cert_reqs", "tls_version"]:
+                    tls_kwargs[key] = getattr(ssl, val)
+                else:
+                    tls_kwargs[key] = val
+
+            client.tls_set(**tls_kwargs)
 
         # Setup proxy if defined
         if options["proxy"]:
