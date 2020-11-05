@@ -37,6 +37,8 @@ def _get_options(ret=None):
         "port": 1883,
         "keepalive": 60,
         "bind_address": "",
+        "username": None,
+        "password": None,
         "tls": {},
         "proxy": {},
         "ws": {}
@@ -51,6 +53,8 @@ def _get_options(ret=None):
         "port": "port",
         "keepalive": "keepalive",
         "bind_address": "bind_address",
+        "username": "username",
+        "password": "password",
         "tls": "tls",
         "proxy": "proxy",
         "ws": "ws"
@@ -87,6 +91,9 @@ def _get_client_for(ret):
             protocol=getattr(mqtt, options["protocol"], mqtt.MQTTv311),
             transport=options["transport"])
 
+        if options["username"]:
+            client.username_pw_set(options["username"], password=options["password"])
+
         # Setup TLS if defined
         if options["tls"]:
             client.tls_set(**options["tls"])
@@ -99,21 +106,53 @@ def _get_client_for(ret):
         if options["ws"]:
             client.ws_set(**options["ws"])
 
+        # Register callback on connect
+        def on_connect(client, userdata, flags, rc):
+            if rc == mqtt.MQTT_ERR_SUCCESS:
+                log.info("Client successfully connected to broker")
+            else:
+                log.error("Client unable to connect to broker: {:}".format(mqtt.error_string(rc)))
+
+        client.on_connect = on_connect
+
+        # Register callback on disconnect
+        def on_disconnect(client, userdata, rc):
+            log.warn("Client disconnected from broker: {:}".format(mqtt.error_string(rc)))
+            
+            # Call disconnect to make sure 'is_connected' will return False
+            rc = client.disconnect()
+            log.info("Client disconnect result: {:}".format(mqtt.error_string(rc)))
+
+        client.on_disconnect = on_disconnect
+
+        # Connect to the broker
         client.connect(options["host"],
             port=options["port"],
             keepalive=options["keepalive"],
             bind_address=options["bind_address"])
+
+        # Run a client loop to make sure 'is_connected' will return True
+        rc = client.loop()
+        if rc != mqtt.MQTT_ERR_SUCCESS:
+            log.error("Client loop call after initial connect failed: {:}".format(mqtt.error_string(rc)))
 
         __context__[__name__] = client
     else:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Re-using client instance found in context")
 
-        # TODO HN:
-        #if not client.is_connected():
-        #    log.warn("Existing client instance is no longer connected - attempting to reconnect")
+    # Check connection
+    if not client.is_connected():
+        log.warn("Client is no longer connected - attempting to reconnect")
 
-        #    client.reconnect()
+        # Attempt to reconnect
+        rc = client.reconnect()
+        log.info("Client reconnect result: {:}".format(mqtt.error_string(rc)))
+
+        # Run a client loop to make sure 'is_connected' will return True
+        rc = client.loop()
+        if rc != mqtt.MQTT_ERR_SUCCESS:
+            log.error("Client loop call after reconnect failed: {:}".format(mqtt.error_string(rc)))
 
     return client
 
@@ -183,9 +222,9 @@ def returner_data(data, *args, **kwargs):
         }
 
     client = _get_client_for(kwargs)
-    res = client.publish("/".join(namespace), json.dumps(payload, separators=(",", ":")))
 
-    # TODO HN:
-    #if res.is_published():
-    #    client.disconnect()
-
+    # Publish message
+    topic = "/".join(namespace)
+    res = client.publish(topic, json.dumps(payload, separators=(",", ":")))
+    if res.rc != mqtt.MQTT_ERR_SUCCESS:
+        log.warn("Publish of message with topic '{:}' failed: {:}".format(topic, mqtt.error_string(res.rc)))
