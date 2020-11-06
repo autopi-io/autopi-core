@@ -768,11 +768,11 @@ def gnss_fix_frequency(value=None):
 
     The fix frequency of the GNSS engine corresponds to how often will the position
     (latitude and longitude) update. Possible values (Hz):
-    - None (default): returns the current fix_frequency of the GNSS engine
-    - 1
-    - 2
-    - 5
-    - 10
+      - None (default): returns the current fix_frequency of the GNSS engine
+      - 1
+      - 2
+      - 5
+      - 10
     """
 
     if value == None:
