@@ -7,6 +7,7 @@ croniter==0.3.20
 flask==1.1.2
 flask-cors==3.0.9
 flask-api==1.1
+paho-mqtt==1.5.0
 python-can==3.1.1
 cantools==32.16.0
 diskcache==3.1.1
