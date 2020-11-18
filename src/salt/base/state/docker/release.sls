@@ -27,6 +27,9 @@ docker-image-{{ cont['qname'] }}-tag-{{ tag }}-present:
     - name: {{ cont['image_full'] }}:{{ tag }}
 {%- endfor %}
 
+# TODO: If purge_data == true, move directories to FILE/DIR+.bak
+# On fail move it back
+
 # Ensure container is started/running
 docker-container-{{ cont['qname'] }}-running:
   docker_container.running:
@@ -60,14 +63,14 @@ docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released:
     - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
 
 # On project release success remove obsolete containers
-{%- if proj.get('obsolete_containers', []) %}
-docker-project-{{ proj['name'] }}-obsolete-containers-removed:
+{%- for qname in proj.get('obsolete_containers', []) %}
+docker-container-obsolete-{{ qname }}-removed:
   docker_container.absent:
-    - names: {{ proj.get('obsolete_containers', [])|tojson }}
+    - name: {{ qname }}
     - force: true
     - require:
       - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
-{%- endif %}
+{%- endfor %}
 
 # On release failure restart obsolete containers that were stopped
 {%- for qname in proj.get('obsolete_containers', []) %}
