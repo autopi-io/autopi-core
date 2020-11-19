@@ -16,7 +16,7 @@ base:
     - audio.install
     - redis.server
     - mosquitto
-{%- if salt["pillar.get"]("docker", default=False) %}
+{%- if salt["pillar.get"]("docker:enabled", default=False) %}
     - docker.install
 {%- else %}
     - docker.uninstall

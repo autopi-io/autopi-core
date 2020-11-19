@@ -3,6 +3,20 @@ docker-registries-logged-in:
   module.run:
     - name: docker.login
 
+# TODO Set with all project names.
+# TODO Change state to take list of known projects instead of regexes, and then remove all containers that does not start with the project slug!
+{%- set _all_projects = [] %}
+{%- for project in salt['pillar.get']('docker:projects', default=[]) %}
+    {%- do _all_projects.append(project.get('name')) %}
+{%- endfor %}
+
+{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
+docker-unknown-containers-removed:
+  docker_extra.container_absent_regex:
+    - projects: _all_projects
+    - force: True
+{%- endif %}
+
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
 
 # First ensure all obsolete containers are stopped
