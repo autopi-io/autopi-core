@@ -12,8 +12,8 @@ docker-registries-logged-in:
 
 {%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
 docker-unknown-containers-removed:
-  docker_extra.container_absent_regex:
-    - projects: _all_projects
+  docker_extra.container_absent_except:
+    - projects: {{ _all_projects|tojson }}
     - force: True
 {%- endif %}
 
