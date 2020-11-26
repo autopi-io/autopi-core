@@ -5,12 +5,11 @@ docker-registries-logged-in:
 
 # TODO Set with all project names.
 # TODO Change state to take list of known projects instead of regexes, and then remove all containers that does not start with the project slug!
+{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
 {%- set _all_projects = [] %}
 {%- for project in salt['pillar.get']('docker:projects', default=[]) %}
     {%- do _all_projects.append(project.get('name')) %}
 {%- endfor %}
-
-{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
 docker-unknown-containers-removed:
   docker_extra.container_absent_except:
     - projects: {{ _all_projects|tojson }}
@@ -30,16 +29,16 @@ docker-obsolete-container-{{ qname }}-stopped:
 # Ensure all containers in release are running
 {%- for cont in proj.get('containers', []) %}
 
-# Ensure required images are pulled
-docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
-  docker_image.present:
-    - name: {{ cont['image_full'] }}:{{ cont['tag'] }}
-
+# Ensure required images are pulled, first all required_tags, then the tag to run.
 {%- for tag in cont.required_tags %}
 docker-image-{{ cont['qname'] }}-tag-{{ tag }}-present:
   docker_image.present:
     - name: {{ cont['image_full'] }}:{{ tag }}
 {%- endfor %}
+
+docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
+  docker_image.present:
+    - name: {{ cont['image_full'] }}:{{ cont['tag'] }}
 
 # TODO: If purge_data == true, move directories to FILE/DIR+.bak
 # On fail move it back
@@ -58,18 +57,23 @@ docker-container-{{ cont['qname'] }}-running:
       {%- if loop.index > 1 %}
       - docker_container: docker-container-{{ proj['containers'][loop.index0 - 1]['qname'] }}-running
       {%- endif %}
-    - onfail_in:
-      - docker_container: docker-container-{{ cont['qname'] }}-stopped-after-release-failure
     - require_in:
-      - docker_container: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
-
-# Ensure container is stopped if start failed for some reason
-docker-container-{{ cont['qname'] }}-stopped-after-release-failure:
-  docker_container.stopped:
-    - name: {{ cont['qname'] }}
-    - error_on_absent: false
+      - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 
 {%- endfor %}
+
+# Ensure container is stopped if start failed for some reason
+docker-project-{{ proj['name'] }}@{{ proj['version'] }}-containers-stopped-after-release-failure:
+  docker_container.stopped:
+    - names:
+      {%- for cont in proj.get('containers', []) %}
+      - {{ cont['qname'] }}
+      {%- endfor %}
+    - onfail:
+      {%- for cont in proj.get('containers', []) %}
+      - docker-container-{{ cont['qname'] }}-running
+      {%- endfor %}
+    - error_on_absent: false
 
 docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released:
   test.succeed_without_changes:
@@ -89,9 +93,11 @@ docker-container-obsolete-{{ qname }}-removed:
 # On release failure restart obsolete containers that were stopped
 {%- for qname in proj.get('obsolete_containers', []) %}
 docker-obsolete-container-{{ qname }}-started-after-release-failure:
-  docker_container.running:
-    - name: {{ qname }}
-    - onchanges:
+  module.run:
+    - name: docker.start
+    - kwargs:
+        name: {{ qname }}
+    - requre:
       - docker_container: docker-obsolete-container-{{ qname }}-stopped
     - onfail:
       - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
