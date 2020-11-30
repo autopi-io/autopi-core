@@ -19,6 +19,14 @@ packages-installed:
       - avrdude
       - espeak
 
+# Ensure valid pillar data is present to prevent writing an empty requirements file 
+pip-requirements-pillar-data-present:
+  module.run:
+    - name: pillar.keys
+    - key: minion
+    - prereq:
+      - file: pip-requirements-distributed
+
 pip-requirements-distributed:
   file.managed:
     - name: /etc/pip-requirements.txt
