@@ -36,7 +36,7 @@ def module_result_cache_returner(message, result):
 @edmp.register_hook()
 def context_handler(key=None, **kwargs):
     """
-    Queries or manipulatea context instance of this engine.
+    Queries or manipulates context instance of this engine.
     """
 
     # Validate input
