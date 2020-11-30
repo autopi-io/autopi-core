@@ -243,7 +243,7 @@ def start(**settings):
         def on_execute(command, *args, **kwargs):
 
             # Check if command is allowed
-            if not term_settings.get("cmd_allow_regex", None) or not re.match(term_settings.["cmd_allow_regex"], command):
+            if not term_settings.get("cmd_allow_regex", None) or not re.match(term_settings["cmd_allow_regex"], command):
                 raise ValueError("Command not allowed")
 
             res = __salt__[command](*args, **kwargs)

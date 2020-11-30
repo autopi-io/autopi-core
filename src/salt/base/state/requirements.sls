@@ -22,7 +22,8 @@ packages-installed:
 pip-requirements-distributed:
   file.managed:
     - name: /etc/pip-requirements.txt
-    - source: salt://requirements.txt
+    - source: salt://requirements.txt.jinja
+    - template: jinja
 
 pip-requirements-installed:
   pip.installed:
