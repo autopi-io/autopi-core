@@ -4,3 +4,4 @@ ble-mac-address-queried:
     - name: ble.interface
     - args:
       - mac_address
+    - returner: cloud.returner
