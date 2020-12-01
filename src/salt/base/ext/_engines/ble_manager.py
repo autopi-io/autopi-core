@@ -2,13 +2,14 @@ import base64
 import bluenrg.codes
 import bluenrg.commands
 import bluenrg.events
-import Crypto
+import re
 import datetime
 import json
 import logging
 import time
 import _strptime  # Attempt to avoid: Failed to import _strptime because the import lockis held by another thread
 
+from jwcrypto import jwk, jwe
 from messaging import EventDrivenMessageProcessor
 from common_util import fromisoformat
 
@@ -226,16 +227,21 @@ def start(**settings):
 
         # Prepare authentication handler for terminal interface
         def on_authenticate(token):
-            Crypto.Random.atfork()
-
             if not "auth_rsa_key_b64" in term_settings:
                 raise Exception("No RSA key defined in settings")
 
-            rsa_key = Crypto.PublicKey.RSA.importKey(base64.b64decode(term_settings["auth_rsa_key_b64"]))
-            cipher = Crypto.Cipher.PKCS1_OAEP.new(rsa_key)
-            decrypted_token = json.loads(cipher.decrypt(token))
+            private_key = jwk.JWK()
+            private_key.import_from_pem(base64.b64decode(term_settings["auth_rsa_key_b64"]))
 
-            valid = fromisoformat(decrypted_token["from"]) <= datetime.datetime.utcnow() <= fromisoformat(decrypted_token["to"])
+            try:
+                jwetoken = jwe.JWE()
+                jwetoken.deserialize(token, key=private_key)
+                decrypted_token = json.loads(jwetoken.payload)
+            except:
+                # TODO NV check with what exception it fails
+                return False
+
+            valid = fromisoformat(decrypted_token["valid_from_utc"]) <= datetime.datetime.utcnow() <= fromisoformat(decrypted_token["valid_to_utc"])
 
             return valid
 
