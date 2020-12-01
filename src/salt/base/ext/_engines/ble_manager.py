@@ -233,13 +233,9 @@ def start(**settings):
             private_key = jwk.JWK()
             private_key.import_from_pem(base64.b64decode(term_settings["auth_rsa_key_b64"]))
 
-            try:
-                jwetoken = jwe.JWE()
-                jwetoken.deserialize(token, key=private_key)
-                decrypted_token = json.loads(jwetoken.payload)
-            except:
-                # TODO NV check with what exception it fails
-                return False
+            jwetoken = jwe.JWE()
+            jwetoken.deserialize(token, key=private_key)
+            decrypted_token = json.loads(jwetoken.payload)
 
             valid = fromisoformat(decrypted_token["valid_from_utc"]) <= datetime.datetime.utcnow() <= fromisoformat(decrypted_token["valid_to_utc"])
 
