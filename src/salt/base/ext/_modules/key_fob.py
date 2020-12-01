@@ -7,7 +7,7 @@ __virtualname__ = "keyfob"
 
 log = logging.getLogger(__name__)
 
-client = EventDrivenMessageClient(__name__)
+client = EventDrivenMessageClient("key_fob")
 
 
 def __virtual__():
