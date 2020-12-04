@@ -18,15 +18,7 @@ docker-unknown-containers-removed:
 
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
 
-# First ensure all obsolete containers are stopped
-{%- for qname in proj.get('obsolete_containers', []) %}
-docker-obsolete-container-{{ qname }}-stopped:
-  docker_container.stopped:
-    - name: {{ qname }}
-    - error_on_absent: false
-{%- endfor %}
-
-# Ensure all containers in release are running
+# Pull images for project before stopping containers
 {%- for cont in proj.get('containers', []) %}
 
 # Ensure required images are pulled, first all required_tags, then the tag to run.
@@ -40,8 +32,32 @@ docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
   docker_image.present:
     - name: {{ cont['image_full'] }}:{{ cont['tag'] }}
 
-# TODO: If purge_data == true, move directories to FILE/DIR+.bak
-# On fail move it back
+{%- endfor %}
+
+# First ensure all obsolete containers are stopped
+{%- for qname in proj.get('obsolete_containers', []) %}
+docker-obsolete-container-{{ qname }}-stopped:
+  docker_container.stopped:
+    - name: {{ qname }}
+    - error_on_absent: false
+{%- endfor %}
+
+# "purge" directories
+{%- for dir in proj.get('purge_directories', []) %}
+# Remove old bak dir if exists
+docker-directory-purge-{{ dir }}-old-bak-removed:
+  file.absent:
+    - name: {{ dir }}_bak
+
+# Move new dir to bak
+docker-directory-purge-{{ dir }}-dir-moved-to-bak:
+  file.rename:
+    - name: {{ dir }}_bak
+    - source: {{ dir }}
+{%- endfor %}
+
+# Ensure all containers in release are running
+{%- for cont in proj.get('containers', []) %}
 
 # Ensure container is started/running
 docker-container-{{ cont['qname'] }}-running:
@@ -90,15 +106,13 @@ docker-container-obsolete-{{ qname }}-removed:
       - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 {%- endfor %}
 
-# On release failure restart obsolete containers that were stopped
-{%- for qname in proj.get('obsolete_containers', []) %}
-docker-obsolete-container-{{ qname }}-started-after-release-failure:
+# On release failure restart fallback containers
+{%- for qname in proj.get('fallback_containers', []) %}
+docker-fallback-container-{{ qname }}-started-after-release-failure:
   module.run:
     - name: docker.start
     - kwargs:
         name: {{ qname }}
-    - requre:
-      - docker_container: docker-obsolete-container-{{ qname }}-stopped
     - onfail:
       - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 {%- endfor %}
