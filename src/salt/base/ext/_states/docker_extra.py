@@ -62,9 +62,14 @@ def container_absent_except(name, projects, force=False):
         return ret
 
     ret['result'] = True
-    ret['comment'] = (
-        'The following container(s) were removed: {0}'
-        .format(', '.join(to_remove))
-    )
+    if to_remove:
+        ret['comment'] = (
+            'The following container(s) were removed: {0}'
+            .format(', '.join(to_remove))
+        )
+    else:
+        ret['comment'] = (
+            'No containers were removed'
+        )
 
     return ret
