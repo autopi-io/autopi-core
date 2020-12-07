@@ -3,24 +3,10 @@ docker-registries-logged-in:
   module.run:
     - name: docker.login
 
-# TODO Set with all project names.
-# TODO Change state to take list of known projects instead of regexes, and then remove all containers that does not start with the project slug!
-{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
-{%- set _all_projects = [] %}
-{%- for project in salt['pillar.get']('docker:projects', default=[]) %}
-    {%- do _all_projects.append(project.get('name')) %}
-{%- endfor %}
-docker-unknown-containers-removed:
-  docker_extra.container_absent_except:
-    - projects: {{ _all_projects|tojson }}
-    - force: True
-{%- endif %}
-
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
 
 # Pull images for project before stopping containers
 {%- for cont in proj.get('containers', []) %}
-
 # Ensure required images are pulled, first all required_tags, then the tag to run.
 {%- for tag in cont.required_tags %}
 docker-image-{{ cont['qname'] }}-tag-{{ tag }}-present:
@@ -33,6 +19,18 @@ docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
     - name: {{ cont['image_full'] }}:{{ cont['tag'] }}
 
 {%- endfor %}
+
+# Remove unknown containers
+{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
+{%- set _all_projects = [] %}
+{%- for project in salt['pillar.get']('docker:projects', default=[]) %}
+    {%- do _all_projects.append(project.get('name')) %}
+{%- endfor %}
+docker-unknown-containers-removed:
+  docker_extra.container_absent_except:
+    - projects: {{ _all_projects|tojson }}
+    - force: True
+{%- endif %}
 
 # First ensure all obsolete containers are stopped
 {%- for qname in proj.get('obsolete_containers', []) %}
