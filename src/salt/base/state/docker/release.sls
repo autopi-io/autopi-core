@@ -3,6 +3,10 @@ docker-registries-logged-in:
   module.run:
     - name: docker.login
 
+docker-containers-list-before-release:
+  module.run:
+    - name: docker.list_containers
+
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
 
 # Pull images for project before stopping containers
@@ -116,3 +120,7 @@ docker-fallback-container-{{ qname }}-started-after-release-failure:
 {%- endfor %}
 
 {%- endfor %}
+
+docker-containers-list-after-release:
+  module.run:
+    - name: docker.list_containers
