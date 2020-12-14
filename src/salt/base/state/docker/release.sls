@@ -5,7 +5,9 @@ docker-registries-logged-in:
 
 docker-containers-list-before-release:
   module.run:
-    - name: docker.list_containers
+    - name: docker.ps
+    - kwargs:
+        all: true
 
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
 
@@ -24,17 +26,13 @@ docker-image-{{ cont['qname'] }}-basetag-{{ cont['tag'] }}-present:
 
 {%- endfor %}
 
-# Remove unknown containers
-{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
-{%- set _all_projects = [] %}
-{%- for project in salt['pillar.get']('docker:projects', default=[]) %}
-    {%- do _all_projects.append(project.get('name')) %}
+# First ensure all unknown containers are stopped
+{%- for qname in proj.get('unknown_containers', []) %}
+docker-unknown-container-{{ qname }}-stopped:
+  docker_container.stopped:
+    - name: {{ qname }}
+    - error_on_absent: false
 {%- endfor %}
-docker-unknown-containers-removed:
-  docker_extra.container_absent_except:
-    - projects: {{ _all_projects|tojson }}
-    - force: True
-{%- endif %}
 
 # First ensure all obsolete containers are stopped
 {%- for qname in proj.get('obsolete_containers', []) %}
@@ -108,9 +106,30 @@ docker-container-obsolete-{{ qname }}-removed:
       - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
 {%- endfor %}
 
+# On project release success remove stopped unknown containers
+{%- for qname in proj.get('unknown_containers', []) %}
+docker-container-unknown-{{ qname }}-removed:
+  docker_container.absent:
+    - name: {{ qname }}
+    - force: true
+    - require:
+      - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
+{%- endfor %}
+
 # On release failure restart fallback containers
 {%- for qname in proj.get('fallback_containers', []) %}
-docker-fallback-container-{{ qname }}-started-after-release-failure:
+docker-container-fallback-{{ qname }}-restarted-after-release-failure:
+  module.run:
+    - name: docker.start
+    - kwargs:
+        name: {{ qname }}
+    - onfail:
+      - test: docker-project-{{ proj['name'] }}-version-{{ proj['version'] }}-released
+{%- endfor %}
+
+# On release failure restart any unknown containers
+{%- for qname in proj.get('unknown_containers', []) %}
+docker-container-unknown-{{ qname }}-restarted-after-release-failure:
   module.run:
     - name: docker.start
     - kwargs:
@@ -123,4 +142,6 @@ docker-fallback-container-{{ qname }}-started-after-release-failure:
 
 docker-containers-list-after-release:
   module.run:
-    - name: docker.list_containers
+    - name: docker.ps
+    - kwargs:
+        all: true
