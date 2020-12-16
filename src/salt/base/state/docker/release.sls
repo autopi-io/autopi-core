@@ -89,10 +89,10 @@ docker-registries-logged-in:
 ###############################################################################
 
 # Ensure all obsolete containers are stopped
-{%- for cont in proj.get('obsolete_containers', []) %}
-{{ proj_id_prefix }}-obsolete-container-{{ cont['qname'] }}-stopped:
+{%- for qname in proj.get('obsolete_containers', []) %}
+{{ proj_id_prefix }}-obsolete-container-{{ qname }}-stopped:
   docker_container.stopped:
-    - name: {{ cont['qname'] }}
+    - name: {{ qname }}
     - error_on_absent: false
     - require:
       - test: {{ proj_id_prefix }}-unknown-containers-stopped
@@ -165,10 +165,10 @@ docker-registries-logged-in:
 # Remove any obsolete containers
 ###############################################################################
 
-{%- for cont in proj.get('obsolete_containers', []) %}
-{{ proj_id_prefix }}-obsolete-conainer-{{ cont['qname'] }}-removed:
+{%- for qname in proj.get('obsolete_containers', []) %}
+{{ proj_id_prefix }}-obsolete-conainer-{{ qname }}-removed:
   docker_container.absent:
-    - name: {{ cont['qname'] }}
+    - name: {{ qname }}
     - force: true
     - require:
       - test: {{ proj_id_prefix }}-released
