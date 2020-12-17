@@ -166,7 +166,7 @@ docker-registries-logged-in:
 ###############################################################################
 
 {%- for qname in proj.get('obsolete_containers', []) %}
-{{ proj_id_prefix }}-obsolete-conainer-{{ qname }}-removed:
+{{ proj_id_prefix }}-obsolete-container-{{ qname }}-removed:
   docker_container.absent:
     - name: {{ qname }}
     - force: true
