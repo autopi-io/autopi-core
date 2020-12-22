@@ -225,7 +225,7 @@ docker-registries-logged-in:
     {%- for key, val in cont['startup_parameters'].iteritems() %}
     - {{ key }}: {{ val|tojson }}
     {%- endfor %}
-    - onfail_any:
+    - onfail:
       - test: {{ proj_id_prefix }}-obsolete-containers-stopped
       - test: {{ proj_id_prefix }}-purge-directories-backed-up
       - test: {{ proj_id_prefix }}-released
@@ -240,7 +240,7 @@ docker-registries-logged-in:
     - name: docker.start
     - kwargs:
         name: {{ name }}
-    - onfail_any:
+    - onfail:
       - test: {{ proj_id_prefix }}-unknown-containers-stopped
       - test: {{ proj_id_prefix }}-released
 {%- endfor %}  # Unknown containers loop
