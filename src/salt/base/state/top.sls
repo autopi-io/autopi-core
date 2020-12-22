@@ -25,8 +25,7 @@ base:
     - ec2x.config
     {%- endif %}
     {%- if salt["pillar.get"]("ble:enabled", default=False) %}
-# TODO HN: Make SLS able to check current version
-#    - ble.install
+    - ble.install
     {%- endif %}
     - ui.install
     - power.sleep_timer.config
