@@ -6,6 +6,7 @@ import re
 import datetime
 import json
 import logging
+import RPi.GPIO as gpio
 import time
 import _strptime  # Attempt to avoid: Failed to import _strptime because the import lockis held by another thread
 
@@ -15,6 +16,9 @@ from common_util import fromisoformat
 
 from bluenrg.connection import SerialConnection
 from bluenrg.interface import GATTTerminalInterface
+
+
+READY_PIN = 22
 
 
 log = logging.getLogger(__name__)
@@ -51,7 +55,7 @@ def query_handler(cmd, **kwargs):
     timeout = kwargs.pop("_timeout", 1)
 
     # Find command class
-    cmd_cls = getattr(bluenrg.commands, cmd, None)
+    cmd_cls = getattr(bluenrg.commands, str(cmd).upper(), None)
     if cmd_cls == None:
         raise ValueError("No command found by name '{:}'".format(cmd))
 
@@ -215,6 +219,11 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting BLE manager with settings: {:}".format(settings))
 
+        # Initialize GPIO ready pin
+        gpio.setwarnings(False)
+        gpio.setmode(gpio.BCM)
+        gpio.setup(READY_PIN, gpio.OUT, initial=gpio.LOW)  # Not yet ready
+
         # Set normal mode
         mode_handler(value="normal")
         
@@ -258,6 +267,9 @@ def start(**settings):
 
         try:
             iface.start()
+
+            # Signal ready
+            gpio.output(READY_PIN, gpio.HIGH)
         except:
             log.exception("Failed to start terminal interface")
 
@@ -274,3 +286,6 @@ def start(**settings):
         raise
     finally:
         log.info("Stopping BLE manager")
+
+        # Signal no longer ready
+        gpio.output(READY_PIN, gpio.LOW)
