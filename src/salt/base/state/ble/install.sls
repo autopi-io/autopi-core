@@ -20,6 +20,7 @@ ble-firmware-local-name-imprinted:
       - file: ble-firmware-distributed
       - pkg: bbe
 
+# TODO HN: Only run if 'ble.interface version' is different
 ble-firmware-installed:
   module.run:
     - name: ble.flash_firmware
