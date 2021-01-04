@@ -1,4 +1,9 @@
 
+docker-pillar-data-before-release:
+  module.run:
+    - name: pillar.get
+    - key: docker
+
 docker-containers-list-before-release:
   module.run:
     - name: docker.ps
