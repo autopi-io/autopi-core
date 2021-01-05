@@ -195,14 +195,14 @@ docker-registries-logged-in:
 # Failure: Stop current containers
 ###############################################################################
 
-# Ensure containers are stopped if start failed for some reason
-{{ proj_id_prefix }}-containers-stopped-after-release-failure:
-  docker_container.stopped:
+# Ensure containers are removed if start failed for some reason
+{{ proj_id_prefix }}-containers-removed-after-release-failure:
+  docker_container.absent:
     - names:
       {%- for cont in proj.get('containers', []) %}
       - {{ cont['qname'] }}
       {%- endfor %}
-    - error_on_absent: false
+    - force: true
     - onfail:
       - test: {{ proj_id_prefix }}-released
 
