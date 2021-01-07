@@ -79,12 +79,12 @@ def connection(**kwargs):
 
     Optional arguments:
       - baudrate (int): Changes baudrate used to communicate with interface.
-      - reset (str): Reboots interface and re-initializes connection. 
+      - reset (str): Reboots interface. Available options: warm, cold
 
     Examples:
       - 'obd.connection'
       - 'obd.connection baudrate=1152000'
-      - 'obd.connection reset=True'
+      - 'obd.connection reset=cold'
     """
 
     return client.send_sync(_msg_pack(_handler="connection", **kwargs))
