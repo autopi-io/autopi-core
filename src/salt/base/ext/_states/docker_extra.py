@@ -1,12 +1,12 @@
 import re
 
-def container_absent_except(name, projects, force=False):
+def container_absent_except(name, containers, force=False):
     '''
-    Ensure that all containers except those that match the project names are absent.
-    This state must be run with all project names in one go, do not use the name field.
+    Ensure that all containers except those that match the container names are absent.
+    This state must be run with all container names in one go, do not use the name field.
 
-    projects
-        List of project names that will be excempted from being absent.
+    containers
+        List of container names that will be excempted from being absent.
 
     force : False
         Set to ``True`` to remove the container even if it is running
@@ -18,29 +18,35 @@ def container_absent_except(name, projects, force=False):
         project_slug:
           docker_extra.container_absent_except
 
-        multiple_projects:
+        multiple_names:
           docker_extra.container_absent_except:
-            - projects:
-              - project_name
-              - project_name
+            - containers:
+              - container_name
+              - container_name
     '''
     ret = {'name': name,
            'changes': {},
            'result': False,
            'comment': ''}
 
-    containers = __salt__['docker.list_containers'](all=True)
-
     if not containers:
+        ret['result'] = False
+        ret['comment'] = (
+            'No names provided to be excempt, not removing everything.'
+        )
+        return ret
+
+    running_containers = __salt__['docker.list_containers'](all=True)
+
+    if not running_containers:
         ret['result'] = True
-        ret['comment'] = 'No containers'
+        ret['comment'] = 'No containers exists'
         return ret
 
     # Find unknown containers
     to_remove = []
-    for container_name in containers:
-        print(container_name)
-        if not [x for x in projects if container_name.startswith(x)]:
+    for container_name in running_containers:
+        if not [x for x in containers if re.match(x, container_name)]:
             to_remove.append(container_name)
 
     if __opts__['test']:
