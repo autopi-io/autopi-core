@@ -14,15 +14,19 @@ docker-registries-logged-in:
   module.run:
     - name: docker.login
 
+{%- set _known_containers = [] %}
+
 # Loop through all projects
 {%- for proj in salt['pillar.get']('docker:projects', default=[]) %}
-{%- set proj_id_prefix = 'docker-project-' ~ proj['name'] ~ '@' ~ proj['version'] %} 
+{%- set proj_id_prefix = 'docker-project-' ~ proj['name'] ~ '@' ~ proj['version'] %}
 
 # Pull images
 ###############################################################################
 
 # First images for current containers
 {%- for cont in proj.get('containers', []) %}
+
+{%- do _known_containers.append(cont['qname']) %}
 
 # Ensure required images are pulled, first all required tags, then the base tag to run
 {%- for tag in cont.required_tags %}
@@ -46,6 +50,7 @@ docker-registries-logged-in:
 
 # Then images for fallback containers
 {%- for cont in proj.get('fallback_containers', []) %}
+{%- do _known_containers.append(cont['qname']) %}
 
 # Ensure required images are pulled, first all required tags, then the base tag to run
 {%- for tag in cont.required_tags %}
@@ -76,6 +81,8 @@ docker-registries-logged-in:
 
 # Ensure all unknown containers are stopped
 {%- for name in proj.get('unknown_containers', []) %}
+{%- do _known_containers.append(name) %}
+
 {{ proj_id_prefix }}-unknown-container-{{ name }}-stopped:
   docker_container.stopped:
     - name: {{ name }}
@@ -154,6 +161,10 @@ docker-registries-logged-in:
   test.succeed_without_changes:
     - name: 'docker:{{ proj['name'] }}@{{ proj['version'] }}'
     - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
+    {%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
+    - require_in: 
+      - test: docker-unknown-containers-removed
+    {%- endif %}
 
 # Remove any unknown containers
 ###############################################################################
@@ -251,6 +262,19 @@ docker-registries-logged-in:
 {%- endfor %}  # Unknown containers loop
 
 {%- endfor %}  # Projects loop
+
+# Remove all unknown containers
+###############################################################################
+
+{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
+docker-unknown-containers-removed:
+  docker_extra.container_absent_except:
+    - containers: {{ _known_containers|tojson }}
+    - force: True
+{%- endif %}
+
+# Log running containers
+###############################################################################
 
 docker-containers-list-after-release:
   module.run:
