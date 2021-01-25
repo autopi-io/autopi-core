@@ -54,6 +54,7 @@ def upload(path, gzip=True, service=None, **kwargs):
     Optional arguments:
       - gzip (bool): Gzip it? Default is 'True'.
       - service (str): The service to be used (Possible: 'dropbox'). Default is None.
+      - token (str): The token to use when uploading (Required when using 'dropbox' service)
     """
 
     # setup
