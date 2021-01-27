@@ -105,6 +105,25 @@ FF_MT_SRC_EA  = (1 << 7)
 FF_MT_THS_MASK   = 0x7F
 FF_MT_THS_DBCNTM = (1 << 7)
 
+# Transient configuration register
+TRANSIENT_CFG_HPF_BYP = (1 << 0)
+TRANSIENT_CFG_XTEFE   = (1 << 1)
+TRANSIENT_CFG_YTEFE   = (1 << 2)
+TRANSIENT_CFG_ZTEFE   = (1 << 3)
+TRANSIENT_CFG_ELE     = (1 << 4)
+
+# Transient source register
+TRANSIENT_SRC_X_TRANS_POL = (1 << 0)
+TRANSIENT_SRC_XTRANSE     = (1 << 1)
+TRANSIENT_SRC_Y_TRANS_POL = (1 << 2)
+TRANSIENT_SRC_YTRANSE     = (1 << 3)
+TRANSIENT_SRC_Z_TRANS_POL = (1 << 4)
+TRANSIENT_SRC_ZTRANSE     = (1 << 5)
+TRANSIENT_SRC_EA          = (1 << 6)
+
+# Transient threshold registers
+TRANSIENT_THS_DBCNTM = (1 << 7)
+
 # Interrupt status register
 INT_SOURCE_DRDY   = (1 << 0)  # Data-ready interrupt status
 INT_SOURCE_FF_MT  = (1 << 2)  # Freefall/motion interrupt status
@@ -316,6 +335,10 @@ class MMA8X5XConn(I2CConn):
 
             # Configure specified FIFO watermark or use default
             self.fifo_watermark(value=settings.get("fifo_watermark", self._fifo_watermark))
+
+            # Configure transient detector
+            self.transient_threshold(value=5, debounce_mode=1)
+            self.transient_config(configure=True, bypass_HPF=False, event_latch=True, x=True, y=True, z=True)
 
             # Configure interrupts if defined
             for name, pin in settings.get("interrupts", {}).iteritems():
@@ -849,6 +872,82 @@ class MMA8X5XConn(I2CConn):
         res = self.read(FF_MT_COUNT)
 
         return res
+
+    def transient_config(self, configure=False, event_latch=False, bypass_HPF=False, x=False, y=False, z=False):
+        """
+        Configure transient detector or read data
+        """
+
+        if not configure:
+            ret = {}
+            res = self.read(TRANSIENT_CFG)
+
+            ret["event_latch"] = bool(TRANSIENT_CFG_ELE & res)
+            ret["bypass_HPF"] = bool(TRANSIENT_CFG_HPF_BYP & res)
+            ret["x_enabled"] = bool(TRANSIENT_CFG_XTEFE & res)
+            ret["y_enabled"] = bool(TRANSIENT_CFG_YTEFE & res)
+            ret["z_enabled"] = bool(TRANSIENT_CFG_ZTEFE & res)
+
+            return ret
+        else:
+            self._require_standby_mode()
+
+            val = TRANSIENT_CFG_ELE * int(event_latch) \
+                | TRANSIENT_CFG_HPF_BYP * int(bypass_HPF) \
+                | TRANSIENT_CFG_XTEFE * int(x) \
+                | TRANSIENT_CFG_YTEFE * int(y) \
+                | TRANSIENT_CFG_ZTEFE * int(z)
+
+            self.write(TRANSIENT_CFG, val)
+
+    def transient_threshold(self, value=None, debounce_mode=0):
+        """
+        Configure the threshold at which the transient detector will fire an event.
+
+        Formula is the following:
+
+            `value * 0.063 = g`
+
+        where `g` is the amount of acceleration that needs to happen in order to activate
+        the trigger. The maximum value you can pass is 127.
+
+        Optional arguments:
+          - value (int): The value to be assigned as the threshold value.
+          - debounce_mode (int): 0 or 1. Defines the mode of the debounce counter.
+            - 0: increments or decrements debounce counter
+            - 1: increments or clears debounce counter
+        """
+
+        if not value:
+            res = self.read(TRANSIENT_THS)
+            return res
+        else:
+            if type(value) != int or value < 0 or value > 127:
+                raise ValueError("'value' must be an int between 0 and 127")
+            if debounce_mode != 0 and debounce_mode != 1:
+                raise ValueError("'debounce_mode' must be a value of 0 or 1")
+
+            self._require_standby_mode()
+            val = (TRANSIENT_THS_DBCNTM * int(debounce_mode) | value)
+            self.write(TRANSIENT_THS, val)
+
+    def transient_event(self):
+        """
+        Read data after a transient event has been triggered
+        """
+
+        ret = {}
+        res = self.read(TRANSIENT_SRC)
+
+        ret["event_triggered"] = bool(TRANSIENT_SRC_EA & res)
+        ret["x"] = bool(TRANSIENT_SRC_XTRANSE & res)
+        ret["x_neg"] = bool(TRANSIENT_SRC_X_TRANS_POL & res)
+        ret["y"] = bool(TRANSIENT_SRC_YTRANSE & res)
+        ret["y_neg"] = bool(TRANSIENT_SRC_Y_TRANS_POL & res)
+        ret["z"] = bool(TRANSIENT_SRC_ZTRANSE & res)
+        ret["z_neg"] = bool(TRANSIENT_SRC_Z_TRANS_POL & res)
+
+        return ret
 
     def _require_standby_mode(self):
         res = self.read(SYSMOD)
