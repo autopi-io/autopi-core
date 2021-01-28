@@ -1,6 +1,6 @@
 import re
 
-def container_absent_except(name, containers, force=False):
+def container_absent_except(name, containers, force=False, allow_remove_all=False):
     '''
     Ensure that all containers except those that match the container names are absent.
     This state must be run with all container names in one go, do not use the name field.
@@ -29,8 +29,8 @@ def container_absent_except(name, containers, force=False):
            'result': False,
            'comment': ''}
 
-    if not containers:
-        ret['result'] = False
+    if not containers and not allow_remove_all:
+        ret['result'] = True
         ret['comment'] = (
             'No names provided to be excempt, not removing everything.'
         )
