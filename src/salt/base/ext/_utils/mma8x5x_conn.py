@@ -338,8 +338,16 @@ class MMA8X5XConn(I2CConn):
             self.fifo_watermark(value=settings.get("fifo_watermark", self._fifo_watermark))
 
             # Configure transient detector
-            self.transient_threshold(value=5)
-            self.transient_config(transient=True, x=True, y=True, event_latch=True)
+            if "transient_detector" in settings:
+                td_settings = settings.get("transient_detector")
+                self.transient_threshold(value=td_settings.get("sensitivity"))
+                self.transient_config(
+                    mode=td_settings.get("transient"),
+                    x=td_settings.get("x_enabled"),
+                    y=td_settings.get("y_enabled"),
+                    z=td_settings.get("z_enabled"),
+                    event_latch=False,
+                )
 
             # Configure interrupts if defined
             for name, pin in settings.get("interrupts", {}).iteritems():
@@ -874,26 +882,28 @@ class MMA8X5XConn(I2CConn):
 
         return res
 
-    def transient_config(self, transient=None, x=None, y=None, z=None, event_latch=None):
+    def transient_config(self, mode=None, x=None, y=None, z=None, event_latch=None):
         """
         Configure transient detector or read data.
 
         Optional arguments:
-          - transient (bool): A flag deciding whether the transient detector should use default behavior or
-            act as a motion detector
+          - mode (string): The mode the transient detector should work in. Possible options are 'transient' and 'motion'
           - x (bool): Should events trigger when X axis change is detected above threshold (default: False)
           - y (bool): Should events trigger when Y axis change is detected above threshold (default: False)
           - z (bool): Should events trigger when Z axis change is detected above threshold (default: False)
           - event_latch (bool): Should event data be kept in the source register until read (default: True)
         """
 
-        if transient == None:
+        if mode == None:
             res = self.read(TRANSIENT_CFG)
         else:
-            self._require_standby_mode()
+            if mode not in ["transient", "monitor"]:
+                raise ValueError("'mode' must be 'transient' or 'monitor'.")
+
+            bypass_high_pass_filter = 0 if mode == "transient" else 1
 
             mask = TRANSIENT_CFG_HPF_BYP
-            val = TRANSIENT_CFG_ELE * int(not transient)
+            val = TRANSIENT_CFG_ELE * int(bypass_high_pass_filter)
 
             if x != None:
                 mask |= TRANSIENT_CFG_XTEFE
@@ -908,10 +918,11 @@ class MMA8X5XConn(I2CConn):
                 mask |= TRANSIENT_CFG_ELE
                 val  |= TRANSIENT_CFG_ELE * int(event_latch)
 
+            self._require_standby_mode()
             res = self.read_write(TRANSIENT_CFG, mask, val)
 
         ret = {}
-        ret["transient"] = not bool(TRANSIENT_CFG_HPF_BYP & res) # 0 == transient, 1 == motion
+        ret["mode"] = "motion" if bool(TRANSIENT_CFG_HPF_BYP & res) else "transient" # 0 == transient, 1 == motion
         ret["event_latch"] = bool(TRANSIENT_CFG_ELE & res)
         ret["x_enabled"] = bool(TRANSIENT_CFG_XTEFE & res)
         ret["y_enabled"] = bool(TRANSIENT_CFG_YTEFE & res)
