@@ -903,7 +903,7 @@ class MMA8X5XConn(I2CConn):
             bypass_high_pass_filter = 0 if mode == "transient" else 1
 
             mask = TRANSIENT_CFG_HPF_BYP
-            val = TRANSIENT_CFG_ELE * int(bypass_high_pass_filter)
+            val = TRANSIENT_CFG_HPF_BYP * int(bypass_high_pass_filter)
 
             if x != None:
                 mask |= TRANSIENT_CFG_XTEFE
