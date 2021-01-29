@@ -897,8 +897,8 @@ class MMA8X5XConn(I2CConn):
         if mode == None:
             res = self.read(TRANSIENT_CFG)
         else:
-            if mode not in ["transient", "monitor"]:
-                raise ValueError("'mode' must be 'transient' or 'monitor'.")
+            if mode not in ["transient", "motion"]:
+                raise ValueError("'mode' must be 'transient' or 'motion'.")
 
             bypass_high_pass_filter = 0 if mode == "transient" else 1
 
