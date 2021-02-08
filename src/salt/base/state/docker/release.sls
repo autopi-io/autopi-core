@@ -149,6 +149,7 @@ docker-registries-logged-in:
     {%- endfor %}
     - require:
       - test: {{ proj_id_prefix }}-purge-directories-backed-up
+      - test: {{ proj_id_prefix }}-images-present
       # Also require previous container is running
       {%- if loop.index > 1 %}
       - docker_container: {{ proj_id_prefix }}-container-{{ proj['containers'][loop.index0 - 1]['qname'] }}-running
