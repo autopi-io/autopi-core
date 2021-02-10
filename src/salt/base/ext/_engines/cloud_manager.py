@@ -2,6 +2,7 @@ import logging
 
 from cloud_cache import NextCloudCache
 from messaging import EventDrivenMessageProcessor
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ def status_handler():
     return context
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

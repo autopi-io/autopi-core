@@ -13,7 +13,7 @@ import threading
 from common_util import abs_file_path, factory_rendering
 from messaging import EventDrivenMessageProcessor, filter_out_unchanged
 from mma8x5x_conn import MMA8X5XConn
-from threading_more import TimedEvent
+from threading_more import intercept_exit_signal, TimedEvent
 from timeit import default_timer as timer
 
 
@@ -269,6 +269,7 @@ def roll_pitch_enricher(result):
 
 
 @factory_rendering
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

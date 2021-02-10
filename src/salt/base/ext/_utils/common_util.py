@@ -5,6 +5,8 @@ import logging.handlers
 import os
 import re
 
+from timeit import default_timer as timer
+
 
 log = logging.getLogger(__name__)
 
@@ -114,3 +116,60 @@ def add_rotating_file_handler_to(
     logger.addHandler(handler)
     logger.setLevel(level)
 
+
+class RotatingTextFile(object):
+
+    def __init__(self, open_func):
+        self.max_size = 0
+        self.expiration_time = 0
+
+        self._open_func = open_func
+        self._file = None
+        self._size = 0
+
+    @property
+    def closed(self):
+        if self._file != None:
+            return self._file.closed
+
+        # Not considered closed when file has not yet been opened
+        return False
+
+    @property
+    def size(self):
+        return self._size
+
+    def close(self):
+        if self._file != None:
+            self._file.close()
+
+    def rotate(self):
+
+        # First close any existing file
+        self.close()
+
+        # Open new file
+        self._file = self._open_func(self)
+
+        # Get initial size
+        self._size = os.path.getsize(self._file.name)
+
+    def write(self, line):
+
+        if self._file == None:
+            self.rotate()
+        elif self.max_size and self.max_size <= self._size:
+            log.info("Rotating {:} due to max size reached ({:}/{:})".format(self._file, self._size, self.max_size))
+
+            self.rotate()
+        elif self.expiration_time and self.expiration_time <= timer():
+            log.info("Rotating {:} due to expiration time reached ({:}/{:})".format(self._file, timer(), self.expiration_time))
+
+            self.rotate()
+
+        # Perform write
+        ret = self._file.write(line)
+
+        self._size += len(line)
+
+        return ret

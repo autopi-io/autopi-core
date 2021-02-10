@@ -6,6 +6,7 @@ import salt.exceptions
 
 from messaging import EventDrivenMessageProcessor
 from retrying import retry
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -174,6 +175,7 @@ def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_
     return ret
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

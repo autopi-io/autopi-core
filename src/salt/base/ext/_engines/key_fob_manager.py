@@ -3,6 +3,7 @@ import RPi.GPIO as gpio
 import time
 
 from messaging import EventDrivenMessageProcessor
+from threading_more import intercept_exit_signal
 
 
 USER_EXT1_PIN_WIRES = {
@@ -117,6 +118,7 @@ def action_handler(*names):
     return ret
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

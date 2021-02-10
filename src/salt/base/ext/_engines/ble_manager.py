@@ -13,6 +13,7 @@ import _strptime  # Attempt to avoid: Failed to import _strptime because the imp
 from jwcrypto import jwk, jwe
 from messaging import EventDrivenMessageProcessor
 from common_util import fromisoformat
+from threading_more import intercept_exit_signal
 
 from bluenrg.connection import SerialConnection
 from bluenrg.interface import GATTTerminalInterface
@@ -214,6 +215,7 @@ def flash_firmware_handler(bin_file, write=False, erase=False, verify=True):
     return ret
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

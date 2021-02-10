@@ -5,6 +5,7 @@ import time
 from datetime import datetime
 from messaging import EventDrivenMessageProcessor
 from serial_conn import SerialConn
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -347,6 +348,7 @@ def sync_time_handler(force=False):
     return ret
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

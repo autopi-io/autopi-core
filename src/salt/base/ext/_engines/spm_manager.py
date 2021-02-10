@@ -6,6 +6,7 @@ import RPi.GPIO as gpio
 import time
 
 from messaging import EventDrivenMessageProcessor
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -202,6 +203,7 @@ def led_pwm_handler(frequency=None, duty_cycle=None):
     return ret
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

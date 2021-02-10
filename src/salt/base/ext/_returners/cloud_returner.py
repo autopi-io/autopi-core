@@ -6,7 +6,7 @@ try:
 except ImportError:
     HAS_REDIS = False
 
-from cloud_cache import CloudCache
+from cloud_cache import CloudCache, prepare_result_recursively
 from salt.returners import get_returner_options
 from salt.utils import jid
 
@@ -74,51 +74,6 @@ def _get_cloud_cache_for(ret):
     return _cloud_cache
 
 
-def _prepare_recursively(result, kind, timestamp=None):
-    ret = []
-
-    if isinstance(result, dict):
-
-        # Clone result as we might change it
-        result = result.copy()
-
-        # Look for override values in result
-        timestamp = result.pop("_stamp", timestamp) or datetime.datetime.utcnow().isoformat()
-        kind = ".".join(filter(None, [kind, result.pop("_type", None)]))
-
-        # Check if only one single list exists
-        lone_key = next(iter(result)) if len(result) == 1 else None
-        if lone_key != None and isinstance(result[lone_key], list):
-
-            # Flatten lonely list into seperate results
-            ret.extend(_prepare_recursively(result[lone_key], kind, timestamp))
-        else:
-
-            # Skip adding result if empty after timestamp and kind have been removed
-            if result:
-                result.update({
-                    "@ts": timestamp,
-                    "@t": kind,
-                })
-                ret.append(result)
-
-    elif isinstance(result, (list, set, tuple)):
-        timestamp = timestamp or datetime.datetime.utcnow().isoformat()
-
-        # Flatten list into seperate results
-        for res in result:
-            ret.extend(_prepare_recursively(res, kind, timestamp))
-
-    else:  # Handle primitive data types
-        ret.append({
-            "@ts": timestamp or datetime.datetime.utcnow().isoformat(),
-            "@t": kind,
-            "value": result
-        })
-
-    return ret
-
-
 def returner(ret):
     """
     Return a result to cloud cache.
@@ -146,9 +101,9 @@ def returner_job(job):
 
     # TODO: Timestamp can be extracted from JID value
 
-    kind = job["fun"] if not "_type" in ret else job["fun"].split(".")[0]
+    kind = job["fun"] if isinstance(ret, dict) and not "_type" in ret else job["fun"].split(".")[0]
 
-    res = _prepare_recursively(ret, kind, timestamp=None)
+    res = prepare_result_recursively(ret, kind, timestamp=None)
 
     cloud_cache = _get_cloud_cache_for(job)
     for r in res:
@@ -189,7 +144,7 @@ def returner_data(data, kind, **kwargs):
 
         return
 
-    res = _prepare_recursively(data, kind)
+    res = prepare_result_recursively(data, kind)
 
     cloud_cache = _get_cloud_cache_for(kwargs)
     for r in res:

@@ -1,7 +1,10 @@
 import datetime
 import logging
 import re
+import signal
 import threading
+
+from timeit import default_timer as timer
 
 
 PROFILING = False
@@ -10,6 +13,56 @@ if PROFILING:
     import cProfile as profile
 
 log = logging.getLogger(__name__)
+
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
+on_exit = []
+
+
+def append_signal_handler_for(sig, func):
+    """
+    Appends signal handler instead of replacing any existing. Remember this is only possible from main thread.
+    """
+
+    # Check for existing handler
+    old = None
+    if callable(signal.getsignal(sig)):
+        old = signal.getsignal(sig)
+
+    def wrapper(*args, **kwargs):
+
+        # Call old first
+        if old != None:
+            try:
+                old(*args, **kwargs)
+            except SystemExit:
+                pass
+            except:
+                log.exception("Error in signal handler {:} for signal number {:}".format(old, sig))
+
+        # Then call new
+        func(*args, **kwargs)
+
+    # Register wrapper
+    signal.signal(sig, wrapper)
+
+
+def intercept_exit_signal(func):
+    """
+    Decorator
+    """
+
+    def handle_signal(sig, frame):
+        for func in on_exit:
+            try:
+                func()
+            except:
+                log.exception("Error in exit event handler {:} for signal number {:}".format(func, sig))
+
+    append_signal_handler_for(signal.SIGINT, handle_signal)
+    append_signal_handler_for(signal.SIGTERM, handle_signal)
+
+    return func
 
 
 class WorkerThread(threading.Thread):
@@ -72,7 +125,7 @@ class WorkerThread(threading.Thread):
             if self.terminate:
                 return
 
-            if log.isEnabledFor(logging.DEBUG):
+            if DEBUG:
                 log.debug("Running worker thread '%s'...", self.name)
 
             self.context["state"] = "running"
@@ -116,7 +169,7 @@ class WorkerThread(threading.Thread):
             log.info("Worker thread '%s' terminated", self.name)
 
             if self.registry and self.registry.remove(self):
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Worker thread '%s' removed from registry", self.name)
             else:
                 log.warn("Was unable to remove worker thread '%s' from registry", self.name)
@@ -125,7 +178,7 @@ class WorkerThread(threading.Thread):
         if not self.proceed_event.is_set():
             return
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Pausing worker thread '%s'...", self.name)
 
         # Disallow to proceed
@@ -138,7 +191,7 @@ class WorkerThread(threading.Thread):
         if self.proceed_event.is_set():
             return
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Resuming worker thread '%s'...", self.name)
 
         # Disallow wake to enforce sleep interval again
@@ -151,7 +204,7 @@ class WorkerThread(threading.Thread):
         if self.terminate:
             return
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Killing worker thread '%s'...", self.name)
 
         # Set flag that decide whether to run one last time
@@ -314,3 +367,182 @@ class ReturnThread(threading.Thread):
         super(ReturnThread, self).join()
 
         return self._return
+
+
+class AsyncWriterThread(threading.Thread):
+    """
+    Writes to file asynchronously in background thread.
+    """
+
+    def __init__(self, file, flush_threshold=8192, flush_timeout=1, buffer_size=10485760, buffer_high_watermark=0):
+        super(AsyncWriterThread, self).__init__()
+
+        # Validate arguments
+        if not flush_threshold:
+            raise ValueError("Flush threshold must greater than zero")
+
+        if not flush_timeout:
+            raise ValueError("Flush timeout must greater than zero")
+
+        if not buffer_size:
+            raise ValueError("Buffer size must greater than zero")
+
+        if flush_threshold * 2 > buffer_size:
+            raise ValueError("Flush threshold cannot be higher than half of buffer size")
+
+        if buffer_high_watermark > buffer_size:
+            raise ValueError("Buffer high watermark cannot be higher than buffer size")
+
+        # Set inherited attributes
+        self.daemon = True
+
+        # Set public attributes
+        self.flush_threshold = flush_threshold
+        self.flush_timeout = flush_timeout
+        self.buffer_size = buffer_size
+
+        # Set private attributes
+        self._file = file
+        self._stop = False
+        self._lock = threading.RLock()
+        self._event = threading.Event()
+        self._next_flush_timeout = timer() + flush_timeout
+        self._buffer_data = ""
+        self._buffer_count = 0
+        self._buffer_high_watermark = buffer_high_watermark or flush_threshold * 2
+
+        # Start thread
+        self.start()
+
+    @property
+    def stopped(self):
+        return self._stop
+
+    @property
+    def closed(self):
+        return self._file.closed
+
+    def stop(self):
+
+        # Skip if already stopped
+        if self._stop:
+            return
+
+        # Raise stop flag
+        self._stop = True
+
+        # Signal event to interrupt waiting
+        self._event.set()
+
+        # Wait for thread to terminate
+        self.join()
+
+    def close(self):
+
+        # First ensure stopped
+        self.stop()
+
+        # Then close file
+        self._file.close()
+
+    def write(self, data):
+
+        # Skip if no data
+        if not data:
+            return
+
+        data_len = len(data)
+
+        # Append data to buffer inside critical section
+        with self._lock:
+
+            # Check for buffer overflow
+            if self._buffer_count + data_len > self.buffer_size:
+                # NOTE: Possible broken line here if partial line written
+                raise Warning("Buffer overflow in asynchronous writer for {:}".format(self._file))
+
+            self._buffer_data += data
+            self._buffer_count += data_len
+
+            if self._stop:
+                log.warning("Asynchronous writer for {:} is stopped - writing buffer synchronously".format(self._file))
+
+                # Force write buffer synchronously
+                self._write_buffer(force=True)
+
+            else:
+
+                # Signal event if flush threshold is reached
+                if self.flush_threshold > 0 and self._buffer_count >= self.flush_threshold:
+                    self._event.set()
+
+    def _write_buffer(self, force=False):
+
+        with self._lock:
+
+            # First reset event if set
+            if self._event.is_set():
+                self._event.clear()
+
+            # Skip if buffer is empty
+            if not self._buffer_count:
+                if DEBUG:
+                    log.debug("Buffer empty for {:}".format(self._file))
+
+                return
+
+            if not force:
+
+                # Skip if flush timeout is not reached 
+                if self._next_flush_timeout > timer():
+                    return
+                elif DEBUG:
+                    log.debug("Buffer flush timeout exceeded with {:} second(s) for {:}".format(timer() - self._next_flush_timeout, self._file))
+
+            # Read out buffer to local variable
+            buf = self._buffer_data
+            buf_len = self._buffer_count
+
+            # Clear buffer
+            self._buffer_data = ""
+            self._buffer_count = 0
+
+        # Check if high watermark warning should be reported
+        if buf_len >= self._buffer_high_watermark:
+            log.warning("Buffer reached high watermark ({:}/{:}) for {:}".format(buf_len, self._buffer_high_watermark, self._file))
+
+        # Perform actual write outside critical section
+        if DEBUG:
+            log.debug("Asynchronously writing buffer ({:}/{:} bytes) to {:}".format(buf_len, self.buffer_size, self._file))
+
+        self._file.write(buf)
+
+        # Update next flush timeout
+        self._next_flush_timeout = timer() + self.flush_timeout
+
+    def run(self):
+        log.info("Starting asynchronous writer thread for {:}".format(self._file))
+
+        try:
+
+            # Loop until stopped
+            while not self._stop:
+
+                # Wait for event up until flush timeout
+                if self._event.wait(self.flush_timeout):
+                    self._write_buffer(force=self._stop)  # Force write out if stopped
+
+                # Waiting timed out
+                else:
+                    if DEBUG:
+                        log.debug("Buffer timed out waiting for data to {:}".format(self._file))
+
+                    self._write_buffer(force=True)
+
+            log.info("Stopped asynchronous writer thread for {:}".format(self._file))
+        except:
+
+            # Ensure stop flag is set
+            self._stop = True
+
+            log.exception("Error in asynchronous writer thread for {:}".format(self._file))

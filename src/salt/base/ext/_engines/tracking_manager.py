@@ -6,6 +6,7 @@ import salt.loader
 from messaging import EventDrivenMessageProcessor, extract_error_from
 from salt_more import SuperiorCommandExecutionError
 from serial_conn import SerialConn
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -228,6 +229,7 @@ def significant_position_filter(result):
     return new_pos
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

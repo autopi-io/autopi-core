@@ -5,6 +5,7 @@ from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 from flask_api import FlaskAPI
 from functools import wraps
+from threading_more import intercept_exit_signal
 
 log = logging.getLogger(__name__)
 
@@ -160,6 +161,7 @@ def apn_settings(unit_id):
         return grains
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):

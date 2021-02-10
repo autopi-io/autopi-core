@@ -2,6 +2,7 @@ import logging
 
 from common_util import dict_get, dict_find, dict_filter
 from messaging import EventDrivenMessageProcessor
+from threading_more import intercept_exit_signal
 
 
 log = logging.getLogger(__name__)
@@ -122,6 +123,7 @@ def alternating_cache_event_filter(result):
     return result["value"]["event"]
 
 
+@intercept_exit_signal
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
