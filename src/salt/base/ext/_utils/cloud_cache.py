@@ -33,7 +33,7 @@ def prepare_result_recursively(result, kind, timestamp=None):
         if lone_key != None and isinstance(result[lone_key], list):
 
             # Flatten lonely list into seperate results
-            ret.extend(_prepare_recursively(result[lone_key], kind, timestamp))
+            ret.extend(prepare_result_recursively(result[lone_key], kind, timestamp))
         else:
 
             # Skip adding result if empty after timestamp and kind have been removed
@@ -49,7 +49,7 @@ def prepare_result_recursively(result, kind, timestamp=None):
 
         # Flatten list into seperate results
         for res in result:
-            ret.extend(_prepare_recursively(res, kind, timestamp))
+            ret.extend(prepare_result_recursively(res, kind, timestamp))
 
     else:  # Handle primitive data types
         ret.append({
