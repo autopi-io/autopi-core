@@ -1,4 +1,7 @@
+import logging
 import re
+
+log = logging.getLogger(__name__)
 
 def container_absent_except(name, containers, force=False, allow_remove_all=False):
     '''
@@ -24,6 +27,8 @@ def container_absent_except(name, containers, force=False, allow_remove_all=Fals
               - container_name
               - container_name
     '''
+    log.info('Running state: container_absent_except. Protected containers: {}'.format(containers))
+
     ret = {'name': name,
            'changes': {},
            'result': False,
@@ -45,9 +50,16 @@ def container_absent_except(name, containers, force=False, allow_remove_all=Fals
 
     # Find unknown containers
     to_remove = []
+    log.debug('Containers on device: {}'.format(running_containers))
     for container_name in running_containers:
-        if not [x for x in containers if re.match(x, container_name)]:
+        # if not [x for x in containers if re.match(container_name, x)]:
+        if not container_name in containers: # Without regex...
+            log.debug('Container not recognized {}'.format(container_name))
             to_remove.append(container_name)
+        else:
+            log.debug('Not removing container: {} as it is protected'.format(container_name))
+
+    log.info('Will remove the following containers due to them not being recognized as protected: {}'.format(to_remove))
 
     if __opts__['test']:
         ret['result'] = None
