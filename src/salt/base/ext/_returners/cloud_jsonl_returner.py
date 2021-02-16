@@ -13,7 +13,7 @@ import salt.returners
 import salt.utils
 
 from cloud_cache import prepare_result_recursively
-from common_util import RotatingTextFile
+from common_util import makedirs, RotatingTextFile
 from threading_more import AsyncWriterThread, on_exit
 
 
@@ -98,6 +98,9 @@ def _get_writer_for(ret):
         # Then try to find writer in thread shared context
         with tlock:
             options = _get_options(ret)
+
+            # Ensure directory exists
+            makedirs(options["dir"], exist_ok=True)
 
             key = options["filename"].format(now=EPOC_DATETIME, pid=os.getpid(), tid=threading.currentThread().ident)
             writer = __context__.setdefault("cloud_jsonl_writers", {}).get(key, None)

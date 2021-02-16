@@ -1,4 +1,5 @@
 import datetime
+import errno
 import importlib
 import logging
 import logging.handlers
@@ -9,6 +10,16 @@ from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
+
+
+def makedirs(path, exist_ok=False):
+    try:
+        os.makedirs(path)
+    except OSError as e:
+        if exist_ok and e.errno == errno.EEXIST:
+            pass
+        else:
+            raise
 
 
 def dict_get(dic, *args, **kwargs):
