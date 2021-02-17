@@ -6,7 +6,7 @@ filebeat-scrubber-service-disabled:
 
 filebeat-scrubber-uninstalled:
   cmd.run:
-    - name: pip3 uninstall filebeat-scrubber
+    - name: pip3 uninstall filebeat-scrubber --yes
     - onlyif: "pip3 show filebeat-scrubber | grep 'Name: filebeat-scrubber'"
 
 filebeat-uninstalled:
