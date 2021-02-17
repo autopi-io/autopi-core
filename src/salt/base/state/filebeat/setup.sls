@@ -12,8 +12,8 @@ filebeat-setup:
   test.succeed_without_changes:
     - require:
       {%- if salt["pillar.get"]("filebeat") %}
-      - sls: .install
-      - sls: .config
+      - sls: filebeat.install
+      - sls: filebeat.config
       {%- else %}
-      - sls: .uninstall
+      - sls: filebeat.uninstall
       {%- endif %}
