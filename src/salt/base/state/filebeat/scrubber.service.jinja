@@ -1,0 +1,11 @@
+[Unit]
+Description=Scrubber to move or delete files that have been fully harvested by Filebeat.
+After=filebeat.service
+
+[Service]
+ExecStart=/usr/local/bin/filebeat_scrubber --registry-folder /var/lib/filebeat/registry/filebeat/ --summary --older-than {{ salt["pillar.get"]("filebeat_scrubber:interval", 3600) }} --remove --interval {{ salt["pillar.get"]("filebeat_scrubber:older_than", 3600) }}
+Restart=on-failure
+Type=simple
+
+[Install]
+WantedBy=multi-user.target
