@@ -1,6 +1,7 @@
 import datetime
 import errno
 import importlib
+import json
 import logging
 import logging.handlers
 import os
@@ -126,6 +127,20 @@ def add_rotating_file_handler_to(
 
     logger.addHandler(handler)
     logger.setLevel(level)
+
+
+def jsonl_dumps(objs, separators=(",", ":"), **kwargs):
+    ret = ""
+
+    encoder = json.JSONEncoder(separators=separators, **kwargs)
+    for obj in objs:
+        ret += encoder.encode(obj) + "\n"
+
+    return ret
+
+
+def jsonl_dump(objs, fp, **kwargs):
+    fp.write(jsonl_dumps(objs, **kwargs))
 
 
 class RotatingTextFile(object):

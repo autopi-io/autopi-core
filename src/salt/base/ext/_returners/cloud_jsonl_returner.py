@@ -4,7 +4,6 @@ from __future__ import absolute_import, print_function, unicode_literals, with_s
 
 import croniter
 import datetime
-import json
 import logging
 import os
 import threading
@@ -13,7 +12,7 @@ import salt.returners
 import salt.utils
 
 from cloud_cache import prepare_result_recursively
-from common_util import makedirs, RotatingTextFile
+from common_util import jsonl_dump, makedirs, RotatingTextFile
 from threading_more import AsyncWriterThread, on_exit
 
 
@@ -177,8 +176,7 @@ def returner_job(job):
     res = prepare_result_recursively(ret, kind, timestamp=None)
 
     writer = _get_writer_for(job)
-    for r in res:
-        writer.write(json.dumps(r, separators=JSON_SEPARATORS) + "\n")  # One line, one write
+    jsonl_dump(res, writer)
 
 
 def returner_event(event):
@@ -218,5 +216,5 @@ def returner_data(data, kind, **kwargs):
     res = prepare_result_recursively(data, kind)
 
     writer = _get_writer_for(kwargs)
-    for r in res:
-        writer.write(json.dumps(r, separators=JSON_SEPARATORS) + "\n")  # One line, one write
+    jsonl_dump(res, writer)
+
