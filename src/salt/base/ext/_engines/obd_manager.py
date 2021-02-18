@@ -855,9 +855,14 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
             metadata_file.seek(0)  # Ensures file pointer is at the begining
             metadata_file.truncate()
             json.dump(metadata, metadata_file, indent=4, sort_keys=True)
+            metadata_file.flush()
 
         if count > 0:
             log.info("Imported {:} line(s) in {:}".format(count, timer() - start))
+
+            if count < limit:
+                log.info("Did not import maximum data possible - sleeping for {} second(s)".format(idle_sleep))
+                time.sleep(idle_sleep)
         else:
 
             if idle_sleep > 0:
