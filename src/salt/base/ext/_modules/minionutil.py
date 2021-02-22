@@ -216,6 +216,12 @@ def update_release(force=False, dry_run=False, only_retry=False):
                 except:
                     log.exception("Failed to pause all OBD workers before update")
 
+                # Also ensure any OBD exporter is stopped
+                try:
+                    __salt__["obd.file_export"](run=False)
+                except:
+                    log.exception("Failed to stop OBD exporter before update")
+
                 # Pause all accelerometer workers
                 try:
                     __salt__["acc.manage"]("worker", "pause", "*")
