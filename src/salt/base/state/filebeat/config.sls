@@ -9,6 +9,7 @@ filebeat-configured:
 filebeat-service-running:
   service.running:
     - name: filebeat
+    - enable: true
     - watch:
       - file: /etc/filebeat/filebeat.yml
 
@@ -21,5 +22,6 @@ filebeat-scrubber-service-configured:
 filebeat-scrubber-service-running:
   service.running:
     - name: filebeat-scrubber
+    - enable: true
     - watch:
       - file: /lib/systemd/system/filebeat-scrubber.service
