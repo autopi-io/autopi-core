@@ -28,6 +28,7 @@ ERROR_STATES = [
 def state_for(voltage, nominal_voltage=DEFAULT_NOMINAL_VOLTAGE, critical_limit=DEFAULT_CRITICAL_LIMIT):
     if nominal_voltage != DEFAULT_NOMINAL_VOLTAGE:
         voltage = voltage * (DEFAULT_NOMINAL_VOLTAGE / nominal_voltage)
+        critical_limit = critical_limit * (DEFAULT_NOMINAL_VOLTAGE / nominal_voltage)
 
     if voltage <= critical_limit:
         return CRITICAL_LEVEL_STATE
