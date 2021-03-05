@@ -780,10 +780,11 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
                 # Initialize metadata for file, if not already
                 metadata.setdefault(filename, {})
 
-                # Compare offset with size
                 offset = metadata[filename].get("offset", 0)
-                size = os.path.getsize(os.path.join(folder, filename))
-                if offset < size:
+                size = metadata[filename].get("size", offset)  # Fallback to offset value
+
+                # Compare size/offset with current size
+                if size < os.path.getsize(os.path.join(folder, filename)):
 
                     # Continue to next file if limit is already reached
                     if count >= limit:
@@ -798,6 +799,16 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
                         # Read first line
                         line = file.readline()
                         while line:
+
+                            # Ensure line ends with a newline (last line might not) 
+                            if line[-1] != "\n":
+                                log.info("Skipping incomplete line {:}".format(repr(line)))
+
+                                # Set incremented size instead of offset
+                                size = offset + len(line)
+
+                                break
+
                             count += 1
                             offset += len(line)
 
@@ -820,9 +831,9 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
                             # Read next line
                             line = file.readline()
 
+                        # Update metadata
                         metadata[filename]["offset"] = offset
-
-                        # Update timestamp
+                        metadata[filename]["size"] = size if size > offset else offset
                         metadata[filename]["timestamp"] = datetime.datetime.utcnow().isoformat()
 
                 else:
