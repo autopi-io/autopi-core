@@ -11,7 +11,7 @@ filebeat-scrubber-pip3-requirement-installed:
 
 filebeat-scrubber-installed:
   cmd.run:
-    - name: pip3 install git+git://github.com/autopi-io/filebeat-scrubber@cd3da7250d57e1181648e93c2a9de54455dae6c7#filebeat_scrubber
-    - unless: "pip3 show filebeat_scrubber | grep 'Version: 1.3.0'"
+    - name: pip3 install git+git://github.com/autopi-io/filebeat-scrubber@9f73fe11ab90f1ff38fadeec667b8ebb8b9411fe#filebeat_scrubber
+    - unless: "pip3 show filebeat_scrubber | grep 'Version: 1.3.1'"
     - require:
       - pkg: python3-pip
