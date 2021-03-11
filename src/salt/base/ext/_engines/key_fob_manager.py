@@ -101,13 +101,38 @@ def action_handler(*names):
         raise Exception("Key fob is powered off")
 
     for name in names:
+        log.info("Performing key fob action '{:}'".format(name))
+
         action = ctx[name]
-        initial = gpio.input(context["pin_wires"][action["pin"]["wire"]])
+        gpio_pin = context["pin_wires"][action["pin"]["wire"]]
+        initial = gpio.input(gpio_pin)
+
         try:
-            gpio.output(context["pin_wires"][action["pin"]["wire"]], not initial)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Setting GPIO output pin {:} to {:d}".format(gpio_pin, not initial))
+            gpio.output(gpio_pin, not initial)
+
             time.sleep(action.get("duration", 0.25))
         finally:
-            gpio.output(context["pin_wires"][action["pin"]["wire"]], initial)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Setting GPIO output pin {:} to {:d}".format(gpio_pin, initial))
+            gpio.output(gpio_pin, initial)
+
+        # Perform any repetitions
+        for count, repetition in enumerate(action.get("repetitions", [])):
+            log.info("Performing key fob action '{:}' repetition #{:}".format(name, count + 1))
+
+            time.sleep(repetition.get("delay", 0.25))
+            try:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Setting GPIO output pin {:} to {:d}".format(gpio_pin, not initial))
+                gpio.output(gpio_pin, not initial)
+
+                time.sleep(repetition.get("duration", action.get("duration", 0.25)))
+            finally:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Setting GPIO output pin {:} to {:d}".format(gpio_pin, initial))
+                gpio.output(gpio_pin, initial)
 
         # Trigger key fob action event
         edmp.trigger_event(
