@@ -1297,6 +1297,7 @@ def communication_event_trigger(result):
 
     if error and isinstance(error, Warning):
         log.info("Communication event trigger got a warning, skipping.")
+        return
 
     # Check if state has chaged since last known state
     ctx = context.setdefault("communication", {})
