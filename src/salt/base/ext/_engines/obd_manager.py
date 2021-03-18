@@ -392,7 +392,7 @@ def setup_handler(**kwargs):
     Setup advanced runtime settings.
 
     Optional arguments, general:
-      - adaptive_timing (int): Set adaptive timing mode. Sometimes, a single OBD requests results in multiple response frames. The time between frames varies significantly depending on the vehicle year, make, and model – from as low as 5ms up to 100ms. Default value is '1' (on, normal mode).
+      - adaptive_timing (int): Set adaptive timing mode. Sometimes, a single OBD requests results in multiple response frames. The time between frames varies significantly depending on the vehicle year, make, and model - from as low as 5ms up to 100ms. Default value is '1' (on, normal mode).
       - response_timeout (int): When adaptive timing is on, this sets the maximum time that is to be allowed, even if the adaptive algorithm determines that the setting should be longer. In most circumstances, it is best to let the adaptive timing algorithm determine what to use for the timeout. Default value is '50' x 4ms giving a time of approximately 200ms.
 
     Optional arguments, CAN specific:
