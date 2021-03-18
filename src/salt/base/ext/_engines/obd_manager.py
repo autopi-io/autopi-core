@@ -1395,6 +1395,17 @@ def rpm_motor_event_trigger(result):
 
 
 @edmp.register_hook(synchronize=False)
+def speed_motor_event_trigger(result):
+    """
+    Looks for speed result and triggers motor 'vehicle/motor/[not_running|running|stopped]' event based on the value(s) found.
+    This trigger supports single value results as well as multiple values results.
+    This trigger is meant to be used for electric vehicles without an engine.
+    """
+
+    rpm_engine_event_trigger(result, key="motor", kind="speed")
+
+
+@edmp.register_hook(synchronize=False)
 def battery_event_trigger(result):
     """
     Looks for battery results and triggers 'vehicle/battery/*' event when voltage changes.
