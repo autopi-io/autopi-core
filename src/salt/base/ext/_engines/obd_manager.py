@@ -117,14 +117,14 @@ def context_handler(key=None):
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False):
+def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False, **kwargs):
     """
     Queries an OBD command.
 
     Arguments:
       - name (str): Name of the command.
 
-    Optional arguments:
+    Optional arguments, general:
       - mode (str): Service section of the PID.
       - pid (str): Code section of the PID.
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
@@ -136,6 +136,12 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.
+
+    Optional arguments, CAN specific:
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
     """
 
     ret = {
@@ -165,7 +171,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
     if not cmd in conn.supported_commands() and not force:
         raise Exception("Command may not be supported - add 'force=True' to run it anyway")
 
-    res = conn.query(cmd, header=header, formula=formula, force=force)
+    res = conn.query(cmd, header=header, formula=formula, force=force, **kwargs)
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
@@ -385,7 +391,11 @@ def setup_handler(**kwargs):
     """
     Setup advanced runtime settings.
 
-    Optional arguments:
+    Optional arguments, general:
+      - adaptive_timing (int): Set adaptive timing mode. Sometimes, a single OBD requests results in multiple response frames. The time between frames varies significantly depending on the vehicle year, make, and model – from as low as 5ms up to 100ms. Default value is '1' (on, normal mode).
+      - response_timeout (int): When adaptive timing is on, this sets the maximum time that is to be allowed, even if the adaptive algorithm determines that the setting should be longer. In most circumstances, it is best to let the adaptive timing algorithm determine what to use for the timeout. Default value is '50' x 4ms giving a time of approximately 200ms.
+
+    Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
       - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
@@ -395,13 +405,13 @@ def setup_handler(**kwargs):
     ret = {}
 
     # Ensure all options are applied
-    conn.ensure_runtime_settings(kwargs, filter=True)
+    conn.ensure_advanced_settings(kwargs, filter=True)
 
     if kwargs:
         raise Exception("Unsupported argument(s): {:}".format(", ".join(kwargs)))
 
-    # Return all runtime settings
-    ret["runtime_settings"] = conn.runtime_settings()
+    # Return all advanced runtime settings
+    ret["setup"] = conn.advanced_settings()
 
     return ret
 

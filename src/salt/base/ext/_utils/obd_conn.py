@@ -33,17 +33,22 @@ class OBDConn(object):
 
     def __init__(self):
 
-        # Settings
+        # Initial settings
         self._device = None
         self._baudrate = None
         self._timeout = None
         self._protocol_id = "AUTO"
         self._protocol_baudrate = None
         self._protocol_verify = True
+        self._advanced_initial = {}
 
         self._obd = None
 
-        self._can_runtime_settings = collections.OrderedDict([  # Maintain order to ensure correct call sequence
+        self._advanced_mappings = collections.OrderedDict([  # Maintain order to ensure correct call sequence towards interface
+            # Query
+            ("adaptive_timing", lambda v: self._obd.interface.set_adaptive_timing(v))
+            ("response_timeout", lambda v: self._obd.interface.set_response_timeout(v))
+            # CAN
             ("can_flow_control_clear", lambda v: [self._obd.interface.can_flow_control_filters(clear=v), self._obd.interface.can_flow_control_id_pairs(clear=v)]),  # Must be called before adding, if present
             ("can_flow_control_filter", lambda v: self._obd.interface.can_flow_control_filters(add=v)),
             ("can_flow_control_id_pair", lambda v: self._obd.interface.can_flow_control_id_pairs(add=v)),
@@ -89,6 +94,9 @@ class OBDConn(object):
             self._protocol_baudrate = settings["protocol"].get("baudrate", self._protocol_baudrate)
             self._protocol_verify = settings["protocol"].get("verify", self._protocol_verify)
 
+        if "advanced" in settings:
+            self._advanced_initial = settings["advanced"]
+
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self, force=False):
 
@@ -116,6 +124,9 @@ class OBDConn(object):
                 status_callback=self._status_callback,
                 fast=False
             )
+
+            if self._advanced_initial:
+                self.ensure_advanced_settings.undecorated(self, self._advanced_initial)  # No need to call the 'ensure_open' decorator
 
             return self
 
@@ -179,7 +190,7 @@ class OBDConn(object):
         }
 
     @Decorators.ensure_open
-    def runtime_settings(self):
+    def advanced_settings(self):
         return self._obd.interface.runtime_settings()
 
     @Decorators.ensure_open
@@ -263,15 +274,19 @@ class OBDConn(object):
         self.change_protocol.undecorated(self, ident, baudrate=baudrate, verify=verify)  # No need to call the 'ensure_open' decorator again
 
     @Decorators.ensure_open
-    def ensure_runtime_settings(self, settings, filter=False):
+    def ensure_advanced_settings(self, settings, filter=False):
 
-        # Apply CAN settings in correct order
-        for name, func in self._can_runtime_settings.iteritems():
+        # Apply advanced settings in correct order
+        for name, func in self._advanced_mappings.iteritems():
             if name in settings:
                 func(settings.pop(name) if filter else settings[name])
 
     @Decorators.ensure_open
     def query(self, cmd, formula=None, **kwargs):
+
+        # Filter out and apply advanced runtime settings if any
+        self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
+        
         res = self._obd.query(cmd, **kwargs)
 
         # Calculate formula if given
@@ -288,7 +303,7 @@ class OBDConn(object):
     def send(self, msg, **kwargs):
 
         # Filter out and apply advanced runtime settings if any
-        self.ensure_runtime_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
+        self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
 
         # Parse out header if found
         hash_pos = msg.find("#")
@@ -306,7 +321,7 @@ class OBDConn(object):
         ret = []
 
         # Filter out and apply advanced runtime settings if any
-        self.ensure_runtime_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
+        self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
 
         for msg in msgs:
 

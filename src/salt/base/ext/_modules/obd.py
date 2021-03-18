@@ -33,7 +33,7 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
     Arguments:
       - name (str): Name of the command.
 
-    Optional arguments:
+    Optional arguments, general:
       - mode (str): Service section of the PID.
       - pid (str): Code section of the PID.
       - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
@@ -45,6 +45,12 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.
+
+    Optional arguments, CAN specific:
+      - can_extended_address (str): Use CAN extended address.
+      - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
 
     Examples:
       - 'obd.query RPM'
@@ -113,7 +119,11 @@ def setup(**kwargs):
     """
     Setup advanced runtime settings.
 
-    Optional arguments:
+    Optional arguments, general:
+      - adaptive_timing (int): Set adaptive timing mode. Sometimes, a single OBD requests results in multiple response frames. The time between frames varies significantly depending on the vehicle year, make, and model – from as low as 5ms up to 100ms. Default value is '1' (on, normal mode).
+      - response_timeout (int): When adaptive timing is on, this sets the maximum time that is to be allowed, even if the adaptive algorithm determines that the setting should be longer. In most circumstances, it is best to let the adaptive timing algorithm determine what to use for the timeout. Default value is '50' x 4ms giving a time of approximately 200ms.
+
+    Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
       - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
