@@ -1501,7 +1501,7 @@ def start(**settings):
                         raise Warning("OBD connection is currently used by export subprocess")
 
             conn.on_ensure_open = on_ensure_open
-        conn.setup(protocol=settings.get("protocol", {}), **settings["serial_conn"])
+        conn.setup(protocol=settings.get("protocol", {}), advanced=settings.get("advanced", {}), **settings["serial_conn"])
 
         # Start ELM327 proxy if configured
         if "elm327_proxy" in settings:
