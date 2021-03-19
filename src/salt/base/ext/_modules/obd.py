@@ -26,7 +26,7 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
-def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwargs):
+def query(*args, **kwargs):
     """
     Queries a given OBD command. To see supported OBD commands for your vehicle run: 'obd.commands'
 
@@ -36,8 +36,10 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
     Optional arguments, general:
       - mode (str): Service section of the PID.
       - pid (str): Code section of the PID.
-      - header (str): Identifer of message to send. If none is specifed the default OBD header will be used.
-      - bytes (int): Default value is '0'.
+      - header (str): Identifer of message to send. If none is specifed the default header will be used.
+      - bytes (int): Byte size of individual returned frame(s). Default value is '0'.
+      - frames (int): Expected frame count to be returned?
+      - strict (int): Enforce strict validation of specified 'bytes' and/or 'frames'. Default value is 'False'.
       - decoder (str): Specific decoder to be used to process the response.
       - formula (str): Formula written in Python to convert the response.
       - unit (str): Unit of the result.
@@ -60,7 +62,7 @@ def query(cmd, mode=None, pid=None, bytes=None, decoder=None, force=None, **kwar
       - 'obd.query custom_intake_temp mode=01 pid=0F decoder=temp'
     """
 
-    return client.send_sync(_msg_pack(cmd, mode=mode, pid=pid, bytes=bytes, decoder=decoder, force=force, **kwargs))
+    return client.send_sync(_msg_pack(*args, **kwargs))
 
 
 def commands(**kwargs):

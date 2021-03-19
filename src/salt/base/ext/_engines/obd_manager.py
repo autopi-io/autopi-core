@@ -117,7 +117,7 @@ def context_handler(key=None):
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False, **kwargs):
+def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, strict=False, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False, **kwargs):
     """
     Queries an OBD command.
 
@@ -128,7 +128,9 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
       - mode (str): Service section of the PID.
       - pid (str): Code section of the PID.
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
-      - bytes (int): Default value is '0'.
+      - bytes (int): Byte size of individual returned frame(s). Default value is '0'.
+      - frames (int): Expected frame count to be returned?
+      - strict (int): Enforce strict validation of specified 'bytes' and/or 'frames'. Default value is 'False'.
       - decoder (str): Specific decoder to be used to process the response.
       - formula (str): Formula written in Python to convert the response.
       - unit (str): Unit of the result.
@@ -160,6 +162,8 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, decoder=None,
         cmd = obd.commands[name.upper()]
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
+    cmd.frames = frames
+    cmd.strict = strict
 
     # Ensure protocol
     if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
