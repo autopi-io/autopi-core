@@ -46,8 +46,8 @@ class OBDConn(object):
 
         self._advanced_mappings = collections.OrderedDict([  # Maintain order to ensure correct call sequence towards interface
             # Query
-            ("adaptive_timing", lambda v: self._obd.interface.set_adaptive_timing(v))
-            ("response_timeout", lambda v: self._obd.interface.set_response_timeout(v))
+            ("adaptive_timing", lambda v: self._obd.interface.set_adaptive_timing(v)),
+            ("response_timeout", lambda v: self._obd.interface.set_response_timeout(v)),
             # CAN
             ("can_flow_control_clear", lambda v: [self._obd.interface.can_flow_control_filters(clear=v), self._obd.interface.can_flow_control_id_pairs(clear=v)]),  # Must be called before adding, if present
             ("can_flow_control_filter", lambda v: self._obd.interface.can_flow_control_filters(add=v)),
