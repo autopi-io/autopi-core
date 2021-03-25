@@ -6,3 +6,10 @@ include:
   - {{ sls }}
   {%- endfor %}
 {%- endif %}
+
+{%- set max_pending_sync = salt["pillar.get"]("minion_ext:max_pending_sync", default=0) %}
+{%- if max_pending_sync %}
+max-pending-sync:
+  test.succeed_without_changes:
+    - name: {{ max_pending_sync }}
+{%- endif %}
