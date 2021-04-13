@@ -28,10 +28,11 @@ def help():
 
 def context(**kwargs):
     """
+    Deprecated: Use 'manage context' instead.
     Queries or manipulates context of event reactor.
     """
 
-    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+    raise DeprecationWarning("Use '{:}.manage context' instead".format(__virtualname__))
 
 
 def cache(**kwargs):

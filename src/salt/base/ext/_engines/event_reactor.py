@@ -35,34 +35,6 @@ def module_result_cache_returner(message, result):
 
 
 @edmp.register_hook()
-def context_handler(key=None, **kwargs):
-    """
-    Queries or manipulates context instance of this engine.
-    """
-
-    # Validate input
-    if key != None and not kwargs:
-        raise ValueError("No context data specified to set")
-    elif key == None and kwargs:
-        raise ValueError("A key must be specified to identify context data")
-
-    ret = {}
-
-    if key != None:
-        ctx = context.setdefault(key, {})
-
-        # Set new values if given
-        for k, v in kwargs.iteritems():
-            ctx[k.replace("__", ".")] = v
-
-        ret["value"] = ctx
-    else:
-        ret["values"] = {k: v for k, v in context.iteritems() if not "." in k}
-
-    return ret
-
-
-@edmp.register_hook()
 def cache_handler(key=None, **kwargs):
     """
     Manages cached data.

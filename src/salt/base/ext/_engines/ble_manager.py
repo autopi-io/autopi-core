@@ -33,18 +33,6 @@ conn = SerialConnection()
 iface = GATTTerminalInterface(conn)
 
 
-@edmp.register_hook(synchronize=False)
-def context_handler(key=None):
-    """
-    Gets current context.
-    """
-
-    if key:
-        return context.get(key, None)
-
-    return context
-
-
 @edmp.register_hook()
 def query_handler(cmd, **kwargs):
     """

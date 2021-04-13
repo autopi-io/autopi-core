@@ -32,15 +32,6 @@ network_time_regex = re.compile('^\+QLTS: "(?P<year>\d{4})/(?P<month>\d{2})/(?P<
 
 
 @edmp.register_hook(synchronize=False)
-def context_handler():
-    """
-    Gets current context.
-    """
-
-    return context
-
-
-@edmp.register_hook(synchronize=False)
 def connection_handler(close=False):
     """
     Manages current connection.

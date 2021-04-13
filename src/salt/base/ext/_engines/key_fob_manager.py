@@ -33,15 +33,6 @@ context = {
 edmp = EventDrivenMessageProcessor("key_fob", context=context)
 
 
-@edmp.register_hook(synchronize=False)
-def context_handler():
-    """
-    Gets current context.
-    """
-
-    return context
-
-
 @edmp.register_hook()
 def power_handler(value=None):
     """

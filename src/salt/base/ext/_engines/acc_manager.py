@@ -38,15 +38,6 @@ interrupt_event = TimedEvent()
 
 
 @edmp.register_hook(synchronize=False)
-def context_handler():
-    """
-    Gets current context.
-    """
-
-    return context
-
-
-@edmp.register_hook(synchronize=False)
 def connection_handler(close=False):
     """
     Manages current connection.

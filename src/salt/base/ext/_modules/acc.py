@@ -28,10 +28,11 @@ def help():
 
 def context(**kwargs):
     """
+    Deprecated: Use 'manage context' instead.
     Gets current context.
     """
 
-    return client.send_sync(_msg_pack(_handler="context", **kwargs))
+    raise DeprecationWarning("Use '{:}.manage context' instead".format(__virtualname__))
 
 
 def connection(**kwargs):
