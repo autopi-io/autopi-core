@@ -10,11 +10,14 @@ import time
 import urlparse
 import uuid
 
+from common_util import ensure_primitive, last_iter
 from salt_more import SuperiorCommandExecutionError
 from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
+
+DEBUG = log.isEnabledFor(logging.DEBUG)
 
 
 class MessageProcessor(object):
@@ -78,7 +81,7 @@ class MessageProcessor(object):
             name = func.__name__
             self._hook_funcs[name] = ret_func
 
-            if log.isEnabledFor(logging.DEBUG):
+            if DEBUG:
                 log.debug("Registered hook function '%s'", name)
 
             return ret_func
@@ -226,7 +229,7 @@ class MessageProcessor(object):
             if kill_upon_success and success:
                 thread.kill()
 
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Killed worker thread '{:}' upon successful run".format(thread.name))
 
         # Start immediately is default
@@ -373,7 +376,13 @@ class MessageProcessor(object):
                 }
 
             elif args[1] == "call":
-                return self._get_func(args[2])(*args[3:], **kwargs)
+                res = self._get_func(args[2])(*args[3:], **kwargs)
+                if isinstance(res, dict):
+                    return res.clone()  # Avoid adding '_stamp' to original
+                elif isinstance(res, (list, set, tuple)):
+                    return {"values": res}
+                else:
+                    return {"value": res}
 
         elif len(args) > 1 and args[0] == "worker":
             if args[1] == "list":
@@ -611,6 +620,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             match_type="regex")
 
         # Add given workflow hooks
+        loaders = {}
         for hook in hooks or []:
             try:
 
@@ -618,8 +628,9 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 if hook["kind"] == "returner":
 
                     # Load Salt returner function
-                    returners = salt.loader.returners(__opts__, __salt__)  # TODO: This can be cached
-                    returner_func = returners[hook["func"]]
+                    if not "returners" in loaders:
+                        loaders["returners"] = salt.loader.returners(__opts__, __salt__, context=self._context)
+                    returner_func = loaders["returners"][hook["func"]]
 
                     # Wrap returner function to add defined args and kwargs
                     def returner_wrapper(message, result, hook=hook, returner_func=returner_func):
@@ -640,7 +651,9 @@ class EventDrivenMessageProcessor(MessageProcessor):
                     self.add_hook(hook["name"], hook["kind"], returner_wrapper, synchronize=hook.get("lock", False))
 
                 else:
-                    self.add_hook(hook["name"], hook["kind"], __salt__[hook["func"]], synchronize=hook.get("lock", False))
+                    if not "modules" in loaders:
+                        loaders["modules"] = salt.loader.minion_mods(__opts__, context=self._context)
+                    self.add_hook(hook["name"], hook["kind"], loaders["modules"][hook["func"]], synchronize=hook.get("lock", False))
 
             except Exception:
                 log.exception("Failed to add hook: {:}".format(hook))
@@ -666,9 +679,12 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 if "condition" in reactor:
                     conditions.append(reactor["condition"])
                 for index, condition in enumerate(conditions, 1):
-                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": self._context}):
+                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": self._context, "salt": __salt__}):
                         log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
                     else:
+                        if DEBUG:
+                            log.debug("Event NOT meets condition #{:} '{:}': {:}".format(index, condition, event))
+
                         return
 
                 # Process all action messages
@@ -679,8 +695,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
                     # Check if keyword resolving is enabled
                     if reactor.get("keyword_resolve", False):
-                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context})
-                        if log.isEnabledFor(logging.DEBUG):
+                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context, "salt": __salt__})
+                        if DEBUG:
                             log.debug("Keyword resolved message: {:}".format(resolved_message))
 
                         # TODO: Figure out if we can improve performance by processing each message in a dedicated worker thread or process?
@@ -691,7 +707,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
                     if index < len(actions) and reactor.get("chain_conditionally", False):
                         if not res or isinstance(res, dict) and not res.get("result", True):
-                            if log.isEnabledFor(logging.DEBUG):
+                            if DEBUG:
                                 log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
 
                             break
@@ -711,10 +727,28 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 continue  # Skip reactor
 
             # Register event matcher using above function
-            self.register_reactor(reactor, on_event, match_type=match_type)
+            if match_type:
+                self.register_reactor(reactor, on_event, match_type=match_type)
+
+        # Match init event
+        try:
+            self._match_event({"tag": "_init", "data": {}})
+        except Exception:
+            log.exception("Failed to match init event")
 
     def _custom_match_tag_regex(self, event_tag, search_tag):
         return self._incoming_bus.cache_regex.get(search_tag).search(event_tag)
+
+    def _match_event(self, event):
+        for matcher in self._event_matchers:
+            match = matcher["match_func"](event["tag"], matcher["tag"]) 
+            if not match:
+                continue
+
+            if DEBUG:
+                log.debug("Matched event: %s", repr(event))
+
+            matcher["func"](event, match=match)
 
     def register_reactor(self, reactor, func, match_type="startswith"):
         """
@@ -742,30 +776,50 @@ class EventDrivenMessageProcessor(MessageProcessor):
         Administration workflow to query and manage this processor instance.
 
         Supported commands:
+            - context [key]... [value=<value>]
             - reactor list|show <name>
         """
 
-        args = message.get('args', [])
-        kwargs = message.get('kwargs', {})
+        args = message.get("args", [])
+        kwargs = message.get("kwargs", {})
 
-        if len(args) > 1 and args[0] == 'reactor':
-            if args[1] == 'list':
+        if len(args) > 0 and args[0] == "context":
+            res = self._context
+
+            if len(args) > 1:
+                for is_last, key in last_iter(args[1:]):
+                    if "value" in kwargs:
+                        if is_last:
+                            res[key] = kwargs["value"]
+                            res = res[key]
+                        else:
+                            res = res.setdefault(key, {})
+                    else:
+                        res = res[key]
+
+            res = ensure_primitive(res)
+            if isinstance(res, dict):
+                return res
+            elif isinstance(res, (list, set, tuple)):
+                return {"values": res}
+            else:
+                return {"value": res}
+        elif len(args) > 1 and args[0] == "reactor":
+            if args[1] == "list":
                 return {
-                    "values": [r['name'] for r in self._reactors],
+                    "values": [r["name"] for r in self._reactors],
                 }
-            elif args[1] == 'show':
-                if len(args) > 2 and args[2] != '*':
-                    reactors = [r for r in self._reactors if args[2] in r['name']]
+            elif args[1] == "show":
+                if len(args) > 2 and args[2] != "*":
+                    reactors = [r for r in self._reactors if args[2] in r["name"]]
                 else:
                     reactors = [r for r in self._reactors]
 
                 return {
-                    "value": {r['name']: r for r in reactors}
+                    "value": {r["name"]: r for r in reactors}
                 }
-
         else:
             return super(EventDrivenMessageProcessor, self).manage_workflow(message)
-
 
     def run(self):
         """
@@ -778,7 +832,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
             log.info("Starting {:d} worker thread(s): {:s}".format(len(threads), ", ".join([t.name for t in threads])))
 
         # Listen for incoming messages
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Listening for incoming events using %d registered event matcher(s)", len(self._event_matchers))
 
         try:
@@ -788,16 +842,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
                     continue
 
                 try:
-                    for matcher in self._event_matchers:
-                        match = matcher["match_func"](event["tag"], matcher["tag"]) 
-                        if not match:
-                            continue
-
-                        if log.isEnabledFor(logging.DEBUG):
-                            log.debug("Matched event: %s", repr(event))
-
-                        matcher["func"](event, match=match)
-
+                    self._match_event(event)
                 except Exception:
                     log.exception("Failed to process received event: {:}".format(event))
         finally:
@@ -849,7 +894,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         if skip_duplicates_filter != None:
             skip_duplicates_filter = "dupl:{:}".format(skip_duplicates_filter)
             if (tag, data) == self._outgoing_event_filters.get(skip_duplicates_filter, None):
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Skipping duplicate event with tag '{:s}': {:}".format(tag, data))
 
                 return
@@ -862,7 +907,6 @@ class EventDrivenMessageProcessor(MessageProcessor):
             # Register last event for duplicate filter
             if skip_duplicates_filter != None:
                 self._outgoing_event_filters[skip_duplicates_filter] = (tag, data)
-
 
     def subscribe_to_events(self, tag, match_type="startswith"):
         """
@@ -891,7 +935,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         groups = match.groupdict()
         tag = "{:s}/res/{:s}".format(self._namespace, groups["id"])
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Sending reply mesage with tag '{:s}': {:}".format(tag, data))
 
         # Send reply event
@@ -933,7 +977,7 @@ class EventDrivenMessageClient(object):
         try:
             bus.subscribe(tag=res_tag, match_type="startswith")
 
-            if log.isEnabledFor(logging.DEBUG):
+            if DEBUG:
                 log.debug("Sending request message with tag '%s': %s", req_tag, message)
 
             bus.fire_event(message, req_tag)

@@ -76,6 +76,34 @@ def dict_key_by_value(dic, val):
     return next(iter(kv))
 
 
+def ensure_primitive(val):
+    if isinstance(val, (int, float, bool, str)):
+        return val
+    elif isinstance(val, dict):
+        return {ensure_primitive(k): ensure_primitive(v) for k, v in val.iteritems()}
+    elif isinstance(val, (list, set, tuple)):
+        return [ensure_primitive(v) for v in val]
+    else:
+        return str(val)
+
+    return ret
+
+
+def last_iter(it):
+
+    # Ensure it's an iterator and get the first field
+    it = iter(it)
+    prev = next(it)
+    for item in it:
+
+        # Lag by one item so I know I'm not at the end
+        yield 0, prev
+        prev = item
+        
+    # Last item
+    yield 1, prev
+
+
 def abs_file_path(name, fallback_folder, ext=None):
         ret = name if os.path.isabs(name) else os.path.join(fallback_folder, name)
         if ext and not ret.endswith(".{:}".format(ext)):
