@@ -1,6 +1,7 @@
 import logging
 import dateutil.parser
 import re
+import salt.loader
 
 from messaging import keyword_resolve
 
@@ -54,6 +55,19 @@ def module_direct_handler(name, *args, **kwargs):
 
     if kind != None and isinstance(ret, dict):
         ret["_type"] = kind
+
+    return ret
+
+
+def returner_call_handler(name, *args, **kwargs):
+    """
+    Calls a Salt returner module directy from current process.
+    """
+
+    ret = salt.loader.returners(__opts__, __salt__, context=__context__)[name](*args, **kwargs)
+
+    if ret == None:
+        ret = {}
 
     return ret
 
