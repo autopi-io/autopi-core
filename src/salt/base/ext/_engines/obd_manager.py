@@ -1290,6 +1290,20 @@ def dtc_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
+def realistic_speed_converter(result):
+    """
+    Converts speed value of 255 (max value 0xFF) to 0. Some vehicles can sporadically return value of 255.
+    """
+
+    if result["value"] == 255:
+        result["value"] = 0
+
+        log.info("Converted speed value of 255 to 0")
+
+    return result
+
+
+@edmp.register_hook(synchronize=False)
 def alternating_readout_filter(result):
     """
     Filter that only returns alternating/changed results.
