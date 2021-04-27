@@ -1508,9 +1508,6 @@ def start(**settings):
             conn.on_ensure_open = on_ensure_open
         conn.setup(protocol=settings.get("protocol", {}), advanced=settings.get("advanced", {}), **settings["serial_conn"])
 
-        # Configure CAN database registry
-        can_db_registry.setup(settings.get("can_db_registry", {}))
-
         # Start ELM327 proxy if configured
         if "elm327_proxy" in settings:
             try:
