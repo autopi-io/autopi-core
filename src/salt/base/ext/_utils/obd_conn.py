@@ -5,7 +5,10 @@ import obd
 import obd.utils
 import time
 
+from binascii import unhexlify
 from obd.interfaces import STN11XX
+from obd.utils import format_frame, parse_frame
+
 from retrying import retry
 
 
@@ -45,6 +48,7 @@ class OBDConn(object):
         self._obd = None
 
         self._advanced_mappings = collections.OrderedDict([  # Maintain order to ensure correct call sequence towards interface
+            ("print_spaces", lambda v: self._obd.interface.set_print_spaces(v)),
             # Query
             ("adaptive_timing", lambda v: self._obd.interface.set_adaptive_timing(v)),
             ("response_timeout", lambda v: self._obd.interface.set_response_timeout(v)),
@@ -52,8 +56,13 @@ class OBDConn(object):
             ("can_flow_control_clear", lambda v: [self._obd.interface.can_flow_control_filters(clear=v), self._obd.interface.can_flow_control_id_pairs(clear=v)]),  # Must be called before adding, if present
             ("can_flow_control_filter", lambda v: self._obd.interface.can_flow_control_filters(add=v)),
             ("can_flow_control_id_pair", lambda v: self._obd.interface.can_flow_control_id_pairs(add=v)),
-            ("can_extended_address", lambda v: self._obd.interface.set_can_extended_address(v))
+            ("can_extended_address", lambda v: self._obd.interface.set_can_extended_address(str(v))),
+            ("can_priority", lambda v: self._obd.interface.set_can_priority(str(v))),
+            # J1939
+            ("j1939_pgn_filter", lambda v: self._obd.interface.j1939_pgn_filters(add=v))
         ])
+
+        self._supported_protocols = {}
 
         self.is_permanently_closed = False
 
@@ -122,6 +131,7 @@ class OBDConn(object):
                 load_commands=self._protocol_verify,  # Only load supported commands when protocol is verified
                 interface_cls=STN11XX,
                 status_callback=self._status_callback,
+                reset_callback=self._reset_callback,
                 fast=False
             )
 
@@ -149,7 +159,6 @@ class OBDConn(object):
             self.open()
 
     def close(self, permanent=False):
-
         if not self.is_open():
             raise Exception("Already closed")
 
@@ -168,6 +177,12 @@ class OBDConn(object):
                 self.on_closed()
             except:
                 log.exception("Error in 'on_closed' event handler")
+
+    def supported_protocols(self):
+        if not self._supported_protocols:
+            self._supported_protocols = STN11XX.supported_protocols()
+
+        return self._supported_protocols
 
     @Decorators.ensure_open
     def serial(self):
@@ -206,13 +221,6 @@ class OBDConn(object):
         }
 
     @Decorators.ensure_open
-    def supported_protocols(self):
-        ret = collections.OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
-        ret.update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in self._obd.supported_protocols().iteritems()})
-
-        return ret
-
-    @Decorators.ensure_open
     def change_protocol(self, ident, baudrate=None, verify=True):
         if ident == None:
             raise ValueError("Protocol must be specified")
@@ -221,12 +229,11 @@ class OBDConn(object):
         ident = str(ident).upper()
         baudrate = int(baudrate) if baudrate != None else None
 
-        if not ident in self.supported_protocols.undecorated(self):  # No need to call the 'ensure_open' decorator again
-            raise ValueError("Unsupported protocol specified")
-
         if ident == "AUTO":
             ident = None
             verify = True  # Force verify when autodetecting protocol
+        elif not ident in self.supported_protocols():
+            raise ValueError("Unsupported protocol specified")
 
         self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
@@ -302,14 +309,19 @@ class OBDConn(object):
     @Decorators.ensure_open
     def send(self, msg, **kwargs):
 
-        # Filter out and apply advanced runtime settings if any
-        self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
-
         # Parse out header if found
         hash_pos = msg.find("#")
         if hash_pos > 0:
-            kwargs["header"] = msg[:hash_pos]
+            if hash_pos > 6:  # 29bit header
+                kwargs["can_priority"] = msg[:hash_pos - 6]
+                kwargs["header"] = msg[hash_pos - 6:hash_pos]
+            else:
+                kwargs["header"] = msg[:hash_pos]
+
             msg = msg[hash_pos + 1:]
+
+        # Filter out and apply advanced runtime settings if any
+        self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
 
         res = self._obd.send(msg, **kwargs)
 
@@ -328,11 +340,15 @@ class OBDConn(object):
             # Parse out header if found
             hash_pos = msg.find("#")
             if hash_pos > 0:
-                kwargs["header"] = msg[:hash_pos]
-                res = self._obd.send(msg[hash_pos + 1:], **kwargs)
-            else:
-                res = self._obd.send(msg, **kwargs)
+                if hash_pos > 6:  # 29bit header
+                    self._obd.interface.set_can_priority(msg[:hash_pos - 6])
+                    kwargs["header"] = msg[hash_pos - 6:hash_pos]
+                else:
+                    kwargs["header"] = msg[:hash_pos]
 
+                msg = msg[hash_pos + 1:]
+
+            res = self._obd.send(msg, **kwargs)
             if res:
                 ret.append((msg, res))
 
@@ -360,15 +376,16 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def monitor(self, **kwargs):
-        format_response = kwargs.pop("format_response", True)
+        format_response = kwargs.pop("format_response", False)
 
-        res = self._obd.interface.monitor(**kwargs)
+        lines = self._obd.interface.monitor(**kwargs)
 
-        # Format response
+        # Format response frames if requested
         if format_response:
-            return [r.replace(" ", "#", 1).replace(" ", "") for r in res]
+            header_bits = getattr(self.cached_protocol, "HEADER_BITS", None)
+            lines = [format_frame(l, header_bits) for l in lines]
 
-        return res
+        return lines
 
     @Decorators.ensure_open
     def monitor_continuously(self, **kwargs):
@@ -430,8 +447,7 @@ class OBDConn(object):
         if val in self._obd.interface.ERRORS:
             ret["error"] = self._obd.interface.ERRORS[val]
         else:
-            # No formatting
-            #ret["value"] = val.replace(" ", "#", 1).replace(" ", "")
+            # NOTE: No formatting of response frames, just use what we got
             ret["value"] = val
 
         return ret
@@ -451,6 +467,10 @@ class OBDConn(object):
                 self.on_status(status, data)
             except:
                 log.exception("Error in 'on_status' event handler")
+
+    def _reset_callback(self, mode):
+        if self._advanced_initial:
+            self.ensure_advanced_settings.undecorated(self, self._advanced_initial)  # No need to call the 'ensure_open' decorator
 
     def _calc_formula(self, expression, messages, default=None):
 
@@ -473,3 +493,44 @@ class OBDConn(object):
             log.exception("Failed to calculate formula")
 
             raise Exception("Failed to calculate formula: {:}".format(ex))
+
+
+def decode_can_frame_for(can_db, protocol, result):
+    """
+    Helper function to decode a raw CAN frame result.
+    Note that one single CAN frame can output multiple results.
+    """
+
+    ret = []
+
+    # Fail fast validation
+    if result["value"][:2] in ["?", "NO", "BU"]:
+        if result["value"].startswith("NO DATA"):
+            log.info("CAN decoder is skipping line 'NO DATA'")
+        elif result["value"].startswith("BUFFER FULL"):
+            log.error("CAN decoder is skipping line 'BUFFER FULL' - try increase baud rate of serial connection to prevent buffer overflow")
+        else:
+            log.info("CAN decoder is skipping invalid line '{:}'".format(result["value"]))
+
+        return ret
+
+    # Parse frame
+    header_bits = getattr(protocol, "HEADER_BITS", None)
+    header, data = parse_frame(result["value"], header_bits, validate=False)  # No need to validate hex here
+
+    # Strip any leading hash sign
+    if data[0] == "#":
+        data = data[1:]
+
+    # Find message by decimal value of header
+    try:
+         msg = can_db.get_message_by_frame_id(int(header or data, 16))
+    except KeyError:  # Unknown message
+        return ret
+
+    # Decode data using found message
+    for key, val in msg.decode(unhexlify(data), True, True).iteritems():
+        ret.append(dict(result, _type=key.lower(), value=val))
+
+    return ret
+

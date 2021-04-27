@@ -20,10 +20,10 @@ import signal
 import subprocess
 import time
 
-from binascii import unhexlify
+from collections import OrderedDict
 from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering, fromisoformat
 from obd.utils import OBDError
-from obd_conn import OBDConn
+from obd_conn import OBDConn, decode_can_frame_for
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
 from threading_more import intercept_exit_signal
 from timeit import default_timer as timer
@@ -76,7 +76,7 @@ can_db_cache = {}
 export_subprocess = None
 
 
-def _can_db_for(protocol_id):
+def _can_db_for(protocol):
     """
     Helper function to find cached CAN database instance or load it from file.
     The CAN database file (.dbc) is found on the local file system by the following path expression:
@@ -84,22 +84,25 @@ def _can_db_for(protocol_id):
         /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
 
-    ret = can_db_cache.get(protocol_id, None)
+    ret = can_db_cache.get(protocol.ID, None)
     if not ret:
         import cantools
 
-        # Check for override
-        path = os.path.join(home_dir, "can/db", "_protocol_{:}.dbc".format(protocol_id))
+        # Check for override (prefixed with underscore)
+        path = os.path.join(home_dir, "can/db", "_protocol_{:}.dbc".format(protocol.ID))
         if os.path.isfile(path):
             log.warning("Using overridden CAN database file '{:}'".format(path))
         else:
-            path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol_id))
+            path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol.ID))
 
         # Load file
-        ret = cantools.db.load_file(path)
+        conf = {}
+        if protocol.ID in ["42"]:  # J1939, 29bit
+          conf["frame_id_mask"] = 0x1FFFFF00  # 0x1F = 00011111
+        ret = cantools.db.load_file(path, **conf)
 
         # Put into cache
-        can_db_cache[protocol_id] = ret
+        can_db_cache[protocol.ID] = ret
 
     return ret
 
@@ -141,9 +144,13 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     ret = {
@@ -205,6 +212,7 @@ def send_handler(msg, **kwargs):
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
+      - format_response (bool): Format response frames by separating header and data with a hash sign. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
       - echo (bool): Include the request message in the response? Default value is 'False'.
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
@@ -215,9 +223,13 @@ def send_handler(msg, **kwargs):
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     ret = {
@@ -380,7 +392,8 @@ def protocol_handler(set=None, baudrate=None, verify=False):
     ret = {}
 
     if set == None and baudrate == None:
-        ret["supported"] = conn.supported_protocols()
+        ret["supported"] = OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
+        ret["supported"].update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in conn.supported_protocols().iteritems()})
 
     if set != None:
         conn.change_protocol(set, baudrate=baudrate, verify=verify)
@@ -401,9 +414,13 @@ def setup_handler(**kwargs):
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     ret = {}
@@ -448,7 +465,7 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
     # Ensure filters are added
     if filtering and not conn.has_filters:
         if filtering == "can":
-            conn.sync_filters(_can_db_for(conn.cached_protocol.ID))
+            conn.sync_filters(_can_db_for(conn.cached_protocol))
         else:
             log.warning("Filtering is enabled but no filters are present")
 
@@ -611,7 +628,7 @@ def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=Fals
         # Ensure filters are added
         if monitor_filtering and not conn.has_filters:
             if monitor_filtering == "can":
-                conn.sync_filters(_can_db_for(conn.cached_protocol.ID))
+                conn.sync_filters(_can_db_for(conn.cached_protocol))
             else:
                 log.warning("Monitor filtering is enabled but no filters are present")
 
@@ -1137,39 +1154,6 @@ def _relay_handler(cmd):
     return conn.execute(cmd, raw_response=True)
 
 
-def _decode_can_frame(can_db, res):
-    """
-    Helper function to decode a raw CAN frame result. Note that one single CAN frame can output multiple results.
-    """
-
-    ret = []
-
-    if res["value"][:2] in ["?", "NO", "BU"]:
-        if res["value"].startswith("NO DATA"):
-            log.info("CAN decoder is skipping line 'NO DATA'")
-        elif res["value"].startswith("BUFFER FULL"):
-            log.error("CAN decoder is skipping line 'BUFFER FULL' - try increase baud rate of serial connection to prevent buffer overflow")
-        else:
-            log.info("CAN decoder is skipping invalid line '{:}'".format(res["value"]))
-
-        return ret
-
-    header, data = res["value"].split(" ", 1)
-
-    # Find message by header
-    try:
-         msg = can_db.get_message_by_frame_id(int(header, 16))
-    except KeyError:  # Unknown message
-
-        return ret
-
-    # Decode data using found message
-    for key, val in msg.decode(unhexlify(re.sub(" |\x00", "", data)), True, True).iteritems():
-        ret.append(dict(res, _type=key.lower(), value=val))
-
-    return ret
-
-
 @edmp.register_hook(synchronize=False)
 def can_converter(result):
     """
@@ -1182,11 +1166,14 @@ def can_converter(result):
 
     start = timer()
 
-    protocol = result.pop("protocol", conn.cached_protocol.ID if conn.cached_protocol else None)  # NOTE: If key not popped the cloud returner is unable to split into separate results
+    protocol = conn.supported_protocols().get(result.pop("protocol", None), conn.cached_protocol)  # NOTE: If 'protocol' key not popped the cloud returner is unable to split into separate results
+
     try:
         can_db = _can_db_for(protocol)
     except:
         log.exception("Skipping CAN conversion because no CAN database could be loaded for protocol '{:}'".format(protocol))
+
+        return
 
     # Check for multiple values in result
     if "values" in result:
@@ -1197,7 +1184,7 @@ def can_converter(result):
         for val in result["values"]:
             val = val if isinstance(val, dict) else {"value": val}
             try:
-                res.extend(_decode_can_frame(can_db, val))
+                res.extend(decode_can_frame_for(can_db, protocol, val))
             except Exception as ex:
                 log.info("Failed to decode raw CAN frame result '{:}' as a CAN message: {:}".format(val, ex))
 
@@ -1228,7 +1215,7 @@ def can_converter(result):
         # Try to decode CAN messages
         res = None
         try:
-            res = _decode_can_frame(can_db, result)
+            res = decode_can_frame_for(can_db, protocol, result)
         except Exception as ex:
             log.error("Failed to decode raw CAN frame result '{:}' as a CAN message(s): {:}".format(result, ex))
 
@@ -1520,6 +1507,9 @@ def start(**settings):
 
             conn.on_ensure_open = on_ensure_open
         conn.setup(protocol=settings.get("protocol", {}), advanced=settings.get("advanced", {}), **settings["serial_conn"])
+
+        # Configure CAN database registry
+        can_db_registry.setup(settings.get("can_db_registry", {}))
 
         # Start ELM327 proxy if configured
         if "elm327_proxy" in settings:

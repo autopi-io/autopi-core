@@ -50,9 +50,13 @@ def query(*args, **kwargs):
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
 
     Examples:
       - 'obd.query RPM'
@@ -127,9 +131,13 @@ def setup(**kwargs):
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     return client.send_sync(_msg_pack(_handler="setup", **kwargs))
@@ -146,6 +154,7 @@ def send(msg, **kwargs):
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
+      - format_response (bool): Format response frames by separating header and data with a hash sign. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
       - echo (bool): Include the request message in the response? Default value is 'False'.
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
@@ -156,9 +165,13 @@ def send(msg, **kwargs):
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
+      - can_priority (str): Set CAN priority bits of a 29-bit CAN ID.
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
-      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<pattern>,<mask>'.
-      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<transmitter ID>,<receiver ID>'.
+      - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
+      - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+
+    Optional arguments, J1939 specific:
+      - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
@@ -260,7 +273,7 @@ def dump(**kwargs):
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
-      - format_response (bool): Format response messages by separating header and data with a hash sign? Default value is 'True'.
+      - format_response (bool): Format response frames by separating header and data with a hash sign. Default value is 'True'.
     """
 
     return client.send_sync(_msg_pack(_handler="dump", **kwargs))
