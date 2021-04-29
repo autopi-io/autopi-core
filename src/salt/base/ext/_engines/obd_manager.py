@@ -1333,6 +1333,10 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
     This trigger supports single value results as well as multiple values results.
     """
 
+    # Skip empty result
+    if not result:
+      return
+
     # Check for error result
     error = extract_error_from(result)
     if error:
