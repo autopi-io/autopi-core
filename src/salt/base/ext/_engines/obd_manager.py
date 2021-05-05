@@ -23,7 +23,7 @@ import time
 from collections import OrderedDict
 from common_util import abs_file_path, add_rotating_file_handler_to, factory_rendering, fromisoformat
 from obd.utils import OBDError
-from obd_conn import OBDConn, decode_can_frame_for
+from obd_conn import OBDConn, decode_can_frame_for, FILTER_TYPE_CAN_PASS, FILTER_TYPE_J1939_PGN
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
 from threading_more import intercept_exit_signal
 from timeit import default_timer as timer
@@ -107,16 +107,23 @@ def _can_db_for(protocol):
     return ret
 
 
-@edmp.register_hook(synchronize=False)
-def context_handler(key=None):
+def _ensure_filtering(ident):
     """
-    Gets current context.
+    Helper method to ensure filtering.
     """
 
-    if key:
-        return context.get(key, None)
+    # Skip if boolean
+    if not isinstance(ident, str):
+        return
 
-    return context
+    if ident == "auto":
+        conn.interface().auto_filtering(enable=True)
+    elif ident == "can":
+        conn.sync_filters_with(_can_db_for(conn.cached_protocol), FILTER_TYPE_CAN_PASS)
+    elif ident == "j1939":
+        conn.sync_filters_with(_can_db_for(conn.cached_protocol), FILTER_TYPE_J1939_PGN)
+    else:
+        raise ValueError("Unsupported filtering value - supported values are: auto, can, j1939")
 
 
 @edmp.register_hook()
@@ -211,6 +218,7 @@ def send_handler(msg, **kwargs):
     Optional arguments, general:
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
+      - auto_filter (bool): Ensure automatic response filtering is enabled. Default value is 'True' if no custom filters have be added.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
       - format_response (bool): Format response frames by separating header and data with a hash sign. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
@@ -448,7 +456,7 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
       - duration (float): How many seconds to monitor? If not set there is no limitation.
       - mode (int): The STN monitor mode. Default is '0'.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
-      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' in order to add filters based on the messages found in a CAN database file (.dbc).
+      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
@@ -462,12 +470,9 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
     # Ensure protocol
     conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
-    # Ensure filters are added
-    if filtering and not conn.has_filters:
-        if filtering == "can":
-            conn.sync_filters(_can_db_for(conn.cached_protocol))
-        else:
-            log.warning("Filtering is enabled but no filters are present")
+    # Ensure filtering
+    if filtering:
+        _ensure_filtering(filtering)
 
     # Monitor until limit is reached
     res = conn.monitor_continuously(wait=wait, limit=limit, duration=duration, mode=mode, auto_format=auto_format, filtering=filtering)
@@ -492,36 +497,33 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
 
 
 @edmp.register_hook()
-def filter_handler(action, **kwargs):
+def filter_handler(action, *args, **kwargs):
     """
-    Manages filters used when monitoring.
+    Manages filters.
 
     Arguments:
-      - action (str): Action to perform. Available actions are 'list', 'add' and 'clear'.
+      - action (str): Action to perform. Available actions are 'auto', 'list', 'add', 'clear' and 'sync'.
     """
 
     ret = {}
 
     action = action.lower()
-    if action == "list":
-        ret["values"] = conn.list_filters(type=kwargs.get("type", None))
-
+    if action == "auto":
+        ret["value"] = conn.interface().auto_filtering(**kwargs)
+    elif action == "list":
+        ret["values"] = conn.interface().list_filters(**kwargs)
     elif action == "add":
-        conn.add_filter(kwargs.get("type", None), kwargs.get("pattern", ""), kwargs.get("mask", ""))
-
-        ret["values"] = conn.list_filters(type=kwargs.get("type", None))
-
+        conn.interface().add_filter(*args)
+        ret["values"] = conn.interface().list_filters(**kwargs)
     elif action == "clear":
-        conn.clear_filters(type=kwargs.get("type", None))
-
+        conn.interface().clear_filters(**kwargs)
         ret["values"] = []
-
     elif action == "sync":
         import cantools
-        conn.sync_filters(cantools.db.load_file(kwargs.pop("can_db_file")), **kwargs)
-
+        can_db = cantools.db.load_file(args[0], **kwargs)
+        conn.sync_filters_with(can_db, *args[1:], force=True)
     else:
-        raise ValueError("Unsupported action - allowed options are: 'list', 'add', 'clear', 'sync'")
+        raise ValueError("Unsupported action - allowed options are: 'auto', 'list', 'add', 'clear', 'sync'")
 
     return ret
 
@@ -535,6 +537,7 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
       - duration (int): How many seconds to record data? Default value is '2' seconds.
       - file (str): Write data to a file with the given name.
       - description (str): Additional description to the file.
+      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
@@ -546,6 +549,10 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
 
     # Ensure protocol
     conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+
+    # Ensure filtering
+    if filtering:
+        _ensure_filtering(filtering)
 
     # Play sound to indicate recording has begun
     __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
@@ -602,7 +609,7 @@ def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=Fals
       - run (bool): Specify if subprocess should be running or not. If not defined the current state will be queried.
       - folder (str): Custom folder to place export log files.
       - wait_timeout (int): Maximum time in seconds to wait for subprocess to complete. Default value is '0'.
-      - monitor_filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' in order to add filters based on the messages found in a CAN database file (.dbc).
+      - monitor_filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - monitor_mode (int): The STN monitor mode. Default is '0'.
       - can_auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - read_timeout (int): How long time in seconds should the subprocess wait for data on the serial port? Default value is '1'.
@@ -625,12 +632,9 @@ def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=Fals
         # Ensure protocol
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
-        # Ensure filters are added
-        if monitor_filtering and not conn.has_filters:
-            if monitor_filtering == "can":
-                conn.sync_filters(_can_db_for(conn.cached_protocol))
-            else:
-                log.warning("Monitor filtering is enabled but no filters are present")
+        # Ensure filtering
+        if monitor_filtering:
+            _ensure_filtering(monitor_filtering)
 
         # Setup CAN monitoring mode
         conn.interface().set_can_monitor_mode(monitor_mode)

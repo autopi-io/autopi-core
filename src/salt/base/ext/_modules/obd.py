@@ -126,8 +126,10 @@ def setup(**kwargs):
     Setup advanced runtime settings.
 
     Optional arguments, general:
+      - print_spaces (bool): Turn printing of spaces in OBD responses on or off. To get better performance, turn spaces off.
       - adaptive_timing (int): Set adaptive timing mode. Sometimes, a single OBD requests results in multiple response frames. The time between frames varies significantly depending on the vehicle year, make, and model - from as low as 5ms up to 100ms. Default value is '1' (on, normal mode).
       - response_timeout (int): When adaptive timing is on, this sets the maximum time that is to be allowed, even if the adaptive algorithm determines that the setting should be longer. In most circumstances, it is best to let the adaptive timing algorithm determine what to use for the timeout. Default value is '50' x 4ms giving a time of approximately 200ms.
+      - auto_filter (bool): Ensure automatic response filtering is enabled.
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
@@ -153,6 +155,7 @@ def send(msg, **kwargs):
     Optional arguments, general:
       - header (str): Identifer of message to send. If none is specifed the default header will be used.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
+      - auto_filter (bool): Ensure automatic response filtering is enabled. Default value is 'True' if no custom filters have be added.
       - expect_response (bool): Wait for response after sending? Avoid waiting for timeout by specifying the exact the number of frames expected. Default value is 'False'.
       - format_response (bool): Format response frames by separating header and data with a hash sign. Default value is 'False'.
       - raw_response (bool): Get raw response without any validation nor parsing? Default value is 'False'.
@@ -235,7 +238,7 @@ def monitor(**kwargs):
       - duration (float): How many seconds to monitor? If not set there is no limitation.
       - mode (int): The STN monitor mode. Default is '0'.
       - auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
-      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'.
+      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
@@ -245,20 +248,22 @@ def monitor(**kwargs):
     return client.send_sync(_msg_pack(_handler="monitor", **kwargs))
 
 
-def filter(action, **kwargs):
+def filter(action, *args, **kwargs):
     """
-    Manages filters used when monitoring.
+    Manages filters.
 
     Arguments:
-      - action (str): Action to perform. Available actions are 'list', 'add' and 'clear'.
+      - action (str): Action to perform. Available actions are 'auto', 'list', 'add', 'clear' and 'sync'.
 
     Examples:
-      - 'obd.filter list'
-      - 'obd.filter add type=<pass|block|flow> pattern=7C8 mask=7FF'
-      - 'obd.filter clear [type=<pass|block|flow>]'
+      - 'obd.filter auto [enable=true]'
+      - 'obd.filter list [type=<all|pass|block|flow|pgn>]'
+      - 'obd.filter add <pass|block|flow|pgn> 7c8,7ff'
+      - 'obd.filter clear [type=<all|pass|block|flow|pgn>]'
+      - 'obd.filter sync <DBC file path> <pass|block|flow|pgn> [frame_id_mask=0x1FFFFF00]'
     """
 
-    return client.send_sync(_msg_pack(action, _handler="filter", **kwargs))
+    return client.send_sync(_msg_pack(action, *args, _handler="filter", **kwargs))
 
 
 def dump(**kwargs):
@@ -269,6 +274,7 @@ def dump(**kwargs):
       - duration (int): How many seconds to record data? Default value is '2' seconds.
       - file (str): Write data to a file with the given name.
       - description (str): Additional description to the file.
+      - filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - protocol (str): ID of specific protocol to be used to receive the data. If none is specifed the current protocol will be used.
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
@@ -327,7 +333,7 @@ def file_export(**kwargs):
       - run (bool): Specify if subprocess should be running or not. If not defined the current state will be queried.
       - folder (str): Custom folder to place export log files.
       - wait_timeout (int): Maximum time in seconds to wait for subprocess to complete. Default value is '0'.
-      - monitor_filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' in order to add filters based on the messages found in a CAN database file (.dbc).
+      - monitor_filtering (bool): Use filters while monitoring or monitor all messages? Default value is 'False'. It is possible to specify 'can' or 'j1939' (PGN) in order to add filters based on the messages found in a CAN database file (.dbc).
       - monitor_mode (int): The STN monitor mode. Default is '0'.
       - can_auto_format (bool): Apply automatic formatting of messages? Default value is 'False'.
       - read_timeout (int): How long time in seconds should the subprocess wait for data on the serial port? Default value is '1'.

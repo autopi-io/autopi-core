@@ -12,6 +12,10 @@ from obd.utils import format_frame, parse_frame
 from retrying import retry
 
 
+FILTER_TYPE_CAN_PASS = STN11XX.FILTER_TYPE_CAN_PASS
+FILTER_TYPE_J1939_PGN = STN11XX.FILTER_TYPE_J1939_PGN
+
+
 log = logging.getLogger(__name__)
 
 
@@ -52,6 +56,7 @@ class OBDConn(object):
             # Query
             ("adaptive_timing", lambda v: self._obd.interface.set_adaptive_timing(v)),
             ("response_timeout", lambda v: self._obd.interface.set_response_timeout(v)),
+            ("auto_filter", lambda v: self._obd.interface.auto_filtering(enable=bool(v))),
             # CAN
             ("can_flow_control_clear", lambda v: [self._obd.interface.can_flow_control_filters(clear=v), self._obd.interface.can_flow_control_id_pairs(clear=v)]),  # Must be called before adding, if present
             ("can_flow_control_filter", lambda v: self._obd.interface.can_flow_control_filters(add=v)),
@@ -73,9 +78,6 @@ class OBDConn(object):
 
         # Keep an up-to-date reference to protocol instance received from interface
         self.cached_protocol = None
-
-        # Flag indicating if filters are applied or not
-        self.has_filters = False
     
     def setup(self, **settings):
 
@@ -237,9 +239,6 @@ class OBDConn(object):
 
         self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
-        # When protocol is changed we assume that any existing filters are lost
-        self.has_filters = False
-
     @Decorators.ensure_open
     def ensure_protocol(self, ident, baudrate=None, verify=True):
 
@@ -392,51 +391,50 @@ class OBDConn(object):
         return self._obd.interface.monitor_continuously(enrich=self._enrich_monitor_entry, **kwargs)
 
     @Decorators.ensure_open
-    def list_filters(self, *args, **kwargs):
-        return self._obd.interface.list_filters(*args, **kwargs)
+    def sync_filters_with(self, can_db, filter_type, force=False, continue_on_error=False):
 
-    @Decorators.ensure_open
-    def add_filter(self, *args, **kwargs):
-        self._obd.interface.add_filter(*args, **kwargs)
+        can_msgs = can_db.messages
 
-        # Set flag indicating filters are present
-        self.has_filters = True
+        # Skip if not messages found in CAN database
+        if not can_msgs:
+            log.warning("No filters to sync found in CAN DB")
 
-    @Decorators.ensure_open
-    def clear_filters(self, *args, **kwargs):
-        self._obd.interface.clear_filters(*args, **kwargs)
+            return
 
-        # Set flag indicating filters are absent
-        self.has_filters = False
+        # Skip if already has sufficient custom filters of type
+        if not force and len(self._obd.interface.list_filters_by(filter_type)) >= len(can_msgs):
+            return
 
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Cleared filters")
-
-    @Decorators.ensure_open
-    def sync_filters(self, can_db, continue_on_error=False):
-
-        # First ensure any existing filters are cleared
+        # Ensure any existing filters are cleared
         try:
-            self.clear_filters.undecorated(self)  # No need to call the 'ensure_open' decorator again
+            self._obd.interface.clear_filters()
         except Exception as ex:
-            log.exception("Failed to clear filters".format(msg))
+            log.exception("Failed to clear filters")
 
             if not continue_on_error:
                 raise Exception("Failed clear filters: {:}".format(ex))
 
-        # Add pass filter for each message ID
-        # NOTE: Can only be added when protocol is set and active/verified
-        for msg in can_db.messages:
+        # NOTE: Filter can only be added when protocol is set and active/verified
+        count = 0
+        for msg in can_msgs:
             try:
-                # TODO HN: How to handle 29 bit headers here?
-                self.add_filter.undecorated(self, "PASS", "{:03X}".format(msg.frame_id), "7FF")  # No need to call the 'ensure_open' decorator again
+                if filter_type.upper() == FILTER_TYPE_J1939_PGN:
+                    # NOTE: 29bit header is expected here
+                    filter_value = "{:04X}".format((msg.frame_id >> 8) & 0xFFFF)
+                else:
+                    # TODO HN: How to handle 29bit headers here?
+                    filter_value = "{:03X},7FF".format(msg.frame_id)
+
+                self._obd.interface.add_filter(filter_type, filter_value)
+                count += 1
+
             except Exception as ex:
-                log.exception("Failed to add pass filter for CAN message '{:}'".format(msg))
+                log.exception("Failed to add '{:}' filter for CAN message '{:}'".format(filter_type, msg))
 
                 if not continue_on_error:
-                    raise Exception("Failed to add pass filter for CAN message '{:}': {:}".format(msg, ex))
+                    raise Exception("Failed to add '{:}' filter for CAN message '{:}': {:}".format(filter_type, msg, ex))
 
-        log.info("Synced filters with CAN DB")
+        log.info("Synced {:}/{:} filter(s) of type '{:}' from CAN DB".format(count, len(can_msgs), filter_type))
 
     def _enrich_monitor_entry(self, res):
         ret = {
