@@ -16,7 +16,7 @@ udev-usb-rules-configured:
 udev-mount-flag-shared-configured:
   file.replace:
     - name: /lib/systemd/system/systemd-udevd.service
-    - pattern: "^#?MountFlags=*$"
+    - pattern: "^#?MountFlags=.*$"
     - repl: "MountFlags=shared"
     - append_if_not_found: true
     - watch_in:
