@@ -18,6 +18,9 @@ packages-installed:
       - git
       - avrdude
       - espeak
+      {%- for entry in salt['pillar.get']('pkg_requirements', []) %}
+      - {{ entry }}
+      {%- endfor %}
 
 # Ensure valid pillar data is present to prevent writing an empty requirements file 
 pip-requirements-pillar-data-present:
