@@ -1,9 +1,9 @@
 import logging
 import dateutil.parser
 import re
-import salt.loader
 
 from messaging import keyword_resolve
+from salt_more import cached_loader
 
 
 log = logging.getLogger(__name__)
@@ -64,8 +64,7 @@ def returner_call_handler(name, *args, **kwargs):
     Calls a Salt returner module directy from current process.
     """
 
-    ret = salt.loader.returners(__opts__, __salt__, context=__context__)[name](*args, **kwargs)
-
+    ret = cached_loader(__salt__, __opts__, "returners", context=__context__)[name](*args, **kwargs)
     if ret == None:
         ret = {}
 

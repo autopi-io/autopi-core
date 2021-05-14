@@ -25,8 +25,9 @@ log = logging.getLogger(__name__)
 
 DEBUG = log.isEnabledFor(logging.DEBUG)
 
-tlock = threading.Lock()
 tlocal = threading.local()
+tlock = threading.RLock()  # NOTE: For this lock to work properly, it is important that this returner module is only loaded once per process
+
 
 __virtualname__ = "cloud_jsonl"
 
@@ -141,32 +142,37 @@ def _get_writer_for(ret):
                 __context__["cloud_jsonl_returner.writers"][key] = writer
 
             elif DEBUG:
-                log.debug("Re-using writer found in context")
+                log.debug("Re-using writer {:} found in context".format(writer))
 
         # Store writer in thread local
         setattr(tlocal, "writer", writer)
 
     elif DEBUG:
-        log.debug("Re-using writer found in thread local")
+        log.debug("Re-using writer {:} found in thread local".format(writer))
 
     return writer
 
 
 def _is_expired_for(ret):
+    """
+    Helper function to initialize expiration and return current state.
+    """
 
-    # Initialize if not already done
-    if not "cloud_jsonl_returner.expiration" in __context__:
-        options = _get_options(ret)
+    with tlock:
 
-        delay = -1  # Disabled
-        if options["initially_expired"]:
-            delay = 0  # Instantly
+        # Initialize if not already done
+        if not "cloud_jsonl_returner.expiration" in __context__:
+            options = _get_options(ret)
 
-            log.info("Returner is initially expired")
+            delay = -1  # Disabled
+            if options["initially_expired"]:
+                delay = 0  # Instantly
 
-        set_expiration(delay, reason="initial")
+                log.info("Returner must be initially expired")
 
-    return is_expired()
+            set_expiration(delay, reason="initial")
+
+        return is_expired()
 
 
 def is_expired():
@@ -174,14 +180,16 @@ def is_expired():
     Check if this returner has expired.
     """
 
-    time = __context__.get("cloud_jsonl_returner.expiration", {}).get("time", -1)
-    if time < 0:
-        return False
+    with tlock:
 
-    if time > 0:
-        return time <= timer()
-    else:
-        return True
+        time = __context__.get("cloud_jsonl_returner.expiration", {}).get("time", -1)
+        if time < 0:
+            return False
+
+        if time > 0:
+            return time <= timer()
+        else:
+            return True
 
 
 def set_expiration(delay, reason="unknown"):
@@ -191,37 +199,49 @@ def set_expiration(delay, reason="unknown"):
     Negative delay will clear any already set expiration.
     """
 
-    ctx = __context__.setdefault("cloud_jsonl_returner.expiration", {})
-    if delay < 0:
-        if ctx:
-            ctx.clear()
+    with tlock:
 
-            log.info("Cleared expiration with reason '{:}'".format(reason))
-    else:
-        if is_expired():
-            log.info("Already expired with reason '{:}'".format(ctx.get("reason", "")))
-        else:
-            if delay > 0:
-                ctx["time"] = float((datetime.datetime.now() + datetime.timedelta(seconds=delay)).strftime("%s"))
+        ctx = __context__.setdefault("cloud_jsonl_returner.expiration", {})
+        if delay < 0:
+            if ctx:
+
+                # Ensure to close writers if already expired
+                if is_expired():
+                    close_writers()
+
+                ctx.clear()
+
+                log.info("Cleared expiration with reason '{:}'".format(reason))
             else:
-                ctx["time"] = 0  # Instantly
-            ctx["reason"] = reason
+                log.info("Attempted to clear expiration with reason '{:}' but no expiration is set".format(reason))
 
-            log.info("Set expiration to {:} with reason '{:}'".format(ctx["time"], ctx["reason"]))
+        else:
+            if is_expired():
+                log.info("Already expired with reason '{:}'".format(ctx.get("reason", "")))
+            else:
+                if delay > 0:
+                    ctx["time"] = float((datetime.datetime.now() + datetime.timedelta(seconds=delay)).strftime("%s"))
+                else:
+                    ctx["time"] = 0  # Instantly
+                ctx["reason"] = reason
 
-    return ctx
+                log.info("Set expiration to {:} with reason '{:}'".format(ctx["time"], ctx["reason"]))
+
+        return ctx
 
 
-def close_writer():
+def close_writers():
     """
-    Ensure any open writer is closed for the calling thread.
+    Ensure all open writers are closed.
     """
 
-    writer = getattr(tlocal, "writer", None)
-    if writer and not writer.closed:
-        log.info("Closing writer found in thread local: {:}".format(writer))
+    with tlock:
 
-        writer.close()
+        for key, writer in __context__.get("cloud_jsonl_returner.writers", {}).iteritems():
+            if not writer.closed:
+                log.info("Closing writer for file '{:}' found in context".format(writer.name))
+
+                writer.close()
 
 
 def returner(ret):
@@ -253,7 +273,12 @@ def returner_job(job):
         if DEBUG:
             log.debug("Skipping job result because the returner has expired")
 
-        close_writer()
+        # Ensure any open writer is closed for the calling thread
+        writer = getattr(tlocal, "writer", None)
+        if writer and not writer.closed:
+            log.info("Closing writer for file '{:}' found in thread local".format(writer.name))
+
+            writer.close()
 
         return
 
@@ -305,7 +330,12 @@ def returner_data(data, kind, **kwargs):
         if DEBUG:
             log.debug("Skipping data result because the returner has expired")
 
-        close_writer()
+        # Ensure any open writer is closed for the calling thread
+        writer = getattr(tlocal, "writer", None)
+        if writer and not writer.closed:
+            log.info("Closing writer for file '{:}' found in thread local".format(writer.name))
+
+            writer.close()
 
         return
 

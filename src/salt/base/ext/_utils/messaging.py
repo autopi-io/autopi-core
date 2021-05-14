@@ -11,7 +11,7 @@ import urlparse
 import uuid
 
 from common_util import ensure_primitive, last_iter
-from salt_more import SuperiorCommandExecutionError
+from salt_more import cached_loader, SuperiorCommandExecutionError
 from timeit import default_timer as timer
 
 
@@ -620,17 +620,13 @@ class EventDrivenMessageProcessor(MessageProcessor):
             match_type="regex")
 
         # Add given workflow hooks
-        loaders = {}
         for hook in hooks or []:
             try:
 
                 # Special handling of returners
                 if hook["kind"] == "returner":
-
-                    # Load Salt returner function
-                    if not "returners" in loaders:
-                        loaders["returners"] = salt.loader.returners(__opts__, __salt__, context=self._context)
-                    returner_func = loaders["returners"][hook["func"]]
+                    returners = cached_loader(__salt__, __opts__, "returners", context=self._context)
+                    returner_func = returners[hook["func"]]
 
                     # Wrap returner function to add defined args and kwargs
                     def returner_wrapper(message, result, hook=hook, returner_func=returner_func):
@@ -651,9 +647,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
                     self.add_hook(hook["name"], hook["kind"], returner_wrapper, synchronize=hook.get("lock", False))
 
                 else:
-                    if not "modules" in loaders:
-                        loaders["modules"] = salt.loader.minion_mods(__opts__, context=self._context)
-                    self.add_hook(hook["name"], hook["kind"], loaders["modules"][hook["func"]], synchronize=hook.get("lock", False))
+                    modules = cached_loader(__salt__, __opts__, "modules", context=self._context)
+                    self.add_hook(hook["name"], hook["kind"], modules[hook["func"]], synchronize=hook.get("lock", False))
 
             except Exception:
                 log.exception("Failed to add hook: {:}".format(hook))

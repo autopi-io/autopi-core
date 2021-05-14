@@ -181,6 +181,21 @@ class RotatingTextFile(object):
         self._file = None
         self._size = 0
 
+    def __str__(self):
+        return "<{:}.{:} file={:} at {:}>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            self._file,
+            hex(id(self))
+        )
+
+    @property
+    def name(self):
+        if self._file:
+            return self._file.name
+
+        return None
+
     @property
     def closed(self):
         if self._file != None:

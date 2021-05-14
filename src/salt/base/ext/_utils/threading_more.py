@@ -414,6 +414,18 @@ class AsyncWriterThread(threading.Thread):
         # Start thread
         self.start()
 
+    def __str__(self):
+        return "<{:}.{:} file={:} at {:}>".format(
+            self.__class__.__module__,
+            self.__class__.__name__,
+            self._file,
+            hex(id(self))
+        )
+
+    @property
+    def name(self):
+        return self._file.name
+    
     @property
     def stopped(self):
         return self._stop

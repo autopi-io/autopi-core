@@ -37,7 +37,7 @@ def status_handler():
         "connection": {
             "open": conn.is_open()
         },
-        "context": context
+        "position": context["position"]
     }
 
     return ret
