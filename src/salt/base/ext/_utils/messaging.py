@@ -674,7 +674,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 if "condition" in reactor:
                     conditions.append(reactor["condition"])
                 for index, condition in enumerate(conditions, 1):
-                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": self._context, "salt": __salt__}):
+                    if keyword_resolve(condition, keywords={"event": event, "match": match, "context": self._context, "salt": __salt__, "options": __opts__}):
                         log.info("Event meets condition #{:} '{:}': {:}".format(index, condition, event))
                     else:
                         if DEBUG:
@@ -690,7 +690,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
                     # Check if keyword resolving is enabled
                     if reactor.get("keyword_resolve", False):
-                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context, "salt": __salt__})
+                        resolved_message = keyword_resolve(copy.deepcopy(message), keywords={"event": event, "match": match, "context": self._context, "salt": __salt__, "options": __opts__})
                         if DEBUG:
                             log.debug("Keyword resolved message: {:}".format(resolved_message))
 
