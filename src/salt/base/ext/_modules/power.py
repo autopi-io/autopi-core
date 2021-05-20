@@ -114,7 +114,7 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
 
     elif not confirm:
         raise salt.exceptions.CommandExecutionError(
-            "This command will power down the system - add parameter 'confirm=true' to continue anyway")
+            "This command will power down the device - add parameter 'confirm=true' to continue anyway")
 
     log.info("Preparing to sleep {:} in {:} second(s)".format(
         "{:} second(s)".format(interval) if interval > 0 else "infinite",
