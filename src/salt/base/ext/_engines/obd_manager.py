@@ -344,7 +344,7 @@ def commands_handler(protocol="auto", baudrate=None, verify=True, output="dict")
     }
 
     if output == "dict":
-        ret["supported"] = {cmd.name: cmd.desc for cmd in conn.supported_commands()}
+        ret["supported"] = {cmd.name: "{:} (PID 0x{:})".format(cmd.desc, cmd.command) for cmd in conn.supported_commands()}
     else:
         ret["supported"] = [cmd.name for cmd in conn.supported_commands()]
 
