@@ -61,13 +61,6 @@ def _caller():
     return salt.client.Caller(mopts=opts)
 
 
-def _salt(command, *args, **kwargs):
-    log.info('Executing Salt call: cmd: {:}, args: {:}, kwargs: {:}'.format(
-        command, args, kwargs))
-
-    return __salt__['minionutil.run_job'](command, *args, **kwargs)
-
-
 @app.route("/")
 def index():
     return {"unit_id": _minion_id()}
@@ -101,6 +94,7 @@ def download_log():
     file_name = request.args.get('file')
     return send_from_directory('/var/log/', file_name, as_attachment=True)
 
+
 @app.route('/dongle/<uuid:unit_id>/execute/', methods=['POST'])
 def terminal_execute(unit_id):
     minion_id = _minion_id()
@@ -115,11 +109,14 @@ def terminal_execute(unit_id):
     args = cmd_object['arg']
     kwargs = dict(cmd_object['kwarg'])
 
-    if command.startswith('state.') or command.startswith('minionutil.update_release'):
-        log.debug('executing command via caller')
+    if command.startswith('state.'):
+        log.info("Executing command via caller: {:}".format(cmd_object))
         response = _caller().cmd(command, *args, **kwargs)
+    elif command.startswith('minionutil.update_release'):
+        log.info("Executing command via minion process: {:}".format(cmd_object))
+        response = __salt__['minionutil.run_job'](command, *args, **kwargs)
     else:
-        log.debug('executing command via __salt__')
+        log.info("Executing command directly in local process: {:}".format(cmd_object))
         response = __salt__[command](*args, **kwargs)
 
     return jsonify(response)
@@ -143,9 +140,9 @@ def apn_settings(unit_id):
     elif request.method == 'PUT':
         obj = request.get_json(force=True)
         validated_settings = {
-            "apn": obj.get("apn", ""), 
-            "pass": obj.get("pass", ""), 
-            "user": obj.get("user", ""), 
+            "apn": obj.get("apn", ""),
+            "pass": obj.get("pass", ""),
+            "user": obj.get("user", ""),
             "pin": obj.get("pin", ""),
             "mtu": obj.get("mtu", None)
         }

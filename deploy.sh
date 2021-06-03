@@ -1,7 +1,7 @@
 
-scp -r src/salt/base/ext/* pi@local.autopi.io:~/core/ext/
+scp -r src/salt/base/ext/* pi@192.168.8.104:~/core/ext/
 
-ssh pi@local.autopi.io "
+ssh pi@192.168.8.104 "
   pyclean /var/cache/salt/minion/extmods/
   sudo cp -fv ~/core/ext/_engines/*.py /var/cache/salt/minion/extmods/engines/
   sudo cp -fv ~/core/ext/_modules/*.py /var/cache/salt/minion/extmods/modules/
