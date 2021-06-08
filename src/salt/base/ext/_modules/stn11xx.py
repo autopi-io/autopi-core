@@ -317,13 +317,22 @@ def volt_level(samples=10):
     return ret
 
 
-def volt_calibrate(value=0000):
+def volt_calibrate(value=0000, confirm=False):
     """
     Manual calibration of voltage measurement.
     Default value '0000' will restore to the factory calibration.
+
+    Optional arguments:
+      - value (int): The value to set the calibration to. Default is 0000.
+      - confirm (bool): Achknowledge the execution of this command. Default is 'False'.
     """
 
+    if not confirm:
+        raise salt.exceptions.CommandExecutionError(
+            "This command will change the voltage calibration of the device - add parameter 'confirm=true' to continue anyway")
+
     res = _change("ATCV {:04d}".format(value), reset=False)
+    log.info("Changed volt calibration to {}".format(value))
 
     return res
 
