@@ -11,5 +11,5 @@ include:
 {%- if max_pending_sync %}
 max-pending-sync:
   test.succeed_without_changes:
-    - name: {{ max_pending_sync }}
+    - comment: {{ max_pending_sync }}
 {%- endif %}
