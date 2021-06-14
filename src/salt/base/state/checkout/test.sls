@@ -57,7 +57,9 @@ acc-test:
 
 acc-interrupt-timeout-check:
   test.module:
-    - name: acc.context
+    - name: acc.manage
+    - args:
+      - context
     - validate:
       - ret["interrupt"]["timeout"] <= 2
       - ret["interrupt"]["total"] > 0
