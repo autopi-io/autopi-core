@@ -117,6 +117,17 @@ rtc-configured:
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
+{%- for key, val in salt["pillar.get"]("rpi:boot:gpio", default={}).iteritems() %}
+gpio-{{ key }}-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?gpio={{ key }}=.*$"
+    - repl: "gpio={{ key }}={{ val }}"
+    - append_if_not_found: true
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+{%- endfor %}
+
 reboot-upon-changes-required:
   module.wait:
     - name: power.request_reboot
