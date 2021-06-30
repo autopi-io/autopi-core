@@ -55,3 +55,29 @@ def action(*args, **kwargs):
     """
 
     return client.send_sync(_msg_pack(*args, _handler="action", **kwargs))
+
+
+def manage(*args, **kwargs):
+    """
+    Runtime management of the underlying service instance.
+
+    Supported commands:
+      - 'hook list|call <name> [argument]... [<key>=<value>]...'
+      - 'worker list|show|start|pause|resume|kill <name>'
+      - 'reactor list|show <name>'
+      - 'run <key>=<value>...'
+
+    Examples:
+      - 'keyfob.manage hook list'
+      - 'keyfob.manage hook call power'
+      - 'keyfob.manage worker list *'
+      - 'keyfob.manage worker show *'
+      - 'keyfob.manage worker start *'
+      - 'keyfob.manage worker pause *'
+      - 'keyfob.manage worker resume *'
+      - 'keyfob.manage worker kill *'
+      - 'keyfob.manage reactor list'
+      - 'keyfob.manage reactor show *'
+    """
+
+    return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

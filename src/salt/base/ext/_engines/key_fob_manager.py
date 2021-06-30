@@ -15,11 +15,11 @@ USER_EXT1_PIN_WIRES = {
 }
 
 USER_EXT2_PIN_WIRES = {
-    "green":  23,
-    "white":  24,
-    "grey":   27,
-    "red":     1,
-    "black":   0
+    "green":  23,  # RPi default low
+    "white":  24,  # RPi default low
+    "grey":   27,  # RPi default low
+    "red":     1,  # RPi default high
+    "black":   0   # RPi default high
 }
 
 
@@ -33,6 +33,101 @@ context = {
 edmp = EventDrivenMessageProcessor("key_fob", context=context)
 
 
+def _init_pins():
+    """
+    Helper function to ensure that GPIO pins are initialized.
+    """
+
+    ret = False
+
+    # Only initialize/setup pins if not already
+    if not context.get("pins_initialized", False):
+
+        for action in context.get("actions", {}).values():
+            gpio_pin = context["pin_wires"][action["pin"]["wire"]]
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Initializing GPIO output pin {:}".format(gpio_pin))
+
+            try:
+                gpio.setup(gpio_pin, gpio.OUT, initial=action["pin"].get("initial", True))
+            except:
+                log.exception("Failed to initialize GPIO pin for action: {:}".format(action))
+
+        # Indicate that pins are initialized
+        context["pins_initialized"] = True
+
+        ret = True
+
+        log.info("GPIO pins initialized")
+
+    # Or else re-initialize if reset
+    elif context.get("pins_reset", False):
+
+        # Ensure all pins are set to initial values
+        for action in context.get("actions", {}).values():
+            gpio_pin = context["pin_wires"][action["pin"]["wire"]]
+            
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Re-initializing GPIO output pin {:}".format(gpio_pin))
+
+            gpio.output(gpio_pin, action["pin"].get("initial", True))
+
+        # Indicate that pins are no longer reset
+        context["pins_reset"] = False
+
+        ret = True
+
+        log.info("GPIO pins re-initialized")
+
+    # After (re-)initialization check for delay 
+    if ret:
+        delay = context.get("settings", {}).get("delay_after_init_pins", 0)
+        if delay > 0:
+
+            # Sleep for the specified delay
+            log.info("Sleeping for {:} seconds(s) after (re-)initializing GPIO output pins".format(delay))
+            time.sleep(delay)
+
+    return ret
+
+
+def _deinit_pins():
+    """
+    Helper function to ensure that GPIO pins are reset.
+    """
+
+    # We can skip if not already initialized
+    if not context.get("pins_initialized", False):
+        return False
+
+    # Check if reset is enabled
+    delay = context.get("settings", {}).get("reset_pins_after_delay", -1)
+    if delay > -1:
+
+        # Sleep for the specified delay
+        log.info("Sleeping for {:} seconds(s) before resetting GPIO output pins".format(delay))
+        time.sleep(delay)
+
+        # Ensure all pins are reset (set low)
+        for action in context.get("actions", {}).values():
+            gpio_pin = context["pin_wires"][action["pin"]["wire"]]
+
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Resetting GPIO output pin {:}".format(gpio_pin))
+
+            gpio.output(gpio_pin, False)
+
+        # Indicate that pins are in reset state
+        context["pins_reset"] = True
+
+        log.info("GPIO pins reset")
+
+        return True
+
+    return False
+
+
 @edmp.register_hook()
 def power_handler(value=None):
     """
@@ -44,7 +139,7 @@ def power_handler(value=None):
 
     ret = {}
 
-    if context["pin_wires"] != USER_EXT2_PIN_WIRES:
+    if context["pin_wires"] != USER_EXT2_PIN_WIRES: 
         raise Exception("Only supported for port ext port 2")
 
     kwargs = {}
@@ -54,6 +149,16 @@ def power_handler(value=None):
     res = __salt__["spm.query"]("ext_pins", **kwargs)
 
     ret["value"] = res["output"]["ext_sw_3v3"]
+
+    if ret["value"]:  # Power is on
+
+        # Ensure pins are initialized
+        _init_pins()
+
+    else:  # Power is off
+
+        # Ensure pins are deinitialized
+        _deinit_pins()
 
     # Trigger key fob power event
     if value != None:
@@ -87,6 +192,7 @@ def action_handler(*names):
             if not name in ctx:
                 raise Exception("No key fob action found by name '{:}'".format(name))
 
+    # Always check power state
     res = power_handler()
     if not res["value"]:
         raise Exception("Key fob is powered off")
@@ -140,6 +246,9 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting key fob manager with settings: {:}".format(settings))
 
+        # Also store settings in context
+        context["settings"] = settings
+
         # Determine which ext port to use 
         ext_port = settings.get("ext_port", 2)
         if ext_port == 1:
@@ -149,26 +258,22 @@ def start(**settings):
         else:
             raise Exception("Unsupported user ext port {:}".format(ext_port))
 
+        for action in settings.get("actions", []):
+            if not action["pin"]["wire"] in context["pin_wires"]:
+                log.error("Pin wire '{:}' not supported - omitting action: {:}".format(action["pin"]["wire"], action))
+
+                continue
+
+            # Add action to context
+            context.setdefault("actions", {})[action["name"]] = action
+
         # Initialize GPIO
         gpio.setwarnings(False)
         gpio.setmode(gpio.BCM)
-
-        for action in settings.get("actions", []):
-            try:
-
-                if not action["pin"]["wire"] in context["pin_wires"]:
-                    raise Exception("Pin wire '{:}' not supported".format(action["pin"]["wire"]))
-
-                gpio.setup(
-                    context["pin_wires"][action["pin"]["wire"]],
-                    gpio.OUT,
-                    initial=action["pin"].get("initial", True)
-                )
-
-                # Add action to context
-                context.setdefault("actions", {})[action["name"]] = action
-            except:
-                log.exception("Failed to setup GPIO pin for action: {:}".format(action))
+        if not settings.get("lazy_init_pins", False):
+            _init_pins()
+        else:
+            log.info("Postpones initialization of GPIO pins")
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
