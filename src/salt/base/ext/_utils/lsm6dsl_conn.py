@@ -69,7 +69,14 @@ FIFO_CTRL5_MODE_MASK = 0x07
 CTRL1_XL_ODR_MASK = 0xF0
 CTRL1_XL_FS_MASK  = 0x0C
 
-CTRL3_C_SW_RESET_MASK = 0x01
+CTRL3_C_BOOT_MASK      = (0x01 << 7)
+CTRL3_C_BDU_MASK       = (0x01 << 6)
+CTRL3_C_H_LACTIVE_MASK = (0x01 << 5)
+CTRL3_C_PP_OD_MASK     = (0x01 << 4)
+CTRL3_C_SIM_MASK       = (0x01 << 3)
+CTRL3_C_IF_INC_MASK    = (0x01 << 2)
+CTRL3_C_BLE_MASK       = (0x01 << 1)
+CTRL3_C_SW_RESET_MASK  = 0x01
 
 FIFO_STATUS2_WATERM_MASK          = 0x80
 FIFO_STATUS2_OVER_RUN_MASK        = 0x40
@@ -335,6 +342,34 @@ class LSM6DSLConn(I2CConn):
         log.info("Performing software reset of device")
 
         self.read_write(CTRL3_C, CTRL3_C_SW_RESET_MASK, 1)
+
+    def block_data_update(self, value=None):
+        """
+        Get or set block data update setting.
+
+        value = 0: Continuous update
+        value = 1: Output registers not updated until MSB and LSB have been read
+        """
+        if value == None:
+            res = self.read(CTRL3_C) & CTRL3_C_BDU_MASK
+        else:
+            res = self.read_write(CTRL3_C, CTRL3_C_BDU_MASK, value) & CTRL3_C_BDU_MASK
+        
+        return res
+
+    def intr_activation_level(self, value=None):
+        """
+        Get or set interrupt activation level
+
+        value = 0: Interrupt output pads active high
+        value = 1: Interrupt output pads active low
+        """
+        if value == None:
+            res = self.read(CTRL3_C) & CTRL3_C_H_LACTIVE_MASK
+        else:
+            res = self.read_write(CTRL3_C, CTRL3_C_H_LACTIVE_MASK, value) & CTRL3_C_H_LACTIVE_MASK
+        
+        return res
 
     def intr(self, source, pin, value=None):
         """
