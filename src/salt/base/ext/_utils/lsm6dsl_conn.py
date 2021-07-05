@@ -347,28 +347,32 @@ class LSM6DSLConn(I2CConn):
         """
         Get or set block data update setting.
 
-        value = 0: Continuous update
-        value = 1: Output registers not updated until MSB and LSB have been read
+        value = False: Continuous update
+        value = True: Output registers not updated until MSB and LSB have been read
         """
         if value == None:
             res = self.read(CTRL3_C) & CTRL3_C_BDU_MASK
         else:
-            res = self.read_write(CTRL3_C, CTRL3_C_BDU_MASK, value) & CTRL3_C_BDU_MASK
+            val = CTRL3_C_BDU_MASK if bool(value) else 0
+            res = self.read_write(CTRL3_C, CTRL3_C_BDU_MASK, val) & CTRL3_C_BDU_MASK
         
-        return res
+        ret = bool(res)
+        return ret
 
     def intr_activation_level(self, value=None):
         """
         Get or set interrupt activation level
 
-        value = 0: Interrupt output pads active high
-        value = 1: Interrupt output pads active low
+        value = False: Interrupt output pads active high
+        value = True: Interrupt output pads active low
         """
         if value == None:
             res = self.read(CTRL3_C) & CTRL3_C_H_LACTIVE_MASK
         else:
-            res = self.read_write(CTRL3_C, CTRL3_C_H_LACTIVE_MASK, value) & CTRL3_C_H_LACTIVE_MASK
+            val = CTRL3_C_H_LACTIVE_MASK if bool(value) else 0
+            res = self.read_write(CTRL3_C, CTRL3_C_H_LACTIVE_MASK, val) & CTRL3_C_H_LACTIVE_MASK
         
+        ret = bool(res)
         return res
 
     def intr(self, source, pin, value=None):
