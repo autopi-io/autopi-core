@@ -312,6 +312,14 @@ class MMA8X5XConn(I2CConn):
     def settings(self):
         return self._settings
 
+    @property
+    def range(self):
+        return self._range
+
+    @property
+    def rate(self):
+        return self._data_rate
+
     def configure(self, **settings):
         """
         Applies specific settings.

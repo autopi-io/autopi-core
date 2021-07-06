@@ -12,7 +12,6 @@ import threading
 
 from common_util import abs_file_path, factory_rendering
 from messaging import EventDrivenMessageProcessor, filter_out_unchanged
-from mma8x5x_conn import MMA8X5XConn
 from threading_more import intercept_exit_signal, TimedEvent
 from timeit import default_timer as timer
 
@@ -31,8 +30,8 @@ context = {
 # Message processor
 edmp = EventDrivenMessageProcessor("acc", context=context, default_hooks={"workflow": "extended", "handler": "query"})
 
-# MMA8X5X I2C connection
-conn = MMA8X5XConn(stats=context)
+# Connection is instantiated during start
+conn = None
 
 interrupt_event = TimedEvent()
 
@@ -43,13 +42,13 @@ def connection_handler(close=False):
     Manages current connection.
 
     Optional arguments:
-      - close (bool): Close MMA8X5X connection? Default value is 'False'. 
+      - close (bool): Close connection? Default value is 'False'. 
     """
 
     ret = {}
 
     if close:
-        log.warning("Closing MMA8X5X connection")
+        log.warning("Closing connection")
 
         conn.close()
 
@@ -99,7 +98,7 @@ def interrupt_query_handler(cmd, *args, **kwargs):
 
     # Wait for data ready interrupt if not already set
     # NOTE: Use short timeout when real time mode and long when FIFO mode
-    timeout = kwargs.pop("interrupt_timeout", 2/conn._data_rate)
+    timeout = kwargs.pop("interrupt_timeout", 2.0/conn.rate)
     if not interrupt_event.wait(timeout=timeout):
         context["interrupt"]["timeout"] += 1
 
@@ -118,7 +117,7 @@ def interrupt_query_handler(cmd, *args, **kwargs):
 
 
 @edmp.register_hook()
-def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound=True, interrupt_driven=True, file=None):
+def dump_handler(duration=1, range=8, rate=12.5, decimals=4, timestamp=True, sound=True, interrupt_driven=True, file=None):
     """
     Dumps raw XYZ readings to screen or file.
 
@@ -126,7 +125,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
       - duration (int): How many seconds to record data? Default value is '1'.
       - file (str): Write data to a file with the given name.
       - range (int): Maximum number of g-forces being measured. Default value is '8'.
-      - rate (float): How many Hz (samples per second)? Default value is '50'.
+      - rate (float): How many Hz (samples per second)? Default value is '12.5'.
       - decimals (int): How many decimals to calculate? Default value is '4'.
       - timestamp (bool): Add timestamp to each sample? Default value is 'True'.
       - sound (bool): Play sound when starting and stopping recording? Default value is 'True'.
@@ -156,8 +155,8 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
     data = []
 
     # Remember settings to restore when done
-    orig_range = conn._range
-    orig_rate = conn._data_rate
+    orig_range = conn.range
+    orig_rate = conn.rate
 
     try:
 
@@ -166,7 +165,9 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
             __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
 
         # Apply specified settings
-        conn.configure(range=range, data_rate=rate)
+        conn.configure(range=range, rate=rate)
+
+        interrupt_timeout = 2.0 / rate
 
         # Run for specified duration
         start = timer()
@@ -176,7 +177,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
             if interrupt_driven:
 
                 # Wait for data ready interrupt if not already set
-                if not interrupt_event.wait(timeout=2/conn._data_rate):
+                if not interrupt_event.wait(timeout=interrupt_timeout):
                     ret["interrupt_timeouts"] += 1
 
                 interrupt_event.clear()
@@ -193,7 +194,7 @@ def dump_handler(duration=1, range=8, rate=50, decimals=4, timestamp=True, sound
     finally:
 
         # Restore original settings
-        conn.configure(range=orig_range, data_rate=orig_rate)
+        conn.configure(range=orig_range, rate=orig_rate)
 
         # Play sound to indicate recording has ended
         if sound:
@@ -272,11 +273,24 @@ def start(**settings):
         # Setup interrupt GPIO pin
         gpio.setwarnings(False)
         gpio.setmode(gpio.BOARD)
-        gpio.setup(gpio_pin.ACC_INT1, gpio.IN)
-        gpio.add_event_detect(gpio_pin.ACC_INT1, gpio.FALLING, callback=lambda ch: interrupt_event.set())
+        gpio.setup(gpio_pin.ACC_INT, gpio.IN)
+        gpio.add_event_detect(gpio_pin.ACC_INT, gpio.FALLING, callback=lambda ch: interrupt_event.set())
 
-        # Initialize MMA8X5X connection
-        conn.init(settings["mma8x5x_conn"])
+        # Initialize connection
+        global conn
+        if "lsm6dsl_conn" in settings:
+            from lsm6dsl_conn import LSM6DSLConn
+
+            conn = LSM6DSLConn(settings["lsm6dsl_conn"])
+        elif "mma8x5x_conn" in settings:
+            from mma8x5x_conn import MMA8X5XConn
+
+            conn = MMA8X5XConn(stats=context)
+            conn.init(settings["mma8x5x_conn"])
+        else:
+            log.error("No supported connection found in settings")
+
+            return;
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
@@ -296,4 +310,4 @@ def start(**settings):
             try:
                 conn.close()
             except:
-                log.exception("Failed to close MMA8X5X connection")
+                log.exception("Failed to close connection")

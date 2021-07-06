@@ -36,7 +36,8 @@ class I2CConn(object):
         self.on_written = None
 
     def init(self, settings):
-        log.debug("Initializing I2C connection using settings: %s", settings)
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Initializing I2C connection using settings: {:}".format(settings))
 
         if not "port" in settings:
             raise ValueError("I2C 'port' must be specified in settings")
@@ -52,7 +53,7 @@ class I2CConn(object):
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self):
-        log.info("Opening I2C connection on port: %d", self._port)
+        log.info("Opening I2C connection on port: {:}".format(self._port))
 
         try :
             self._bus.open(self._port)

@@ -287,7 +287,7 @@ class LSM6DSLConn(I2CConn):
         Added for backward compatibility.
         """
 
-        return self._xl_fs
+        return self._xl_fs or self._settings.get("range", self._settings.get("acc_full_scale", CTRL1_XL_FS_MAP[XL_FS_DEFAULT]))
 
     @property
     def rate(self):
@@ -295,7 +295,7 @@ class LSM6DSLConn(I2CConn):
         Added for backward compatibility.
         """
 
-        return self._xl_odr
+        return self._xl_odr or self._settings.get("rate", self._settings.get("acc_output_data_rate", CTRL1_XL_ODR_MAP[XL_ODR_DEFAULT]))
 
     def open(self):
         super(LSM6DSLConn, self).open()
@@ -325,15 +325,21 @@ class LSM6DSLConn(I2CConn):
 
         self._settings.update(settings)
 
-        # Configure accelerometer based on settings or defaults
-        self.acc_full_scale(value=self._settings.get("range", self._settings.get("acc_fs", CTRL1_XL_FS_MAP[XL_FS_DEFAULT])))
-        self.acc_output_data_rate(value=self._settings.get("rate", self._settings.get("acc_odr", CTRL1_XL_ODR_MAP[XL_ODR_DEFAULT])))
+        if "block_data_update" in self._settings:
+            self.block_data_update(value=self._settings["block_data_update"])
+
+        if "intr_activation_level" in self._settings:
+            self.intr_activation_level(value=self._settings["intr_activation_level"])
 
         # Setup interrupts if available
         if self._settings.get("interrupts", None):
             for pin, enabled_sources in self._settings["interrupts"].items():
                 for source in enabled_sources:
                     self.intr(source, pin, value=True)
+
+        self.acc_full_scale(value=self._settings.get("range", self._settings.get("acc_full_scale", CTRL1_XL_FS_MAP[XL_FS_DEFAULT])))
+
+        self.acc_output_data_rate(value=self._settings.get("rate", self._settings.get("acc_output_data_rate", CTRL1_XL_ODR_MAP[XL_ODR_DEFAULT])))
 
     def reset(self, confirm=False):
         if not confirm:
@@ -355,9 +361,8 @@ class LSM6DSLConn(I2CConn):
         else:
             val = CTRL3_C_BDU_MASK if bool(value) else 0
             res = self.read_write(CTRL3_C, CTRL3_C_BDU_MASK, val) & CTRL3_C_BDU_MASK
-        
-        ret = bool(res)
-        return ret
+
+        return bool(res)
 
     def intr_activation_level(self, value=None):
         """
@@ -372,8 +377,7 @@ class LSM6DSLConn(I2CConn):
             val = CTRL3_C_H_LACTIVE_MASK if bool(value) else 0
             res = self.read_write(CTRL3_C, CTRL3_C_H_LACTIVE_MASK, val) & CTRL3_C_H_LACTIVE_MASK
         
-        ret = bool(res)
-        return res
+        return bool(res)
 
     def intr(self, source, pin, value=None):
         """
@@ -401,8 +405,7 @@ class LSM6DSLConn(I2CConn):
             val = mask if bool(value) else 0
             res = self.read_write(register, mask, val) & mask
 
-        ret = bool(res)
-        return ret
+        return bool(res)
 
     def xyz(self, **kwargs):
         return self.acc_xyz(**kwargs)
