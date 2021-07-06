@@ -1,11 +1,11 @@
 
-{%- set bin_file_path = "/opt/autopi/ble/dtm-" ~ salt["pillar.get"]("ble:firmware:version") ~ ".bin" %} 
+{%- set bin_file_path = "/opt/autopi/ble/dtm-" ~ salt["pillar.get"]("ble:firmware:version", default="3.2.1") ~ ".bin" %} 
 
 ble-firmware-distributed:
   file.managed:
     - name: {{ bin_file_path }}.orig
-    - source: salt://ble/dtm-{{ salt["pillar.get"]("ble:firmware:version") }}.bin
-    - source_hash: salt://ble/dtm-{{ salt["pillar.get"]("ble:firmware:version") }}.bin.sha1
+    - source: salt://ble/dtm-{{ salt["pillar.get"]("ble:firmware:version", default="3.2.1") }}.bin
+    - source_hash: salt://ble/dtm-{{ salt["pillar.get"]("ble:firmware:version", default="3.2.1") }}.bin.sha1
     - makedirs: true
 
 ble-requirement-bbe-installed:
@@ -20,13 +20,15 @@ ble-firmware-local-name-imprinted:
       - file: ble-firmware-distributed
       - pkg: bbe
 
-# TODO HN: Only run if 'ble.interface version' is different
-ble-firmware-installed:
+# Only flash BLE chip during device checkout
+{%- if salt["pillar.get"]("state", default="REGISTERED") == "NEW" %}
+ble-firmware-flashed:
   module.run:
     - name: ble.flash_firmware
     - bin_file: {{ bin_file_path }}
     - check_only: false
     - confirm: true
+{%- endif %}
 
 ble-mac-address-queried:
   module.run:
