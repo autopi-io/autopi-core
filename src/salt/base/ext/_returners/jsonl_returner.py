@@ -34,7 +34,7 @@ def _get_options(ret=None):
     }
 
     options = get_returner_options(
-        __name__,
+        "{:}_returner".format(__virtualname__),
         ret,
         attrs,
         __salt__=__salt__,
