@@ -56,3 +56,44 @@ def clients(interface="uap0"):
         raise salt.exceptions.CommandExecutionError("Failed to parse result with pattern: {:}".format(regex.pattern))
 
     return ret
+
+
+def check_clients():
+    """
+    Checks which clients have connected or disconnected since the last check.
+
+    Needs to be used in a process with a long living context (e.g. a service - *event_reactor*).
+    If the command is run seperately it won't remember which clients were connected since the last
+    time it was ran.
+    """
+
+    ctx_connected_clients = __context__.get("hostapd.connected_clients", set())
+    res = clients()
+
+    currently_connected_clients = set(mac for mac in res.keys())
+
+    ret = {
+        "newly_connected_clients": list(currently_connected_clients - ctx_connected_clients),
+        "newly_disconnected_clients": list(ctx_connected_clients - currently_connected_clients),
+    }
+
+    __context__["hostapd.connected_clients"] = currently_connected_clients
+
+    return ret
+
+
+def clients_changed_trigger(result):
+    """
+    Triggers 'system/hostapd/connected' and 'system/hostapd/disconnected' events.
+    """
+
+    connected_event_tag = "system/hostapd/connected"
+    disconnected_event_tag = "system/hostapd/disconnected"
+
+    if len(result.get("newly_connected_clients", [])) > 0:
+        connected_clients_data = { "values": result["newly_connected_clients"] }
+        __salt__["minionutil.trigger_event"](connected_event_tag, data=connected_clients_data)
+
+    if len(result.get("newly_disconnected_clients", [])) > 0:
+        disconnected_clients_data = { "values": result["newly_disconnected_clients"] }
+        __salt__["minionutil.trigger_event"](disconnected_event_tag, data=disconnected_clients_data)
