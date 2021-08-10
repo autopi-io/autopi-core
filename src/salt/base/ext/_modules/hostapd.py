@@ -90,6 +90,9 @@ def clients_changed_trigger(result):
     connected_event_tag = "system/hostapd/connected"
     disconnected_event_tag = "system/hostapd/disconnected"
 
+    if not result:
+        return
+
     if len(result.get("newly_connected_clients", [])) > 0:
         connected_clients_data = { "values": result["newly_connected_clients"] }
         __salt__["minionutil.trigger_event"](connected_event_tag, data=connected_clients_data)
