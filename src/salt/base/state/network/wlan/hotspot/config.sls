@@ -21,3 +21,5 @@ hostapd-allow-list-configured:
     - name: /etc/hostapd/hostapd.accept
     - source: salt://network/wlan/hotspot/hostapd.accept.jinja
     - template: jinja
+    - watch_in:
+      - service: hostapd_service
