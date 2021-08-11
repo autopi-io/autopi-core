@@ -15,3 +15,12 @@ active-{{ _wpa_service }}-restarted-after-hostapd-service:
     - onlyif: systemctl is-active {{ _wpa_service }}
     - watch:
       - service: hostapd
+
+
+{%- if salt['pillar.get']('hostapd:ext:allow_list') is defined %}
+hostapd-allow-list-configured:
+  file.managed:
+    - name: /etc/hostapd/hostapd.accept
+    - source: salt://network/wlan/hotspot/hostapd.accept.jinja
+    - template: jinja
+{%- endif %}
