@@ -143,6 +143,10 @@ docker-registries-logged-in:
 {{ proj_id_prefix }}-container-{{ cont['qname'] }}-running:
   docker_container.running:
     - name: {{ cont['qname'] }}
+    - labels: 
+      - release_hash={{ proj['version_hash'] }}
+      - release={{ proj['version'] }}
+      - project={{ proj['slug'] }}
     - image: {{ cont['image_full'] }}:{{ cont['tag'] }}
     {%- for key, val in cont['startup_parameters'].iteritems() %}
     - {{ key }}: {{ val|tojson }}
