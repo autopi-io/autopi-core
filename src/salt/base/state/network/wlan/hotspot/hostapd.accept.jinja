@@ -1,0 +1,3 @@
+{%- for mac in salt['pillar.get']('hostapd:cardlist:uap0:allow_list') %}
+{{- mac }}
+{% endfor %}
