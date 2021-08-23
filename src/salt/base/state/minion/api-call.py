@@ -13,6 +13,7 @@ import urllib2  # 'requests' is slow to load so we use 'urllib2'
 import uuid
 import yaml
 
+from collections import OrderedDict
 from contextlib import closing
 from retrying import retry
 
@@ -53,12 +54,14 @@ def execute(cmd, *args, **kwargs):
 def state_output(res):
     errors = []
 
-    for key in res.keys():
+    state_results = OrderedDict(sorted(res.items(), key=lambda item:item[1]['__run_num__']))
+
+    for key in state_results.keys():
         if res[key]["result"]:
-            print("{:} [ OK   ] {:}{:}".format(Colors.OKGREEN, res[key]["comment"], Colors.ENDC))
+            print("{:} [ OK   ] {:}: {:} {:}".format(Colors.OKGREEN, res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
             print("")
         else:
-            print("{:} [ FAIL ] {:}{:}".format(Colors.FAIL, res[key]["comment"], Colors.ENDC))
+            print("{:} [ FAIL ] {:}: {:} {:}".format(Colors.FAIL, res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
             errors.append(res[key])
             print("")
 
