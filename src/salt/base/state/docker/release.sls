@@ -146,7 +146,7 @@ docker-registries-logged-in:
     - labels: 
       - release_hash={{ proj['version_hash'] }}
       - release={{ proj['version'] }}
-      - project={{ proj['slug'] }}
+      - project={{ proj['name'] }}
     - image: {{ cont['image_full'] }}:{{ cont['tag'] }}
     {%- for key, val in cont['startup_parameters'].iteritems() %}
     - {{ key }}: {{ val|tojson }}
