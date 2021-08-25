@@ -208,6 +208,21 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
 
 
 @edmp.register_hook()
+def query_many_handler(*cmds):
+    """
+    Queries many OBD commands in one call.
+    """
+
+    ret = {"values": []}
+
+    for cmd in cmds:
+        res = query_handler(*cmd.get("args", []), **cmd.get("kwargs", {}))
+        ret["values"].append(res)
+
+    return ret
+
+
+@edmp.register_hook()
 def send_handler(msg, **kwargs):
     """
     Sends a message on bus.

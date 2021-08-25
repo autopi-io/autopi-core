@@ -69,6 +69,14 @@ def query(*args, **kwargs):
     return client.send_sync(_msg_pack(*args, **kwargs))
 
 
+def query_many(*cmds):
+  """
+  Queries many OBD commands in one call.
+  """
+
+  return client.send_sync(_msg_pack(*cmds, _handler="query_many"))
+
+
 def commands(**kwargs):
     """
     Lists all supported OBD commands found for vehicle.
