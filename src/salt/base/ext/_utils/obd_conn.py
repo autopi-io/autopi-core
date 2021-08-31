@@ -290,6 +290,13 @@ class OBDConn(object):
     @Decorators.ensure_open
     def query(self, cmd, formula=None, **kwargs):
 
+        if kwargs.get("header", None) and len(kwargs["header"]) > 6:  # 29bit header
+            if kwargs.get("can_priority", None):
+                raise ValueError("Cannot specify 29bit header at the same time as CAN priority")
+
+            kwargs["can_priority"] = kwargs["header"][:-6]
+            kwargs["header"] = kwargs["header"][-6:]
+
         # Filter out and apply advanced runtime settings if any
         self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
         
@@ -312,12 +319,22 @@ class OBDConn(object):
         hash_pos = msg.find("#")
         if hash_pos > 0:
             if hash_pos > 6:  # 29bit header
+                if kwargs.get("can_priority", None):
+                    raise ValueError("Cannot specify 29bit header at the same time as CAN priority")
+
                 kwargs["can_priority"] = msg[:hash_pos - 6]
                 kwargs["header"] = msg[hash_pos - 6:hash_pos]
             else:
                 kwargs["header"] = msg[:hash_pos]
 
             msg = msg[hash_pos + 1:]
+        else:
+            if kwargs.get("header", None) and len(kwargs["header"]) > 6:  # 29bit header
+                if kwargs.get("can_priority", None):
+                    raise ValueError("Cannot specify 29bit header at the same time as CAN priority")
+
+                kwargs["can_priority"] = kwargs["header"][:-6]
+                kwargs["header"] = kwargs["header"][-6:]
 
         # Filter out and apply advanced runtime settings if any
         self.ensure_advanced_settings.undecorated(self, kwargs, filter=True)  # No need to call the 'ensure_open' decorator
