@@ -1295,7 +1295,7 @@ def dtc_converter(result):
     return result
 
 @edmp.register_hook(synchronize=False)
-def dtc_alternating_filter(result):
+def alternating_dtc_filter(result):
     """
     Filters out repeating Diagnostics Trouble Codes (DTCs).
     """
