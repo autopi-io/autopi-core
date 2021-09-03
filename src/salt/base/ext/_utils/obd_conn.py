@@ -18,6 +18,8 @@ FILTER_TYPE_J1939_PGN = STN11XX.FILTER_TYPE_J1939_PGN
 
 log = logging.getLogger(__name__)
 
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 
 class OBDConn(object):
 
@@ -81,7 +83,7 @@ class OBDConn(object):
     
     def setup(self, **settings):
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Configuring OBD connection using settings: %s", settings)
 
         if not "device" in settings:
@@ -117,7 +119,7 @@ class OBDConn(object):
         # Reset flag
         self.is_permanently_closed = False
 
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Opening OBD connection")
 
         try :
@@ -538,14 +540,19 @@ def decode_can_frame_for(can_db, protocol, result):
         data = data[1:]
 
     # Find message by decimal value of header
+    msg_id = int(header or data, 16)
     try:
-         msg = can_db.get_message_by_frame_id(int(header or data, 16))
+         msg = can_db.get_message_by_frame_id(msg_id)
     except KeyError:  # Unknown message
+        if DEBUG:
+            log.debug("No CAN message found by ID {:}".format(msg_id))
+
         return ret
 
     # Decode data using found message
     for key, val in msg.decode(unhexlify(data), True, True).iteritems():
         ret.append(dict(result, _type=key.lower(), value=val))
+        # TODO HN: Also add unit if specified in signal
 
     return ret
 
