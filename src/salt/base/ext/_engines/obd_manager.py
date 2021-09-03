@@ -96,10 +96,9 @@ def _can_db_for(protocol):
             path = os.path.join(home_dir, "can/db", "protocol_{:}.dbc".format(protocol.ID))
 
         # Load file
-        conf = {}
-        if protocol.ID in ["42"]:  # J1939, 29bit
-          conf["frame_id_mask"] = 0x1FFFFF00  # 0x1F = 00011111
+        conf = context["settings"].get("can_db", {}).get("protocol_configs", {}).get(protocol.ID, {})
         ret = cantools.db.load_file(path, **conf)
+        log.info("Loaded CAN database from file '{:}' with configuration: {:}".format(path, conf))
 
         # Put into cache
         can_db_cache[protocol.ID] = ret
@@ -1371,7 +1370,7 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
         if "value" in result:
 
             # Skip if not a RPM result
-            if result.get("_type", None) != kind:
+            if result.get("_type", None) != kind and result.get("unit", None) != "rpm":  # If unit is RPM we do accept the result
                 log.error("RPM {:} event trigger got unsupported RPM type result: {:}".format(key, result))
 
                 return
@@ -1383,6 +1382,8 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
         # Check for multiple values in result
         elif "values" in result:
             for res in result["values"]:
+
+                # TODO HN: Also accept values with unit RPM here? 
 
                 # Only interested in RPM results
                 if res.get("_type", None) != kind:
@@ -1485,6 +1486,9 @@ def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting OBD manager with settings: {:}".format(settings))
+
+        # Also store settings in context
+        context["settings"] = settings
 
         # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
         psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
