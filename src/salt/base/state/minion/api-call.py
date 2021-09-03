@@ -6,7 +6,6 @@
 from __future__ import print_function
 
 import json
-import re
 import sys
 import time
 import urllib2  # 'requests' is slow to load so we use 'urllib2'
@@ -44,9 +43,9 @@ def retry_if_url_error(ex):
     return False
 
 @retry(retry_on_exception=retry_if_url_error, stop_max_attempt_number=30, wait_fixed=2000)
-def execute(cmd, *args, **kwargs):
+def execute(cmd):
     url = "http://localhost:9000/dongle/{:}/execute/".format(get_minion_id())
-    data = json.dumps({"command": cmd, "arg": args, "kwarg": kwargs})
+    data = json.dumps(cmd)
     req = urllib2.Request(url, data, {"Content-Type": "application/json", "Content-Length": len(data) })
     with closing(urllib2.urlopen(req)) as res:
         return json.loads(res.read())
@@ -95,23 +94,8 @@ def main():
     # Pop script name
     args.pop(0)
 
-    # Pop command
-    cmd = args.pop(0)
-
-    # Parse arguments
-    cmd_args = []
-    cmd_kwargs = {}
-    for arg in args:
-
-        # Check if keyword argument
-        if re.match("^[_\w\d]+=", arg):
-            key, val = arg.split("=", 1)
-            cmd_kwargs[key] = try_eval(val)
-        else:
-            cmd_args.append(try_eval(arg))
-
     try:
-        res = execute(cmd, *cmd_args, **cmd_kwargs)
+        res = execute(args)
     except urllib2.HTTPError as e:
         response_text = e.read()
         code = e.code if e.code != 500 else ''
@@ -124,7 +108,7 @@ def main():
         print(Colors.FAIL + code + response_text + Colors.ENDC, file=sys.stderr)
         return
 
-    if cmd.startswith("state.") and isinstance(res,dict):
+    if args[0].startswith("state.") and isinstance(res, dict):
         state_output(res)
     else:
         print(yaml.safe_dump(res, default_flow_style=False))

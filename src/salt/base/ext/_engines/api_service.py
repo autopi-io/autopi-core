@@ -103,21 +103,34 @@ def terminal_execute(unit_id):
         log.warning('unit_id does not match the id configured on this device')
         return 'unit_id does not match the id configured on this device', 401
 
-    cmd_object = request.get_json(force=True)
+    data = request.get_json(force=True)
+    if isinstance(data, list):
+        import salt.utils.args  # Lazy load because it is a little slow
+        args = salt.utils.args.parse_input(data)
 
-    command = cmd_object['command']
-    args = cmd_object['arg']
-    kwargs = dict(cmd_object['kwarg'])
-
-    if command.startswith('state.'):
-        log.info("Executing command via caller: {:}".format(cmd_object))
-        response = _caller().cmd(command, *args, **kwargs)
-    elif command.startswith('minionutil.update_release'):
-        log.info("Executing command via minion process: {:}".format(cmd_object))
-        response = __salt__['minionutil.run_job'](command, *args, **kwargs)
+        cmd = args.pop(0)
+        cmd_args = []
+        cmd_kwargs = {}
+        for arg in args:
+            if isinstance(arg, dict) and arg.get("__kwarg__", False):
+                arg.pop("__kwarg__")
+                cmd_kwargs = arg
+            else:
+                cmd_args.append(arg)
     else:
-        log.info("Executing command directly in local process: {:}".format(cmd_object))
-        response = __salt__[command](*args, **kwargs)
+        cmd = data['command']
+        cmd_args = data['arg']
+        cmd_kwargs = dict(data['kwarg'])
+
+    if cmd.startswith('state.'):
+        log.info("Executing command via caller: {:}".format(data))
+        response = _caller().cmd(cmd, *cmd_args, **cmd_kwargs)
+    elif cmd.startswith('minionutil.update_release'):
+        log.info("Executing command via minion process: {:}".format(data))
+        response = __salt__['minionutil.run_job'](cmd, *cmd_args, **cmd_kwargs)
+    else:
+        log.info("Executing command directly in local process: {:}".format(data))
+        response = __salt__[cmd](*cmd_args, **cmd_kwargs)
 
     return jsonify(response)
 
