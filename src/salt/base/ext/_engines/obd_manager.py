@@ -1293,6 +1293,32 @@ def dtc_converter(result):
 
     return result
 
+@edmp.register_hook(synchronize=False)
+def alternating_dtc_filter(result):
+    """
+    Filters out repeating Diagnostics Trouble Codes (DTCs).
+    """
+
+    if result.get("_type", None) != "dtc":
+        raise Exception("Unrecognized _type received in dtc_filter: {}".format(result["_type"]))
+
+    ctx = context.setdefault("dtc_filter", {})
+
+    # check for new DTCs, this will later be returned
+    new_dtcs = []
+    for dtc in result.get("values", []):
+
+        # if DTC code doesn't exist in context
+        if dtc["code"] not in [c["code"] for c in ctx.get("previous", [])]:
+            new_dtcs.append(dtc)
+
+    # reassign context
+    ctx["previous"] = result["values"]
+
+    if len(new_dtcs) > 0:
+        result["values"] = new_dtcs
+        return result
+
 
 @edmp.register_hook(synchronize=False)
 def realistic_speed_converter(result):
