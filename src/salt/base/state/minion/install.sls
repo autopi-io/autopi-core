@@ -35,3 +35,5 @@ minion-api-call-script-installed:
     - mode: 755
     - user: root
     - group: root
+    - watch_in:
+      - module: minion-restart-after-config-changes-required
