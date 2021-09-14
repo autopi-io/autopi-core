@@ -44,7 +44,7 @@ def retry_if_url_error(ex):
 
 @retry(retry_on_exception=retry_if_url_error, stop_max_attempt_number=30, wait_fixed=2000)
 def execute(cmd):
-    url = "http://localhost:9000/dongle/{:}/execute/".format(get_minion_id())
+    url = "http://localhost:9000/dongle/{:}/execute_raw/".format(get_minion_id())
     data = json.dumps(cmd)
     req = urllib2.Request(url, data, {"Content-Type": "application/json", "Content-Length": len(data) })
     with closing(urllib2.urlopen(req)) as res:
@@ -105,7 +105,7 @@ def main():
         except Exception:
             pass
 
-        print(Colors.FAIL + code + response_text + Colors.ENDC, file=sys.stderr)
+        print(Colors.FAIL + str(code) + ': ' + response_text + Colors.ENDC, file=sys.stderr)
         return
 
     if args[0].startswith("state.") and isinstance(res, dict):

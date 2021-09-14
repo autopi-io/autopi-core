@@ -96,6 +96,7 @@ def download_log():
 
 
 @app.route('/dongle/<uuid:unit_id>/execute/', methods=['POST'])
+@app.route('/dongle/<uuid:unit_id>/execute_raw/', methods=['POST'])
 def terminal_execute(unit_id):
     minion_id = _minion_id()
 
