@@ -1,5 +1,7 @@
 import logging
+import shlex
 import uuid
+
 from flask import Flask, jsonify, request, send_from_directory, send_file, abort
 from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
@@ -96,15 +98,15 @@ def download_log():
 
 
 @app.route('/dongle/<uuid:unit_id>/execute/', methods=['POST'])
-@app.route('/dongle/<uuid:unit_id>/execute_raw/', methods=['POST'])
-def terminal_execute(unit_id):
+def terminal_execute(unit_id, data=None):
     minion_id = _minion_id()
 
     if not minion_id == unit_id:
         log.warning('unit_id does not match the id configured on this device')
         return 'unit_id does not match the id configured on this device', 401
 
-    data = request.get_json(force=True)
+    data = data or request.get_json(force=True)
+
     if isinstance(data, list):
         import salt.utils.args  # Lazy load because it is a little slow
         args = salt.utils.args.parse_input(data)
@@ -125,15 +127,21 @@ def terminal_execute(unit_id):
 
     if cmd.startswith('state.'):
         log.info("Executing command via caller: {:}".format(data))
-        response = _caller().cmd(cmd, *cmd_args, **cmd_kwargs)
+        res = _caller().cmd(cmd, *cmd_args, **cmd_kwargs)
     elif cmd.startswith('minionutil.update_release'):
         log.info("Executing command via minion process: {:}".format(data))
-        response = __salt__['minionutil.run_job'](cmd, *cmd_args, **cmd_kwargs)
+        res = __salt__['minionutil.run_job'](cmd, *cmd_args, **cmd_kwargs)
     else:
         log.info("Executing command directly in local process: {:}".format(data))
-        response = __salt__[cmd](*cmd_args, **cmd_kwargs)
+        res = __salt__[cmd](*cmd_args, **cmd_kwargs)
 
-    return jsonify(response)
+    return jsonify(res)
+
+
+@app.route('/dongle/<uuid:unit_id>/execute_raw/', methods=['POST'])
+def terminal_execute_raw(unit_id):
+    data = request.get_json(force=True)
+    return terminal_execute(unit_id, data=shlex.split(data["command"], posix=True))
 
 
 @app.route('/dongle/<uuid:unit_id>/settings/apn/', methods=['GET', 'PUT'])
