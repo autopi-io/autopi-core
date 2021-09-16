@@ -27,20 +27,26 @@ def start(**settings):
         client = docker.DockerClient(base_url=docker_path)
         
         since = context["newest_event_timestamp"]
-        past_events_seconds = 120
+        past_events_seconds = 120 # enough to catch the events that might have happened on boot before monitor was ready to start.
         if not since:
             # Ensure that older events not caught when they occurred is still processed, else just proceed from "NOW"/Last event.
             since = int(time()) - past_events_seconds
 
-        for event in client.events(decode=True, since=since, filters={ "type": "container", "event": ["start", "stop"] }):
+        for event in client.events(decode=True, since=since, filters={ "type": ["container", "image"], "event": ["start", "stop", "pull"] }):
             # If event is newer than newest_event_timestamp, trigger events.
             if not context["newest_event_timestamp"] or event["time"] > context["newest_event_timestamp"]:
                 context["newest_event_timestamp"] = event["time"]
 
                 try:
-                    log.info('attributes raw: {}'.format(event["Actor"]["Attributes"]))
-                    event_string = "system/docker/container/{:}/{:}".format(event["Actor"]["Attributes"]["name"], event["Action"])
+                    event_string = "system/docker/{:}/{:}/{:}".format(event["Type"], event["Actor"]["Attributes"]["name"], event["Action"])
                     data = { k: v for k, v in event["Actor"]["Attributes"].items() }
+
+                    try:
+                        if event.get("status", None) == "pull":
+                            data.update({ "tag": event["Actor"]["ID"].split(":")[-1] })
+                    except Exception:
+                        log.exception('Error occurred while trying to get tag from pull event metadata')
+
                     log.info("Triggering event: {}".format(event))
                     __salt__["minionutil.trigger_event"](
                         event_string,
