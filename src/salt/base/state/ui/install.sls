@@ -4,7 +4,7 @@
 frontend-release-installed:
   git.latest:
     - name: "https://oauth2:2rJ32Xsb-12Z7XijePyS@gitlab.com/AutoPi.io/frontend_releases.git"
-    - rev: production-local-config
+    - rev: 2021.09.18
     - force_reset: True
     - force_clone: True
     - force_fetch: True
