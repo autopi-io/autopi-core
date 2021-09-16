@@ -106,6 +106,7 @@ def terminal_execute(unit_id, data=None):
         return 'unit_id does not match the id configured on this device', 401
 
     data = data or request.get_json(force=True)
+
     if isinstance(data, list):
         import salt.utils.args  # Lazy load because it is a little slow
         args = salt.utils.args.parse_input(data)
@@ -140,7 +141,7 @@ def terminal_execute(unit_id, data=None):
 @app.route('/dongle/<uuid:unit_id>/execute_raw/', methods=['POST'])
 def terminal_execute_raw(unit_id):
     data = request.get_json(force=True)
-    return terminal_execute(unit_id, data=shlex.split(data["command"], posix=False))
+    return terminal_execute(unit_id, data=shlex.split(data["command"], posix=True))
 
 
 @app.route('/dongle/<uuid:unit_id>/settings/apn/', methods=['GET', 'PUT'])
