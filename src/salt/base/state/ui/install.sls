@@ -1,22 +1,27 @@
+{%- set frontend_version = "2021-09-21" %}
+{%- set frontend_hash    = "4e2a6833f2fdd3672441583e7cd956d174343c9d" %}
 
-# TODO: Future improvement is to check if git repo is corrupt (git fsck) and delete it entirely if it is
+frontend-release-extracted:
+  archive.extracted:
+    - name: /opt/autopi/frontend/{{ frontend_version }}/
+    - source: https://autopi-repo.s3.eu-west-2.amazonaws.com/frontend/release_{{ frontend_version }}.zip
+    - source_hash: {{ frontend_hash }}
+    - archive_format: zip
+    - keep_source: true
+    - clean: true
 
-frontend-release-installed:
-  git.latest:
-    - name: "https://oauth2:2rJ32Xsb-12Z7XijePyS@gitlab.com/AutoPi.io/frontend_releases.git"
-    - rev: 2021.09.18
-    - branch: 2021.09.18
-    - force_reset: True
-    - force_clone: True
-    - force_fetch: True
-    - target: /var/www/html
-    - depth: 1
-    - retry:
-        attempts: 3
-        interval: 3
+frontend-release-linked:
+  file.symlink:
+    - name: /var/www/html
+    - target: /opt/autopi/frontend/{{ frontend_version }}/dist
+    - force: true
+    - require:
+      - archive: frontend-release-extracted
 
 frontend-env-file-created:
   file.managed:
     - name: /var/www/html/env.js
     - source: salt://ui/env.js.jinja
     - template: jinja
+    - require:
+      - file: frontend-release-linked
