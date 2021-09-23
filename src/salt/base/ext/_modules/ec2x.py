@@ -943,6 +943,11 @@ def delete_file(name, storage="ufs"):
 
 def sms_format_config(value=None):
     """
+    Gets or sets the SMS format configuration.
+
+    Possible values:
+      - 0: PDU mode - entire TP data units used (hex responses). This is the default value.
+      - 1: Text mode - headers and body of the message given as separate parameters.
     """
 
     if value != None:
@@ -958,6 +963,9 @@ def sms_format_config(value=None):
 def list_sms():
     """
     List all messages from message storage.
+
+    NOTE: In order to use this function, you need to first execute `ec2x.sms_format_config value=1`
+    to set the correct format of the SMS messages.
     """
 
     res = query('AT+CMGL="all"')
