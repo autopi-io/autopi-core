@@ -10,7 +10,7 @@ import time
 import urlparse
 import uuid
 
-from common_util import ensure_primitive, last_iter
+from common_util import ensure_primitive, last_iter, force_kwargs
 from salt_more import cached_loader, SuperiorCommandExecutionError
 from timeit import default_timer as timer
 
@@ -622,33 +622,68 @@ class EventDrivenMessageProcessor(MessageProcessor):
         # Add given workflow hooks
         for hook in hooks or []:
             try:
+                if not "." in hook["func"]:
+                    hook_func = self._hook_funcs[hook["func"]]
 
-                # Special handling of returners
-                if hook["kind"] == "returner":
-                    returners = cached_loader(__salt__, __opts__, "returners", context=self._context)
-                    returner_func = returners[hook["func"]]
+                    if "args" in hook or "kwargs" in hook:
 
-                    # Wrap returner function to add defined args and kwargs
-                    def returner_wrapper(message, result, hook=hook, returner_func=returner_func):
+                        @force_kwargs(_hook=hook, _hook_func=hook_func)
+                        def hook_wrapper(*args, **kwargs):
+                            hook = kwargs.pop("_hook")
+                            hook_func = kwargs.pop("_hook_func")
 
-                        # Skip empty results
-                        if not result:
-                            return
+                            args = list(args) + hook.get("args", [])
+                            kwargs.update(hook.get("kwargs", {}))
 
-                        args = hook.get("args", [])
-                        kwargs = hook.get("kwargs", {})
+                            return hook_func(*args, **kwargs)
 
-                        # Automatically set namespace as kind for data results
-                        if not args and returner_func.__name__ == "returner_data":
-                            args.append(self._namespace)
+                        hook_func = hook_wrapper
 
-                        return returner_func(result, *args, **kwargs)
-
-                    self.add_hook(hook["name"], hook["kind"], returner_wrapper, synchronize=hook.get("lock", False))
-
+                    self.add_hook(hook["name"], hook["kind"], hook_func, synchronize=hook.get("lock", False))
                 else:
-                    modules = cached_loader(__salt__, __opts__, "modules", context=self._context)
-                    self.add_hook(hook["name"], hook["kind"], modules[hook["func"]], synchronize=hook.get("lock", False))
+
+                    # Special handling of returners
+                    if hook["kind"] == "returner":
+                        returners = cached_loader(__salt__, __opts__, "returners", context=self._context)
+                        returner_func = returners[hook["func"]]
+
+                        # Wrap returner function to add defined args and kwargs
+                        def returner_returner_wrapper(message, result, hook=hook, returner_func=returner_func):
+
+                            # Skip empty results
+                            if not result:
+                                return
+
+                            args = hook.get("args", [])
+                            kwargs = hook.get("kwargs", {})
+
+                            # Automatically set namespace as kind for data results
+                            if not args and returner_func.__name__ == "returner_data":
+                                args.append(self._namespace)
+
+                            return returner_func(result, *args, **kwargs)
+
+                        self.add_hook(hook["name"], hook["kind"], returner_returner_wrapper, synchronize=hook.get("lock", False))
+
+                    else:
+                        modules = cached_loader(__salt__, __opts__, "modules", context=self._context)
+                        hook_func = modules[hook["func"]]
+
+                        if "args" in hook or "kwargs" in hook:
+
+                            @force_kwargs(_hook=hook, _hook_func=hook_func)
+                            def hook_wrapper(*args, **kwargs):
+                                hook = kwargs.pop("_hook")
+                                hook_func = kwargs.pop("_hook_func")
+
+                                args = list(args) + hook.get("args", [])
+                                kwargs.update(hook.get("kwargs", {}))
+
+                                return hook_func(*args, **kwargs)
+
+                            hook_func = hook_wrapper
+
+                        self.add_hook(hook["name"], hook["kind"], hook_func, synchronize=hook.get("lock", False))
 
             except Exception:
                 log.exception("Failed to add hook: {:}".format(hook))
