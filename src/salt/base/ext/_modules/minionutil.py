@@ -4,6 +4,7 @@ import salt.exceptions
 import salt.utils.event
 import salt.utils.jid
 import time
+import os
 
 from retrying import retry
 from salt.utils.network import host_to_ips as _host_to_ips
@@ -313,7 +314,7 @@ def update_release(force=False, dry_run=False, only_retry=False):
     return ret
 
 
-def change_master(host, confirm=False):
+def change_master(host, confirm=False, show_changes=False):
     """
     Change to different master host.
 
@@ -322,6 +323,16 @@ def change_master(host, confirm=False):
 
     Optional arguments:
       - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
+      - show_changes (bool): Show the changes made in the files '/etc/salt/minion' and '/boot/host.aliases'. Default is 'False'.
+
+    NOTE: When the master (hub) is changed, the API endpoint URL won't be updated automatically
+    unless there is a pending sync (for example coming from an update) that will execute the
+    minion.config state.
+
+    NOTE: When moving back and forth between envs and the key hasn't been accepted,
+    the device will keep retrying to connect to the master. If then the salt-minion service
+    is restarted, the service won't shutdown until a SIGKILL is sent to the process (i.e. the
+    salt-minion service will keep retrying to connect to the salt-master)
     """
 
     if not confirm:
@@ -330,11 +341,19 @@ def change_master(host, confirm=False):
 
     ret = {}
 
+    # remove master keys
+    # NOTE: The removal of the pki keys will make it lose connection to the master, i.e. it's
+    # not possible to reach the minion after the command is executed
     ret["master_key_removed"] = __salt__["file.remove"]("/etc/salt/pki/minion/minion_master.pub")
 
-    ret["config_changed"] = __salt__["file.replace"]("/etc/salt/minion", "^master:.*$", "master: {:s}".format(host))
+    # change master in minion config to "hub"
+    ret["config_changed"] = __salt__["file.replace"]("/etc/salt/minion", "^master:.*$", "master: hub", show_changes=show_changes)
 
-    ret["restart"] = restart()
+    # set host.aliases to the actual host
+    ret["host_aliases_changed"] = __salt__["file.replace"]("/boot/host.aliases", "^hub .*$", "hub {}".format(host), show_changes=show_changes)
+
+    # restart minion to read the boot/host.aliases file again
+    ret["restart"] = request_restart(expiration=1, reason="Master host changed")
 
     return ret
 
