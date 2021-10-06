@@ -277,3 +277,18 @@ def force_kwargs(**defaultKwargs):
         return g
 
     return decorator
+
+
+def min_max(it):
+    min_val = max_val = None
+
+    for val in it:
+        if val is None:
+            continue
+
+        if min_val is None or val < min_val:
+            min_val = val
+        if max_val is None or val > max_val:
+            max_val = val
+
+    return min_val, max_val

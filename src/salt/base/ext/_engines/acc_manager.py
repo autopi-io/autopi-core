@@ -10,8 +10,8 @@ import RPi.GPIO as gpio
 import salt.loader
 import threading
 
-from common_util import abs_file_path, factory_rendering
-from messaging import EventDrivenMessageProcessor, filter_out_unchanged
+from common_util import abs_file_path, factory_rendering, min_max
+from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
 from threading_more import intercept_exit_signal, TimedEvent
 from timeit import default_timer as timer
 
@@ -226,6 +226,77 @@ def alternating_readout_filter(result):
     """
 
     return filter_out_unchanged(result, context=context["readout"])
+
+
+@edmp.register_hook(synchronize=False)
+def motion_event_trigger(result, g_change=0.075, duration=1):
+    """
+    Triggers 'vehicle/motion/jolting' and 'vehicle/motion/steady' events based on accelerometer XYZ readings.
+
+    Optional arguments:
+      - g_change (float): The amount of change in G force that will trigger a 'vehicle/motion/jolting' event. Default value is 0.075.
+      - duration (float): How long in seconds should the G force change be observed over? Default value is 1.
+    """
+
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Motion event trigger got error result: {:}".format(result))
+
+        return
+
+    if result.get("_type", None) != "xyz":
+        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(key, result))
+
+        return
+
+    ctx = __context__.setdefault("motion", {})
+
+    # Prepare context
+    data_rate = conn.rate  # In Hz
+    if data_rate != ctx.get("data_rate", 0):
+        window_size = max(int(data_rate * duration), 2)  # Minimum buffer size is 2
+
+        # (Re)initialize context
+        ctx["data_rate"] = data_rate
+        ctx["window_size"] = window_size
+        ctx["axis_windows"] = {k: [None] * window_size for k in ["x", "y", "z"]}
+        ctx["window_cursor"] = 0
+
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("(Re)initialized motion context: {:}".format(ctx))
+
+    changes = {}
+
+    # Reset window cursor
+    if ctx["window_cursor"] >= ctx["window_size"]:
+        ctx["window_cursor"] = 0
+
+    # Store result in FIFO window for each axis
+    for axis, window in ctx["axis_windows"].iteritems():
+        window[ctx["window_cursor"]] = result[axis]
+
+        # Calculate the largest possible difference within window
+        min_val, max_val = min_max(window)
+        diff = round(max_val - min_val, 2)
+        if abs(diff) >= g_change:
+            changes[axis] = diff
+
+    # Increment window cursor
+    ctx["window_cursor"] += 1
+
+    # Check if state has chaged since last known state
+    old_state = ctx.get("state", "")
+    new_state = "jolting" if changes else "steady"
+
+    if old_state != new_state:
+        ctx["state"] = new_state
+
+        # Trigger event
+        __salt__["minionutil.trigger_event"](
+            "vehicle/motion/{:s}".format(ctx["state"]),
+            data=changes)
 
 
 @edmp.register_hook(synchronize=False)
