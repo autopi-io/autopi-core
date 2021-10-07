@@ -45,7 +45,7 @@ obd-test:
         protocol: None
     - validate: ret["value"] > 12.0
 
-acc-test:
+acc-xyz-test:
   test.module:
     - name: acc.query
     - args:
@@ -64,7 +64,7 @@ acc-interrupt-timeout-check:
       - ret["interrupt"]["timeout"] <= 2
       - ret["interrupt"]["total"] > 0
 
-rpi-test:
+rpi-temp-test:
   test.module:
     - name: rpi.temp
     - validate:
@@ -83,6 +83,13 @@ power-test:
     - validate: '"spm" in ret'
     - validate: '"stn" in ret'
 
-rtc-test:
+rtc-i2c-present-test:
+  cmd.run:
+    - name: "i2cdetect -y 1 0x68 0x68 | grep UU"
+
+# Not required when testing HW because the command fails before RTC time has been set the first time (from NTP server)
+{%- if salt['pillar.get']('state', '') %}
+rtc-read-time-test:
   cmd.run:
     - name: "hwclock -r"
+{%- endif %}
