@@ -62,6 +62,16 @@ class RFIDReader():
         # grab device here
         self._dev.grab()
 
+    def translate_event_to_char(self, event):
+        """
+        Returns the character string or "$" if nothing was matched.
+        """
+
+        return EVENT_KEY_MAP.get(event.code, "$")
+
+    def is_key_down_event(self, event):
+        return event.type == evdev.ecodes.EV_KEY and event.value == 1
+
     def read(self, timeout=2):
         """
         Read an RFID or return within timeout.
@@ -71,33 +81,24 @@ class RFIDReader():
         time_left = timeout
         start = time.time()
 
-        while time_left > 0:
-            event = self._dev.read_one()
+        event = self._dev.read_one()
+
+        while time_left > 0 or event: # as long as we have time, but continue working if new events come in
 
             if event == None:
                 time.sleep(.1)
-                continue
-            else:
-                # read rest of line too
 
+            elif self.is_key_down_event(event):
+                # if it's enter, break the loop
+                if event.code == evdev.ecodes.KEY_ENTER:
+                    break
 
+                # otherwise, keep building the RFID
+                rfid += self.translate_event_to_char(event)
 
-
-        while time_left > 0:
-            event = self._dev.read_one()
-
-            if event == None:
-                time.sleep(.2) # don't loop too fast
-            else:
-                if event.type == evdev.ecodes.EV_KEY and event.value == 1: # only care about key-down events
-                    if event.code == evdev.ecodes.KEY_ENTER:
-                        # we're done here, have read a full RFID
-                        break
-                    rfid += EVENT_KEY_MAP.get(event.code, "$")
+            # get new event, recalc time_left
             time_left = timeout - (time.time() - start)
-
-        if rfid != "" and len(rfid) != 10:
-            raise ValueError("Got incomplete RFID: {}".format(rfid))
+            event = self._dev.read_one()
 
         return rfid or None
 
@@ -123,8 +124,9 @@ def reader_handler():
     """
 
     rfid = rfid_reader.read(timeout=2)
+    log.info("RECEIVED RFID: {}".format(rfid))
 
-    if not rfid:
+    if not rfid or len(rfid) != 10:
         return
 
     ret = {}
@@ -168,8 +170,6 @@ def authenticate_rfid_handler(rfid):
       conditions:
       - True
     """
-    log.info("FEDERLIZER: rfid: {}".format(rfid))
-
     ctx = context.setdefault("carstate", {})
 
     now = datetime.datetime.now()
@@ -187,11 +187,10 @@ def authenticate_rfid_handler(rfid):
             valid = True
 
     if not valid:
-        log.info("RFID chip {} rejected".format(rfid))
-        __salt__["audio.speak"]("Rejected.")
+        #__salt__["audio.speak"]("Rejected.")
         return
-    
-    __salt__["audio.speak"]("Authenticated.")
+
+    #__salt__["audio.speak"]("Authenticated.")
 
     car_locked = ctx.get("locked", True) # assume car is locked, TODO - probably shouldn't assume, decern it somehow if possible
 
@@ -202,15 +201,13 @@ def authenticate_rfid_handler(rfid):
     
     if car_locked:
         # unlock
-        log.info("FEDERLIZER: Unlocking vehicle...")
         __salt__["keyfob.action"]("unlock")
         ctx["locked"] = False
     else:
         # lock
-        log.info("FEDERLIZER: Locking vehicle...")
         __salt__["keyfob.action"]("lock")
         ctx["locked"] = True
-    
+
     context["carstate"] = ctx
 
 
