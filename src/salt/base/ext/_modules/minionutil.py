@@ -352,6 +352,9 @@ def change_master(host, confirm=False, show_changes=False):
     # set host.aliases to the actual host
     ret["host_aliases_changed"] = __salt__["file.replace"]("/boot/host.aliases", "^hub .*$", "hub {}".format(host), show_changes=show_changes)
 
+    # restart minion to read the boot/host.aliases file again
+    ret["restart"] = request_restart(expiration=1, reason="Master host changed")
+
     return ret
 
 
