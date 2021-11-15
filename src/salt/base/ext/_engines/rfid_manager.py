@@ -2,6 +2,8 @@ import evdev
 import logging
 import time
 import datetime
+import yaml
+import os
 
 from common_util import factory_rendering
 from messaging import EventDrivenMessageProcessor, extract_error_from
@@ -21,14 +23,9 @@ EVENT_KEY_MAP = {
     evdev.ecodes.KEY_9: "9",
 }
 
-rfid_tokens = [
-    { "valid_from": '2021-09-25T11:30:00', "valid_for": 7200, "rfid": "0003858905" },
-    { "valid_from": '2021-10-25T08:00:00', "valid_for": 3600, "rfid": "0003858905" },
-    { "valid_from": '2021-10-25T11:30:00', "valid_for": 7200, "rfid": "0003858905" },
-    { "valid_from": '2021-10-26T09:30:00', "valid_for": 7200, "rfid": "0011252203" },
-]
-
-context = {}
+context = {
+    "rfid_tokens": []
+}
 
 """
 - rfid_manager:
@@ -114,7 +111,7 @@ class RFIDReader():
 rfid_reader = None
 
 # Message processor
-edmp = EventDrivenMessageProcessor("rfid", context=context)
+edmp = EventDrivenMessageProcessor("rfid", context=context, default_hooks={ "workflow": "extended" })
 
 
 @edmp.register_hook(synchronize=False)
@@ -158,19 +155,11 @@ def rfid_read_trigger(result):
 @edmp.register_hook(synchronize=False)
 def authenticate_rfid_handler(rfid):
     """
-    reactor settings:
-
-    - keyword_resolve: true
-      name: authenticate_rfid
-      regex: ^system/rfid/read/(?P<rfid>[0-9]*)$
-      actions:
-      - handler: authenticate_rfid
-        args:
-        - $match.group('rfid')
-      conditions:
-      - True
     """
     ctx = context.setdefault("carstate", {})
+    rfid_tokens = context.get("rfid_tokens", [])
+
+    log.info("Authorized tokens: {}".format(rfid_tokens))
 
     now = datetime.datetime.now()
 
@@ -187,10 +176,10 @@ def authenticate_rfid_handler(rfid):
             valid = True
 
     if not valid:
-        #__salt__["audio.speak"]("Rejected.")
+        __salt__["audio.speak"]("Rejected.")
         return
 
-    #__salt__["audio.speak"]("Authenticated.")
+    __salt__["audio.speak"]("Authenticated.")
 
     car_locked = ctx.get("locked", True) # assume car is locked, TODO - probably shouldn't assume, decern it somehow if possible
 
@@ -211,6 +200,29 @@ def authenticate_rfid_handler(rfid):
     context["carstate"] = ctx
 
 
+@edmp.register_hook()
+def read_settings_handler():
+    """
+    Read and apply settings from /opt/autopi/rfid/settings.yaml
+    """
+
+    ret = {}
+    ret["settings_updated"] = False
+
+    if not os.path.isfile("/opt/autopi/rfid/settings.yaml"): # file or path doesn't exist
+        return ret
+
+    with open("/opt/autopi/rfid/settings.yaml", "r") as settings_file:
+        new_settings = yaml.load(settings_file)
+
+    context["rfid_tokens"] = new_settings.get("authorized_tokens", [])
+
+    ret["settings_updated"] = True
+    ret["new_settings_read"] = new_settings
+
+    return ret
+
+
 @factory_rendering
 def start(**settings):
     global rfid_reader
@@ -222,6 +234,11 @@ def start(**settings):
             raise ValueError("rfid_device needs to be a valid path to the RFID event device")
 
         context["settings"] = settings
+
+        # Init RFID settings
+        res = read_settings_handler()
+        if not res.get("settupgs_updated", False):
+            log.warning("RFID specific settings couldn't be read.")
 
         # Init RFID reader
         rfid_reader = RFIDReader(settings.get("rfid_device"))
