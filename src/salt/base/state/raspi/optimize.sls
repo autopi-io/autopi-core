@@ -26,13 +26,6 @@ alsa-restore-masked:
   service.masked:
     - name: alsa-restore
 
-dphys-swapfile-disabled:
-  service.disabled:
-    - name: dphys-swapfile
-dphys-swapfile-masked:
-  service.masked:
-    - name: dphys-swapfile
-
 ipv6-disabled:
   file.replace:
     - name: /etc/modprobe.d/ipv6.conf
