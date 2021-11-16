@@ -1,11 +1,13 @@
 import logging
 import re
 import time
+import salt.exceptions
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from messaging import EventDrivenMessageProcessor
 from serial_conn import SerialConn
 from threading_more import intercept_exit_signal
+from parsing import _parse_dict
 
 
 log = logging.getLogger(__name__)
@@ -337,6 +339,157 @@ def sync_time_handler(force=False):
             log.warning("Unable to update time of module's RTC: {:}".format(res["error"]))
 
     return ret
+
+
+@edmp.register_hook()
+def sms_format_config_handler(value=None):
+    """
+    Gets or sets the SMS format configuration.
+
+    Possible values:
+      - 0: PDU mode - entire TP data units used (hex responses). This is the default value.
+      - 1: Text mode - headers and body of the message given as separate parameters.
+    """
+
+    if value != None:
+        return exec_handler("AT+CMGF={:d}".format(value))
+
+    res = exec_handler("AT+CMGF?")
+    if "data" in res:
+        res["value"] = int(_parse_dict(res.pop("data"))["+CMGF"])
+
+    return res
+
+
+@edmp.register_hook()
+def list_sms_handler():
+    """
+    List all messages from message storage.
+
+    NOTE: In order to use this function, you need to first execute `ec2x.sms_format_config value=1`
+    to set the correct format of the SMS messages.
+    """
+    res = exec_handler('AT+CMGL="all"')
+
+    return res
+
+
+@edmp.register_hook()
+def delete_sms_handler(index=None, delete_all=False, confirm=False):
+    """
+    Delete messages from message storage.
+
+    It is possible to list possible for deleting if no indexes are passed and the 'delete_all' kwarg is not passed (or set to 'False').
+
+    Keyword argumnets:
+      - index (int): The index of the message to be deleted. Default None.
+      - delete_all (bool): Set this boolean to true if all messages stored in the modem should be deleted. Default 'False'.
+      - confirm (bool): A confirm flag when deleting messages. Default 'False'.
+    """
+
+    # list delete-able messages
+    if index == None and delete_all == False:
+        res = exec_handler("AT+CMGD=?")
+        return res
+
+    # or actually delete messages
+    if not confirm:
+        raise salt.exceptions.CommandExecutionError(
+            "This command will delete SMS messages stored on the modem - add parameter 'confirm=true' to continue anyway.")
+
+    if delete_all:
+        log.info("Deleting all SMS messages stored in the modem's memory")
+        res = exec_handler("AT+CMGD=1,4")
+    else:
+        log.info("Deleting a single SMS message with index {}".format(index))
+        res = exec_handler("AT+CMGD={},0".format(index))
+
+    return res
+
+
+@edmp.register_hook()
+def read_sms_handler():
+    """
+    Reads SMS messages stored in the modem and processes them into 'system/sms/received' events.
+    Those events hold information such as the timestamp of the message (when it was received by the
+    modem), the sender and the text. Messages will be deleted from the modem after being processed.
+
+    NOTE: This function will configure the SMS format to text mode. This is necessary in order to read
+    the messages correctly. If necessary, revert the configuration with the 'ec2x.sms_format_config'
+    command.
+    """
+
+    # read messages
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Configuring the SMS format to text mode")
+
+    sms_format_config_handler(value=1) # make SMS messages readable
+    list_sms_res = list_sms_handler()
+
+    if not list_sms_res.get("data", None):
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("No SMS messages to process, skipping read_sms_handler execution")
+        return
+
+    new_sms = list_sms_res["data"]
+    log.info("New SMS have been received and will be processed: {}".format(new_sms))
+
+    # go through new messages, trigger events for those
+    sms_to_process = []
+    for i in range(0, len(new_sms), 2):
+        message_meta = new_sms[i]
+        message_text = new_sms[i+1]
+
+        index, message_status, sender, _, date, time = [m.strip("\"") for m in message_meta[7:].split(",")]
+
+        # NV NOTE: Since the modem stores a time offset value (timezone info) we need to use that
+        # to calculate the timestamp to be in UTC. Keep in mind that this calculation has only been
+        # tested in a single timezone and more testing might need to be done.
+
+        # example timestamp from modem:    21/11/16,14:10:00+04 (each offset increment equals 15 minutes)
+        # utc timestamp after calculation: 2021-11-16T13:10:00
+        time_offset_sign = time[-3:-2]
+        time_offset = int(time[-2:])
+        offset_duration = timedelta(minutes=(15 * time_offset))
+
+        sms_timestamp = datetime.strptime(
+            "{}T{}".format(date, time[:-3]),
+            "%y/%m/%dT%H:%M:%S")
+
+        if time_offset_sign == "+":
+            sms_timestamp = sms_timestamp - offset_duration
+        elif time_offset_sign == "-":
+            sms_timestamp = sms_timestamp + offset_duration
+        else:
+            raise Exception("Received an unexpected time offset sign: {}".format(time_offset_sign))
+
+        # timestamp calculation done
+
+        sms = {
+            "index": index,
+            "message_status": message_status,
+            "sender": sender,
+            "timestamp": sms_timestamp.isoformat(),
+            "text": message_text,
+        }
+
+        sms_to_process.append(sms)
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Preparing to delete SMS messages from modem: {}".format(sms_to_process))
+
+    # process SMS
+    sms_to_delete = []
+    for sms in sms_to_process:
+        # trigger event
+        __salt__["minionutil.trigger_event"]("system/sms/received", data={
+            "sender": sms["sender"],
+            "timestamp": sms["timestamp"],
+            "text": sms["text"],
+        })
+
+        # delete SMS from modem
+        delete_sms_handler(index=sms["index"], confirm=True)
 
 
 @intercept_exit_signal

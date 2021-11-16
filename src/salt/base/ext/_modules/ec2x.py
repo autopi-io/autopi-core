@@ -933,17 +933,10 @@ def sms_format_config(value=None):
       - 1: Text mode - headers and body of the message given as separate parameters.
     """
 
-    if value != None:
-        return query("AT+CMGF={:d}".format(value))
-
-    res = query("AT+CMGF?")
-    if "data" in res:
-        res["value"] = int(_parse_dict(res.pop("data"))["+CMGF"])
-
-    return res
+    return client.send_sync(_msg_pack(value=value, _handler="sms_format_config"))
 
 
-def list_sms():
+def list_sms(*args, **kwargs):
     """
     List all messages from message storage.
 
@@ -951,9 +944,24 @@ def list_sms():
     to set the correct format of the SMS messages.
     """
 
-    res = query('AT+CMGL="all"')
+    return client.send_sync(_msg_pack(*args, _handler="list_sms", **kwargs))
 
-    return res
+
+def delete_sms(index=None, delete_all=False, confirm=False, **kwargs):
+    """
+    Delete messages from message storage.
+
+    It is possible to list possible for deleting if no indexes are passed and the 'delete_all' kwarg is not passed (or set to 'False').
+
+    Keyword argumnets:
+      - index (int): The index of the message to be deleted. Default None.
+      - delete_all (bool): Set this boolean to true if all messages stored in the modem should be deleted. Default 'False'.
+      - confirm (bool): A confirm flag when deleting messages. Default 'False'.
+    """
+
+    return client.send_sync(_msg_pack(
+        index=index, delete_all=delete_all, confirm=confirm,
+        _handler="delete_sms", **kwargs))
 
 
 def roaming(value=None):
