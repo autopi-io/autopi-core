@@ -36,3 +36,20 @@ def into_dict_parser(str, root={}, lines_parser=lines_parser, separator=":", val
             root[key] = value_parser(val) if value_parser else val
 
     return root
+
+
+def _parse_dict(data, separator=": ", multiline=False):
+    ret = {}
+
+    lines = data if isinstance(data, list) else [data]
+    pairs = (l.split(separator) for l in lines)
+    for k, v in pairs:
+        if k in ret:
+            if isinstance(ret[k], list):
+                ret[k].append(v)
+            else:
+                ret[k] = [ret[k], v]
+        else:
+            ret[k] = v if not multiline and not isinstance(v, list) else [v]
+
+    return ret

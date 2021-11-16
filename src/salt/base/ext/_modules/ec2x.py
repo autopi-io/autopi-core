@@ -7,6 +7,7 @@ import pynmea2
 
 from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 from pynmea2 import nmea_utils
+from parsing import _parse_dict
 
 
 log = logging.getLogger(__name__)
@@ -16,24 +17,6 @@ client = EventDrivenMessageClient("ec2x")
 
 def __init__(opts):
     client.init(opts)
-
-
-# TODO: Move to _utils/parsing.py?
-def _parse_dict(data, separator=": ", multiline=False):
-    ret = {}
-
-    lines = data if isinstance(data, list) else [data]
-    pairs = (l.split(separator) for l in lines)
-    for k, v in pairs:
-        if k in ret:
-            if isinstance(ret[k], list):
-                ret[k].append(v)
-            else:
-                ret[k] = [ret[k], v]
-        else:
-            ret[k] = v if not multiline and not isinstance(v, list) else [v]
-
-    return ret
 
 
 def help():
