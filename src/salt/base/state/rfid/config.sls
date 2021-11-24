@@ -1,5 +1,3 @@
-
-{%- if salt['pillar.get']('rfid:authorized_tokens') %}
 rfid-settings-configured:
   file.serialize:
     - name: /opt/autopi/rfid/settings.yaml
@@ -8,9 +6,10 @@ rfid-settings-configured:
     - formatter: yaml
     - show_changes: True
 
-rfid-settings-read:
+{%- if salt['pillar.get']('rfid') %}
+rfid-settings-loaded:
   module.run:
-    - name: rfid.read_settings
+    - name: rfid.load_settings
     - require:
       - file: rfid-settings-configured
 {%- endif %}

@@ -1,130 +1,37 @@
-import evdev
 import logging
-import time
 import datetime
 import yaml
 import os
 
 from common_util import factory_rendering
 from messaging import EventDrivenMessageProcessor, extract_error_from
+from rfidreader_conn import RFIDReader
 
 log = logging.getLogger(__name__)
 
-EVENT_KEY_MAP = {
-    evdev.ecodes.KEY_0: "0",
-    evdev.ecodes.KEY_1: "1",
-    evdev.ecodes.KEY_2: "2",
-    evdev.ecodes.KEY_3: "3",
-    evdev.ecodes.KEY_4: "4",
-    evdev.ecodes.KEY_5: "5",
-    evdev.ecodes.KEY_6: "6",
-    evdev.ecodes.KEY_7: "7",
-    evdev.ecodes.KEY_8: "8",
-    evdev.ecodes.KEY_9: "9",
-}
-
 context = {
-    "rfid_tokens": []
+    "authorized_tokens": []
 }
 
-"""
-- rfid_manager:
-    rfid_device: /dev/autopi-rfid
-    workers:
-    - auto_start: true
-      name: rfid_reader
-      interval: 2
-      loop: -1
-      messages:
-      - handler: reader
-        trigger: rfid_read
-    reactors:
-    - keyword_resolve: true
-      name: authenticate_rfid
-      regex: ^system/rfid/read/(?P<rfid>[0-9]*)$
-      actions:
-      - handler: authenticate_rfid
-        args:
-        - $match.group('rfid')
-"""
-
-
-class RFIDReader():
-
-    def __init__(self, dev_path):
-        self._dev_path = dev_path
-        self._dev = evdev.InputDevice(dev_path)
-        self._rfids_read = []
-
-        # grab device here
-        self._dev.grab()
-
-    def translate_event_to_char(self, event):
-        """
-        Returns the character string or "$" if nothing was matched.
-        """
-
-        return EVENT_KEY_MAP.get(event.code, "$")
-
-    def is_key_down_event(self, event):
-        return event.type == evdev.ecodes.EV_KEY and event.value == 1
-
-    def read(self, timeout=2):
-        """
-        Read an RFID or return within timeout.
-        """
-
-        rfid = ""
-        time_left = timeout
-        start = time.time()
-
-        event = self._dev.read_one()
-
-        while time_left > 0 or event: # as long as we have time, but continue working if new events come in
-
-            if event == None:
-                time.sleep(.1)
-
-            elif self.is_key_down_event(event):
-                # if it's enter, break the loop
-                if event.code == evdev.ecodes.KEY_ENTER:
-                    break
-
-                # otherwise, keep building the RFID
-                rfid += self.translate_event_to_char(event)
-
-            # get new event, recalc time_left
-            time_left = timeout - (time.time() - start)
-            event = self._dev.read_one()
-
-        return rfid or None
-
-    def close(self):
-        """
-        Close down device and cleanup.
-        """
-
-        self._dev.close()
-
-
-# RFID reader
 rfid_reader = None
-
-# Message processor
 edmp = EventDrivenMessageProcessor("rfid", context=context, default_hooks={ "workflow": "extended" })
 
 
 @edmp.register_hook(synchronize=False)
 def reader_handler():
     """
-    Continuously reads input from RFID reader.
+    Reads input from the RFID reader.
     """
 
     rfid = rfid_reader.read(timeout=2)
-    log.info("RECEIVED RFID: {}".format(rfid))
 
-    if not rfid or len(rfid) != 10:
+    # no RFID chip was close to reader, skip
+    if rfid == None:
         return
+
+    # partial RFID received, this should be an error
+    if len(rfid) != 10:
+        raise Warning("Received an RFID that is not 10 characters long: {}".format(rfid))
 
     ret = {}
     ret["_type"] = "read"
@@ -136,7 +43,9 @@ def reader_handler():
 @edmp.register_hook(synchronize=False)
 def rfid_read_trigger(result):
     """
-    Triggers events when a new RFID is read.
+    Triggers 'system/rfid/<rfid>/read' events when RFID chips are read.
+
+    NOTE: Use in conjunction with reader_handler.
     """
 
     if not result:
@@ -149,62 +58,68 @@ def rfid_read_trigger(result):
         raise error
     
     # trigger event
-    __salt__["minionutil.trigger_event"]("system/rfid/read/{}".format(result["value"]))
+    __salt__["minionutil.trigger_event"]("system/rfid/{}/read".format(result["value"]))
 
 
 @edmp.register_hook(synchronize=False)
 def authenticate_rfid_handler(rfid):
     """
-    """
-    ctx = context.setdefault("carstate", {})
-    rfid_tokens = context.get("rfid_tokens", [])
+    If there are any authorized_tokens saved in context, this handler will attempt to authenticate
+    an RFID against those tokens. Triggers 'system/rfid/<rfid>/rejected' and
+    'system/rfid/<rfid>/authenticated' events.
 
-    log.info("Authorized tokens: {}".format(rfid_tokens))
+    If the tokens get updated in /opt/autopi/rfid/settings.yaml the manager needs to know about
+    the changes - use 'load_settings_handler' to reload the settings.
+    """
+
+    authorized_tokens = context.get("authorized_tokens", [])
+
+    if len(authorized_tokens) == 0:
+        log.info("No RFID tokens configured, skipping handler execution")
+        __salt__["minionutil.trigger_event"]("system/rfid/{}/rejected".format(rfid))
+        __salt__["audio.play"]("/opt/autopi/audio/sound/beep.wav")
+        return
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Configured RFID tokens: {}".format(authorized_tokens))
 
     now = datetime.datetime.now()
 
-    valid = False
-    for token in rfid_tokens:
+    valid_token = None
+    for token in authorized_tokens:
         if rfid != token["rfid"]:
-            # rfid keys don't match
+            log.info("RFID donesn't match token provided RFID, skipping")
             continue
 
         valid_from = datetime.datetime.strptime(token["valid_from"], '%Y-%m-%dT%H:%M:%S')
         valid_for = datetime.timedelta(seconds=token["valid_for"])
 
+        # is it time for this token to be valid?
         if now >= valid_from and now <= valid_from + valid_for:
-            valid = True
+            valid_token = token
 
-    if not valid:
-        __salt__["audio.speak"]("Rejected.")
+    # REJECT token
+    if valid_token == None:
+        __salt__["minionutil.trigger_event"]("system/rfid/{}/rejected".format(rfid))
+        __salt__["audio.play"]("/opt/autopi/audio/sound/beep.wav")
         return
 
-    __salt__["audio.speak"]("Authenticated.")
-
-    car_locked = ctx.get("locked", True) # assume car is locked, TODO - probably shouldn't assume, decern it somehow if possible
-
-    # ensure keyfob is on
-    keyfob_power_res = __salt__["keyfob.power"]()
-    if not keyfob_power_res["value"]:
-        __salt__["keyfob.power"](value=True)
-    
-    if car_locked:
-        # unlock
-        __salt__["keyfob.action"]("unlock")
-        ctx["locked"] = False
-    else:
-        # lock
-        __salt__["keyfob.action"]("lock")
-        ctx["locked"] = True
-
-    context["carstate"] = ctx
+    # AUTHENTICATE token
+    __salt__["minionutil.trigger_event"](
+        "system/rfid/{}/authenticated".format(rfid),
+        data={
+            "valid_from": valid_token["valid_from"],
+            "valid_for": valid_token["valid_for"],
+        })
 
 
-@edmp.register_hook()
-def read_settings_handler():
+@edmp.register_hook(synchronize=False)
+def load_settings_handler():
     """
-    Read and apply settings from /opt/autopi/rfid/settings.yaml
+    Read the settings file stored in /opt/autopi/rfid/settings.yaml and load it.
     """
+    # TODO: NV we might want to make a check on the file before we read - make sure all
+    # the settings are set in the proper format, etc.
 
     ret = {}
     ret["settings_updated"] = False
@@ -215,10 +130,10 @@ def read_settings_handler():
     with open("/opt/autopi/rfid/settings.yaml", "r") as settings_file:
         new_settings = yaml.load(settings_file)
 
-    context["rfid_tokens"] = new_settings.get("authorized_tokens", [])
+    context["authorized_tokens"] = new_settings.get("authorized_tokens", [])
 
     ret["settings_updated"] = True
-    ret["new_settings_read"] = new_settings
+    ret["value"] = new_settings
 
     return ret
 
@@ -236,9 +151,9 @@ def start(**settings):
         context["settings"] = settings
 
         # Init RFID settings
-        res = read_settings_handler()
+        res = load_settings_handler()
         if not res.get("settupgs_updated", False):
-            log.warning("RFID specific settings couldn't be read.")
+            log.warning("RFID specific settings couldn't be loaded.")
 
         # Init RFID reader
         rfid_reader = RFIDReader(settings.get("rfid_device"))
@@ -253,7 +168,7 @@ def start(**settings):
         edmp.run()
     
     except Exception:
-        log.exception("Failed to start key fob manager")
+        log.exception("Failed to start RFID manager")
         raise
 
     finally:
