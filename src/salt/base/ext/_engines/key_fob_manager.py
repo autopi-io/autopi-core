@@ -240,6 +240,59 @@ def action_handler(*names):
     return ret
 
 
+@edmp.register_hook(synchronize=False)
+def toggle_action_handler(action_name, default=False):
+    """
+    Toggle an action. The action that's being toggled needs to be defined with an 'opposite' field
+    containing the name of the opposite action. The function will toggle the two actions each
+    time it is called with either name.
+
+    Parameters:
+      - default (bool) - What should the default state of these actions be set to. (default False)
+    """
+
+    actions = context.get("actions", {})
+
+    # action exists?
+    if action_name not in actions:
+        raise Exception("No key fob action found by name '{:}'".format(name))
+
+    # does the action have an opposite action?
+    if not actions[action_name].get("opposite", None):
+        raise Exception("Action must specify an 'opposite' action")
+
+    # ensure keyfob is powered
+    keyfob_power_res = power_handler()
+    if not keyfob_power_res["value"]:
+        power_handler(value=True)
+
+    # execute the current or opposite action based on action_states
+    toggle_actions = context.setdefault("toggle_actions", {})
+    opposite_action_name = actions[action_name]["opposite"]
+
+    toggle_actions.setdefault(action_name, default)
+    toggle_actions.setdefault(opposite_action_name, default)
+
+    if toggle_actions[action_name]:
+        # opposite action needs to be executed
+        action_handler(opposite_action_name)
+
+        # update context
+        toggle_actions[action_name] = False
+        toggle_actions[opposite_action_name] = True
+
+    else:
+        # action name needs to be executed
+        action_handler(action_name)
+
+        # update context
+        toggle_actions[action_name] = True
+        toggle_actions[opposite_action_name] = False
+
+
+    context["toggle_actions"] = toggle_actions
+
+
 @intercept_exit_signal
 def start(**settings):
     try:
