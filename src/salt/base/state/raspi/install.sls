@@ -6,6 +6,7 @@ include:
   - .udev
   - .hwclock
   - .config
+  - .swap
 
 hosts-file-configured:
   host.only:
