@@ -5,6 +5,7 @@ import psutil
 import RPi.GPIO as gpio
 import time
 
+from common_util import call_retrying
 from messaging import EventDrivenMessageProcessor
 from threading_more import intercept_exit_signal
 
@@ -21,7 +22,7 @@ edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"handl
 # SPM connection is instantiated during start
 conn = None
 
-# PWM instance to control LED (only available for version 2.X)
+# PWM instance to control LED (only available for version >=2.X)
 led_pwm = None
 
 
@@ -44,7 +45,7 @@ def query_handler(cmd, **kwargs):
         ret["error"] = "Unsupported command: {:s}".format(cmd)
         return ret
 
-    res = func(**kwargs)
+    res = call_retrying(func, kwargs=kwargs, limit=3, wait=0.2, context=context.setdefault("errors", {}))
     if res != None:
         if isinstance(res, dict):
             ret.update(res)
@@ -66,7 +67,7 @@ def heartbeat_handler():
         if context["state"] != "on":
 
             # Get current status
-            res = conn.status()
+            res = call_retrying(conn.status, limit=3, wait=0.2, context=context.setdefault("errors", {}))
 
             old_state = context["state"]
             new_state = res["last_state"]["up"]
@@ -108,7 +109,7 @@ def heartbeat_handler():
     finally:
 
         # Trigger heartbeat as normal
-        conn.heartbeat()
+        call_retrying(conn.heartbeat, limit=3, wait=0.2, context=context.setdefault("errors", {}))
 
 
 @edmp.register_hook()
@@ -219,26 +220,37 @@ def start(**settings):
         gpio.setup(gpio_pin.HOLD_PWR, gpio.OUT, initial=gpio.LOW)
         gpio.setup(gpio_pin.SPM_RESET, gpio.OUT, initial=gpio.HIGH)
 
+        has_led = True
+
         # Initialize SPM connection
         global conn
-        if "i2c_conn" in settings:  # Version 2.X
+        if "spm3_conn" in settings:  # Version 3.X
+            from spm3_conn import SPM3Conn
+
+            conn = SPM3Conn()
+            conn.init(settings["spm3_conn"])
+
+        elif "i2c_conn" in settings:  # Version 2.X
             from spm2_conn import SPM2Conn
 
             conn = SPM2Conn()
             conn.init(settings["i2c_conn"])
-
-            # Initialize LED GPIO
-            gpio.setup(gpio_pin.LED, gpio.OUT)
-
-            global led_pwm
-            led_pwm = gpio.PWM(gpio_pin.LED, settings.get("led_pwm", {}).get("frequency", 2))
-            led_pwm.start(settings.get("led_pwm", {}).get("duty_cycle", 50))
 
         else:  # Version 1.X
             from spm_conn import SPMConn
 
             conn = SPMConn()
             conn.setup()
+
+            has_led = False
+
+        # Initialize LED GPIO, if available
+        if has_led:
+            gpio.setup(gpio_pin.LED, gpio.OUT)
+
+            global led_pwm
+            led_pwm = gpio.PWM(gpio_pin.LED, settings.get("led_pwm", {}).get("frequency", 2))
+            led_pwm.start(settings.get("led_pwm", {}).get("duty_cycle", 50))
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,

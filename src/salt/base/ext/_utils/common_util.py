@@ -6,6 +6,7 @@ import logging
 import logging.handlers
 import os
 import re
+import time
 
 from functools import wraps
 from timeit import default_timer as timer
@@ -292,3 +293,22 @@ def min_max(it):
             max_val = val
 
     return min_val, max_val
+
+
+def call_retrying(func, args=[], kwargs={}, limit=3, wait=0, context={}):
+    count = 0
+    while True:
+        try:
+            return func(*args, **kwargs)
+        except Exception as ex:
+            msg = str(ex)
+
+            context[msg] = context.setdefault(msg, 0) + 1
+
+            count += 1
+            if count < limit:
+                time.sleep(wait)
+
+                continue
+
+            raise ex
