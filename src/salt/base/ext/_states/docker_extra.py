@@ -52,9 +52,8 @@ def container_absent_except(name, containers, force=False, allow_remove_all=Fals
     to_remove = []
     log.debug('Containers on device: {}'.format(running_containers))
     for container_name in running_containers:
-        # if not [x for x in containers if re.match(container_name, x)]:
         if not container_name in containers: # Without regex...
-            log.debug('Container not recognized {}'.format(container_name))
+            log.debug('Container not recognized {}, will remove.'.format(container_name))
             to_remove.append(container_name)
         else:
             log.debug('Not removing container: {} as it is protected'.format(container_name))
