@@ -162,55 +162,68 @@ class SerialConn(object):
             ignore_empty_lines=True,
             echo_on=True,
             expect_multi_lines=False,
-            return_command=False):
+            return_command=False,
+            timeout=None):
 
         ret = {}
 
-        lines = []
-        chars = []
-        while True:
-            char = self._serial.read()
-            if not char:
-                log.error("Read timeout after waiting %f second(s)", self._serial.timeout)
-                # TODO: Mark timeout occured and next read might be false?
+        # Override default timeout if requested
+        if timeout != None and self._serial.timeout != timeout:
+            self._serial.timeout = timeout
 
-                ret["error"] = "Timeout"
-                break
+        try:
 
-            if char == line_separator:
-                line = "".join(chars).rstrip()
-                chars = []
+            lines = []
+            chars = []
+            while True:
+                char = self._serial.read()
+                if not char:
+                    log.error("Read timeout after waiting %f second(s)", self._serial.timeout)
+                    # TODO: Mark timeout occured and next read might be false?
 
-                log.debug("RX: %s", repr(line))
-
-                # Break if entire line matches ready word
-                if dedicated_ready_line and line == ready_word:
-                   break
-
-                match = error_regex.match(line)
-                if match:
-                    groups = match.groupdict()
-                    if groups:
-                        ret["error"] = groups
-                    else:
-                        ret["error"] = line
+                    ret["error"] = "Timeout"
                     break
 
-                if not ignore_empty_lines or line:
-                    lines.append(line)
-            else:
-                chars.append(char)
+                if char == line_separator:
+                    line = "".join(chars).rstrip()
+                    chars = []
 
-            # Break if current chars matches ready word
-            if not dedicated_ready_line and chars == list(ready_word):
-                break
+                    log.debug("RX: %s", repr(line))
 
-        if echo_on and lines:
-            if return_command:
-                ret["command"] = lines[0]
-            lines = lines[1:]
+                    # Break if entire line matches ready word
+                    if dedicated_ready_line and line == ready_word:
+                       break
 
-        if lines:
-            ret["data"] = lines[0] if len(lines) == 1 and not expect_multi_lines else lines
+                    match = error_regex.match(line)
+                    if match:
+                        groups = match.groupdict()
+                        if groups:
+                            ret["error"] = groups
+                        else:
+                            ret["error"] = line
+                        break
+
+                    if not ignore_empty_lines or line:
+                        lines.append(line)
+                else:
+                    chars.append(char)
+
+                # Break if current chars matches ready word
+                if not dedicated_ready_line and chars == list(ready_word):
+                    break
+
+            if echo_on and lines:
+                if return_command:
+                    ret["command"] = lines[0]
+                lines = lines[1:]
+
+            if lines:
+                ret["data"] = lines[0] if len(lines) == 1 and not expect_multi_lines else lines
+
+        finally:
+
+            # Restore default timeout if changed
+            if self._serial.timeout != self._settings["timeout"]:
+                self._serial.timeout = self._settings["timeout"]
 
         return ret
