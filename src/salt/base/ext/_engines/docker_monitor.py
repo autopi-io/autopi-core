@@ -32,7 +32,7 @@ def start(**settings):
             # Ensure that older events not caught when they occurred is still processed, else just proceed from "NOW"/Last event.
             since = int(time()) - past_events_seconds
 
-        for event in client.events(decode=True, since=since, filters={ "type": ["container", "image"], "event": ["start", "stop", "pull"] }):
+        for event in client.events(decode=True, since=since, filters={ "type": ["container", "image"], "event": ["start", "stop", "die", "pull"] }):
             # If event is newer than newest_event_timestamp, trigger events.
             if not context["newest_event_timestamp"] or event["time"] > context["newest_event_timestamp"]:
                 context["newest_event_timestamp"] = event["time"]
@@ -40,6 +40,7 @@ def start(**settings):
                 try:
                     event_string = "system/docker/{:}/{:}/{:}".format(event["Type"], event["Actor"]["Attributes"]["name"], event["Action"])
                     data = { k: v for k, v in event["Actor"]["Attributes"].items() }
+                    data.update({ "id": event.get('id', None) })
 
                     try:
                         if event.get("status", None) == "pull":
