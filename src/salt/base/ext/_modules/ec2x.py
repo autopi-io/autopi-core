@@ -4,10 +4,12 @@ import logging
 import nmea_util
 import os
 import pynmea2
+import re
 
 from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 from pynmea2 import nmea_utils
 from parsing import _parse_dict
+from common_util import dict_key_by_value
 
 
 log = logging.getLogger(__name__)
@@ -56,7 +58,7 @@ def query(cmd, cooldown_delay=None, **kwargs):
     Low-level function to execute AT commands.
     """
 
-    return client.send_sync(_msg_pack(cmd, cooldown_delay=cooldown_delay, **kwargs))
+    return client.send_sync(_msg_pack(cmd, cooldown_delay=cooldown_delay, **kwargs), timeout=kwargs.get('timeout', None))
 
     # TODO Sanity check
     #assert res.get("command", None) == cmd, "Received command '{:}' is not equal to sent command '{:}'".format(res.get("command", None), cmd)
@@ -1006,6 +1008,259 @@ def roaming(value=None):
         raise ValueError("Value of {} is not supported by this function".format(value))
 
     return res
+
+
+def operator_selection(search=False, mode=None, op_format=None, operator=None, access_tech=None):
+    """
+    This command returns the current operators and their status, and allows setting automatic or
+    manual network selection. There are three actions that can be achieved through this function.
+
+    The Search action returns a set of five parameters each representing an operator present in the
+    network. This list can later be used to attempt connecting to a specific operator.
+
+    The Read action returns the current mode and the currently selected operator. If no operator is
+    selected, <format>, <operator> and <access_tech> are omitted.
+
+    The Write action forces an attempt to select and register the GSM/UMTS network operator. If the
+    selected operator is not available, no other operator shall be selected (except when using <mode>=4).
+
+    Parameters:
+    - search (bool): Default False. Whether the search action should be executed. Search action attempts to
+      retrieve all currently available operators in the area. This can take a long time. If this
+      argument is provided, all other parameters will be ignored.
+    - mode (string): Default None. What mode should the operator selection be put in.
+    - op_format (string): Default None. In what format is the operator name written in.
+    - operator (string): Default None. The operator name to attempt a connection with.
+    - access_tech (string): Default None. The access technology that should be used.
+    """
+
+    # STATS
+    STAT_UNKNOWN            = 0
+    STAT_OPERATOR_AVAILABLE = 1
+    STAT_CURRENT_OPERATOR   = 2
+    STAT_OPERATOR_FORBIDDEN      = 3
+    STATS_MAP = {
+        "unknown": STAT_UNKNOWN,
+        "operator-available": STAT_OPERATOR_AVAILABLE,
+        "current-operator": STAT_CURRENT_OPERATOR,
+        "wperator-forbidden": STAT_OPERATOR_FORBIDDEN,
+    }
+
+    # MODES
+    MODE_AUTOMATIC                      = 0
+    MODE_MANUAL                         = 1
+    MODE_DEREGISTER                     = 2
+    MODE_SET_FORMAT                     = 3
+    MODE_MANUAL_AUTOMATIC = 4
+    MODES_MAP = {
+        "automatic": MODE_AUTOMATIC,
+        "manual": MODE_MANUAL,
+        "deregister": MODE_DEREGISTER,
+        "set-format": MODE_SET_FORMAT,
+        "manual-automatic": MODE_MANUAL_AUTOMATIC,
+    }
+
+    # FORMATS
+    FORMAT_LONG     = 0
+    FORMAT_SHORT    = 1
+    FORMAT_NUMERIC  = 2
+    FORMATS_MAP = {
+        "long": FORMAT_LONG,
+        "short": FORMAT_SHORT,
+        "numeric": FORMAT_NUMERIC,
+    }
+
+    # ACCESS TECHNOLOGIES
+    ACT_GSM                 = 0
+    ACT_UTRAN               = 2
+    ACT_GSM_W_EGPRS         = 3
+    ACT_UTRAN_W_HSDPA       = 4
+    ACT_UTRAN_W_HSUPA       = 5
+    ACT_UTRAN_W_HSDPA_HSUPA = 6
+    ACT_E_UTRAN             = 7
+    ACT_CDMA                = 100
+    ACTS_MAP = {
+        "gsm": ACT_GSM,
+        "utran": ACT_UTRAN,
+        "gsm-w-egprs": ACT_GSM_W_EGPRS,
+        "utran-w-hsdpa": ACT_UTRAN_W_HSDPA,
+        "utran-w-hsupa": ACT_UTRAN_W_HSUPA,
+        "utran-w-hsdpa-hsupa": ACT_UTRAN_W_HSDPA_HSUPA,
+        "e-utran": ACT_E_UTRAN,
+        "cdma": ACT_CDMA,
+    }
+
+    response_pattern = re.compile("^\+COPS:\s.*")
+
+    # TEST COMMAND
+    if search:
+        # timeout derived from spec sheet's Maximum Response Time for this command
+        available_operators_res = query("AT+COPS=?", timeout=180)
+        if not response_pattern.match(available_operators_res["data"]):
+            raise Exception("Received unexpected response from AT+COPS=? command: {}".format(available_operators_res))
+
+        # parse response
+        available_ops = available_operators_res["data"][7:].split(",,")[0].split("),")
+
+        ret = {
+            "operators": [],
+        }
+
+        for operator in available_ops:
+            operator = operator.strip("(")
+            operator = operator.strip(")")
+
+            stat, long_op, short_op, numeric_op, act = operator.split(",")
+
+            ret["operators"].append({
+                "stat": dict_key_by_value(STATS_MAP, int(stat)),
+                "long_op": long_op.strip("\""),
+                "short_op": short_op.strip("\""),
+                "numeric_op": numeric_op.strip("\""),
+                "access_tech": dict_key_by_value(ACTS_MAP, int(act))
+            })
+
+        return ret
+
+    # READ COMMAND
+    if mode == None:
+        # execute command and check response
+        selected_operator_res = query("AT+COPS?")
+        if not response_pattern.match(selected_operator_res["data"]):
+            raise Exception("Received unexpected response from AT+COPS? command: {}".format(selected_operator_res))
+
+        # parse response
+        split_res = selected_operator_res["data"][7:].split(",")
+        log.info("FEDERLIZER: split_res: {}".format(split_res))
+
+        # required data returned by AT command
+        ret = {}
+        ret["mode"] = dict_key_by_value(MODES_MAP, int(split_res[0]))
+
+        # optional data returned by AT command
+        ret["op_format"] = dict_key_by_value(FORMATS_MAP, int(split_res[1])) if len(split_res) > 1 else None
+        ret["operator"] = split_res[2].strip("\"") if len(split_res) > 2 else None
+        ret["access_tech"] = dict_key_by_value(ACTS_MAP, int(split_res[3])) if len(split_res) > 3 else None
+
+        return ret
+
+    # WRITE COMMAND
+    else:
+        # checks need to be with None since some maps return falsy values (e.g. 0)
+        if MODES_MAP.get(mode, None) == None:
+            raise Exception("Mode '{}' doesn't exist. Available options: {}".format(mode, [m for m in MODES_MAP.keys()]))
+        if FORMATS_MAP.get(op_format, None) == None:
+            raise Exception("Format '{}' doesn't exist. Available options: {}".format(op_format, [f for f in FORMATS_MAP.keys()]))
+        if ACTS_MAP.get(access_tech, None) == None:
+            raise Exception("Access technology '{}' doesn't exist. Available options: {}".format(access_tech, [a for a in ACTS_MAP.keys()]))
+
+        at_cmd = "AT+COPS={},{},\"{}\",{}".format(
+            MODES_MAP[mode], FORMATS_MAP[op_format], operator, ACTS_MAP[access_tech])
+
+        res = query(at_cmd, timeout=180)
+        log.info("FEDERLIZER: res: {}".format(res))
+
+        return
+
+
+def modem_functionality(value=None, reset=False):
+    """
+    Get or set the modem's functionality level. There are three values that can be selected:
+
+    1. 'minimum' - minimal functionality level
+    2. 'full' - full functionality level
+    3. 'disable' - disable all communication going in and from the modem
+
+    Parameters:
+    - value (string): Default None. If the functionality level on the modem should be changed, this
+      parameter needs to be set to one of the three available values: ['minimum', 'full', 'disable']
+    - reset (boolean): Default False. This parameter is ignored if value == None. If set to a truthy
+      value, the modem will be completely restarted with the execution of this function
+    """
+    # FUNCTIONALITY LEVEL
+    FUNC_MINIMUM = 0
+    FUNC_FULL    = 1
+    FUNC_DISABLE = 4
+
+    FUNCS_MAP = {
+        "minimum":  FUNC_MINIMUM,
+        "full":     FUNC_FULL,
+        "disabled": FUNC_DISABLE
+    }
+
+    response_pattern = re.compile("^\+CFUN:\s.*")
+
+    # read
+    if value == None:
+        res = query("AT+CFUN?")
+        if not response_pattern.match(res["data"]):
+            raise Exception("Received unexpected response from AT+CFUN? command: {}".format(res))
+
+        ret = {
+            "value": dict_key_by_value(FUNCS_MAP, int(res["data"][7:])),
+        }
+
+    # write
+    else:
+        if FUNCS_MAP.get(value, None) == None:
+            raise Exception("Value '{}' doesn't exist. Available options: {}".format(value, [v for v in FUNCS_MAP.keys()]))
+
+        at_cmd = "AT+CFUN={}".format(FUNCS_MAP[value])
+        if reset:
+            at_cmd += ",1" # add a reset argument
+
+        query(at_cmd)
+        ret = {
+            "value": value,
+        }
+
+    return ret
+
+
+def network_registration_status():
+    """
+    Gets the network registration status from the modem. There are five possible results:
+
+    1. 'not-registered-not-searching': Modem isn't registered to a network. The modem isn't searching for a new network.
+    2. 'not-registered-searching': Modem isn't registered to a network, but searching for one.
+    3. 'registration-denied': Registration has been denied.
+    4. 'registered-home': Modem is registered to a home network.
+    5. 'registered-roaming': Modem is registered to a roaming network.
+    """
+    # REGISTRATION STATUSES
+    REG_NOT_SEARCHING = 0 # not registered, not searching
+    REG_SEARCHING = 2 # not registered, searching
+
+    REG_DENIED = 3 # registration denied (was likely attempted)
+    REG_UNKNOWN = 4 # well.. it's unknown, okay?
+
+    REG_HOME = 1 # registered to a home network
+    REG_ROAMING = 5 # registered to a roaming network
+
+    REGISTRATIONS_MAP = {
+        "not-registered-not-searching": REG_NOT_SEARCHING,
+        "not-registered-searching": REG_SEARCHING,
+        "registration-denied": REG_DENIED,
+        "unknown": REG_UNKNOWN,
+        "registered-home": REG_HOME,
+        "registered-roaming": REG_ROAMING,
+    }
+
+    response_pattern = re.compile("^\+CREG:\s.*")
+
+    res = query("AT+CREG?")
+    log.info("FEDERLIZER: received res: {}".format(res))
+
+    if not response_pattern.match(res["data"]):
+        raise Exception("Received unexpected response from AT+CREG? command: {}".format(res))
+
+    registration_status = res["data"][7:].split(",")[1]
+
+    ret = {
+        "value": dict_key_by_value(REGISTRATIONS_MAP, int(registration_status))
+    }
+
+    return ret
 
 
 def manage(*args, **kwargs):

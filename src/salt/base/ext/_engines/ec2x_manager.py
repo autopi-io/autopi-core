@@ -55,7 +55,7 @@ def connection_handler(close=False):
     return ret
 
 
-def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
+def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None, timeout=None):
     log.debug("Executing: %s", cmd)
 
     res = None
@@ -64,7 +64,7 @@ def _exec(cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None):
         conn.write_line(cmd)
 
         for ready_word in ready_words:
-            res = conn.read_until(ready_word, error_regex)
+            res = conn.read_until(ready_word, error_regex, timeout=timeout)
 
             if "error" in res:
                 break
