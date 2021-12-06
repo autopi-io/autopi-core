@@ -275,6 +275,7 @@ docker-registries-logged-in:
 docker-unknown-containers-removed:
   docker_extra.container_absent_except:
     - containers: {{ _known_containers|tojson }}
+    - allow_remove_all: true
     - force: true
 {%- endif %}
 
