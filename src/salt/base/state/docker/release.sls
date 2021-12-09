@@ -166,10 +166,8 @@ docker-registries-logged-in:
   test.succeed_without_changes:
     - name: 'docker:{{ proj['name'] }}@{{ proj['version'] }}'
     - comment: Version {{ proj['version'] }} released of project '{{ proj['name'] }}'
-    {%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
     - require_in: 
       - test: docker-unknown-containers-removed
-    {%- endif %}
 
 # Remove any unknown containers
 ###############################################################################
@@ -271,13 +269,11 @@ docker-registries-logged-in:
 # Remove all unknown containers
 ###############################################################################
 
-{%- if salt['pillar.get']('docker:remove_unknown_containers', default=False) %}
 docker-unknown-containers-removed:
   docker_extra.container_absent_except:
-    - containers: {{ _known_containers|tojson }}
+    - containers: {{ (_known_containers + salt['pillar.get']('docker:container_whitelist', default=[]))|tojson }}
     - allow_remove_all: true
     - force: true
-{%- endif %}
 
 # Log running containers
 ###############################################################################
