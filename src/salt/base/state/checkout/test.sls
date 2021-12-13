@@ -51,9 +51,9 @@ acc-xyz-test:
     - args:
       - xyz
     - validate:
-      - round(ret["x"], 1) == 0.0
-      - round(ret["y"], 1) == 0.0
-      - round(ret["z"], 1) == 1.0
+      - abs(ret["x"] - -1.0) < 0.1
+      - abs(ret["y"] - 0.0) < 0.1
+      - abs(ret["z"] - 0.0) < 0.1
 
 acc-interrupt-timeout-check:
   test.module:
