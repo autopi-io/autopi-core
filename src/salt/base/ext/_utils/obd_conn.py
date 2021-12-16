@@ -239,6 +239,8 @@ class OBDConn(object):
         elif not ident in self.supported_protocols():
             raise ValueError("Unsupported protocol specified")
 
+        log.info("Changing to protocol ID {:} with baudrate {:}".format(ident, baudrate))
+
         self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
     @Decorators.ensure_open
@@ -454,6 +456,10 @@ class OBDConn(object):
                     raise Exception("Failed to add '{:}' filter for CAN message '{:}': {:}".format(filter_type, msg, ex))
 
         log.info("Synced {:}/{:} filter(s) of type '{:}' from CAN DB".format(count, len(can_msgs), filter_type))
+
+    @property
+    def protocol_autodetect_interface(self):
+        return "ELM327"
 
     def _enrich_monitor_entry(self, res):
         ret = {
