@@ -121,6 +121,7 @@ def start(**settings):
 
         # Setup cache
         options = __salt__["config.get"]("cloud_cache")
+        options["unit_id"] = __salt__["config.get"]("id")
         options["endpoint"] = settings["endpoint"]
         cache.setup(**options)
 

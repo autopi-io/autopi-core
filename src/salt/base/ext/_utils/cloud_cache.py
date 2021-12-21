@@ -210,6 +210,8 @@ class CloudCache(object):
             "authorization": "token {:}".format(endpoint.get("auth_token")),
             "content-type": "application/json",
         }
+        if "unit_id" in self.options:
+            headers["unit-id"] = self.options["unit_id"]
 
         # Set correct content encoding when compression is enabled
         if "compression" in self.options:

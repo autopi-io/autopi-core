@@ -228,7 +228,7 @@ register_sim ()
     NET_REG_STATUS=$(autopi ec2x.network_registration_status)
     echo "ec2x.network_registration_status returned $NET_REG_STATUS"
 
-    echo "$NET_REG_STATUS" | egrep -q -v "not-registered-not-searching|not-registered-searching|registration-denied"
+    echo "$NET_REG_STATUS" | egrep -q "not-registered-not-searching|not-registered-searching|registration-denied"
     if [ $? -eq 0 ]; then # we don't want to be seeint those values, if we do, try to connect manually
         echo "Modem not registered, getting current operator..."
 
