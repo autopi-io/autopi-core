@@ -14,7 +14,7 @@ context = {
 }
 
 # Message processor
-edmp = EventDrivenMessageProcessor("reactor", context=context)
+edmp = EventDrivenMessageProcessor("reactor", context=context, default_hooks={"workflow": "extended"})
 
 
 @edmp.register_hook()
