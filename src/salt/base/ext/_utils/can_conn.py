@@ -10,6 +10,10 @@ from timeit import default_timer as timer
 
 log = logging.getLogger(__name__)
 
+
+INTERFACE_STATE_UP   = "up"
+INTERFACE_STATE_DOWN = "down"
+
 BUS_STATES = {
     can.bus.BusState.ACTIVE:  "active",
     can.bus.BusState.PASSIVE: "passive",
@@ -19,32 +23,125 @@ BUS_STATES = {
 
 class CANConn(object):
 
+    class Decorators(object):
+
+        @staticmethod
+        def ensure_open(func):
+
+            def decorator(self, *args, **kwargs):
+
+                # Ensure connection is open
+                self.ensure_open()
+
+                try:
+                    return func(self, *args, **kwargs)
+                except:
+                    # TODO HN: Figure out if we should close here?
+                    raise
+
+            # Add reference to the original undecorated function
+            decorator.undecorated = func
+
+            return decorator
+
+    class ReplyReader(object):
+
+        def __init__(self, notifier):
+            self._notifier = notifier
+            self._listener = None
+
+        def __enter__(self):
+            self._listener = BufferedReader()
+
+            self._notifier.add_listener(self._listener)
+
+            return self
+
+        def __exit__(self, ex_type, ex_val, tb):
+            try:
+                self._notifier.remove_listener(self._listener)
+            except:
+                log.exception("Failed to remove listener from bus notifier")
+
+        def await(self, timeout=0.2, replies=None, strict=True):
+            ret = []
+
+            count = 0
+            while True:
+                count += 1
+
+                reply = self._listener.next(timeout=timeout)
+                if reply != None:
+                    if reply.is_error_frame:
+                        log.warning("Received CAN reply message marked as error frame: {:}".format(reply))
+
+                    ret.append(reply)
+                else:  # Timeout
+                    if strict:
+                        if replies > 0:
+                            raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
+                        elif count == 1:
+                            raise Exception("No CAN message reply received within timeout of {:} second(s)".format(timeout))
+
+                    break
+
+                # Stop if replies is met
+                if replies > 0 and count >= replies:
+                    break
+
+            return ret
+
     def __init__(self, __salt__):
         globals()["__salt__"] = __salt__
 
-        self._settings = {}
+        self._settings = {
+            "channel": "can0",
+            "bitrate": 500000
+        }
 
         self._bus = None
         self._notifier = None
         self._filters = []
+        self._is_filters_dirty = False
         self._monitor_listener = None
 
     @property
     def channel(self):
-        return self._settings.get("channel", "can0")
+        return self._settings["channel"]
 
     def setup(self, **settings):
+
+        # Check for changes
+        has_changes = False
+        for key, val in settings.iteritems():
+            if val != self._settings.get(key, None):
+                has_changes = True
+                break
+
+        # Skip if no changes
+        if not has_changes:
+            return
+
+        # Ensure closed before updating settings
+        if self.is_open():
+            log.info("Closing current CAN connection because settings have changed")
+
+            self.close()
+
+        # Update settings
         self._settings.update(settings)
 
-    def open(self, **settings):
-        self.setup(**settings)
-
+    def open(self):
         settings = self._settings.copy()
+        log.info("Opening CAN connection using settings: {:}".format(settings))
+
         channel = settings.pop("channel", "can0")
         receive_own_messages = settings.pop("receive_own_messages", False)
         notifier_timeout = settings.pop("notifier_timeout", 1.0)
 
-        # TODO HN: Handle restart on error
+        # Ensure interface is down
+        if self.interface_state() != INTERFACE_STATE_DOWN:
+            __salt__["socketcan.down"](interface=channel)
 
         # Bring up interface
         __salt__["socketcan.up"](interface=channel, **settings)
@@ -52,71 +149,105 @@ class CANConn(object):
         self._bus = can.interfaces.socketcan.SocketcanBus(channel=channel, receive_own_messages=receive_own_messages)
         self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
 
+        # TODO HN: Handle restart on error
+
+    def is_open(self):
+        # TODO HN: Figure out how to do this
+        return self._bus != None \
+            and self._bus.state != can.bus.BusState.ERROR
+
+    def ensure_open(self):
+        if not self.is_open():
+            self.open()
+
     def close(self):
 
-        # Shut down bus if present
+        # Shut down bus, if present
         if self._bus:
             self._bus.shutdown()
 
-        # Get current state of interface
-        channel = self.channel
-        state = __salt__["socketcan.show"](interface=channel).get("operstate", None)
-        log.info("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
-
-        # Bring down interface if not already
-        if state != "DOWN":
+        # Bring down interface, if not already
+        if self.interface_state() != INTERFACE_STATE_DOWN:
             __salt__["socketcan.down"](interface=channel)
 
-    def reopen(self, **settings):
-        try:
-            self.close()
-        finally:
-            self.open(**settings)
+    def interface_state(self, channel=None):
+
+        # Get current state of interface
+        channel = channel or self.channel
+        state = __salt__["socketcan.show"](interface=channel).get("operstate", "").lower()
+        log.info("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
+
+        return state
 
     def bus_state(self):
-        if not self._bus:
-            raise Exception("No CAN bus object present")
+        ret = None
 
-        res = BUS_STATES.get(self._bus.state, None)
-        if not res:
-            raise Exception("CAN bus is in unknown state")
+        if self._bus:
+            ret = BUS_STATES.get(self._bus.state, None)
 
-        return res
+        return ret
 
     def list_filters(self):
-        return self._filters
+        return [{"id": f["can_id"], "is_ext_id": f["extended"], "mask": f["can_mask"]} for f in self._filters]
 
-    def clear_filters(self):
+    def clear_filters(self, apply=True):
+        ret = False
 
         if self._filters:
             log.info("Clearing {:} CAN filter(s)".format(len(self._filters)))
+            self._filters = []
+            self._is_filters_dirty = True
 
-        self._filters = []
-        self.apply_filters()
+            ret = True
 
-    def add_filter(self, id=0, is_ext_id=False, mask=None):
+        if apply and self._is_filters_dirty:
+            self.apply_filters()
 
-        # Ensure hex strings are converted to integers
-        if isinstance(id, string_types):
-            id = int(id, 16)
-        if isinstance(mask, string_types):
-            mask = int(mask, 16)
+        return ret
 
-        # Set mask if undefined
+    def ensure_filter(self, id=0x00, is_ext_id=False, mask=None, clear=False, apply=True):
+        ret = False
+
+        # Set default mask if undefined
         if mask == None:
             if is_ext_id:
                 mask = 0x1FFFFFFF
             else:
                 mask = 0x7FF
 
-        log.info("Adding CAN pass filter: {{'id': '{:x}', 'is_ext_id': {:}, 'mask': '{:x}'}}".format(id, is_ext_id, mask))
+        filter = {"can_id": id, "can_mask": mask, "extended": is_ext_id}
+        if filter in self._filters:
+            if clear and len(self._filters) > 1:
+                self.clear_filters(apply=False)
 
-        self._filters.append({"can_id": id, "can_mask": mask, "extended": is_ext_id})
-        self.apply_filters()
+                ret = True
+        else:
+            ret = True
 
+            if clear and self._filters:
+                self.clear_filters(apply=False)
+
+        if ret:
+            log.info("Adding CAN filter: {{'id': '{:x}', 'is_ext_id': {:}, 'mask': '{:x}'}}".format(id, is_ext_id, mask))  # NOTE: Outputs hex values
+
+            self._filters.append(filter)
+            self._is_filters_dirty = True
+        else:
+            log.info("CAN filter is already added: {{'id': '{:x}', 'is_ext_id': {:}, 'mask': '{:x}'}}".format(id, is_ext_id, mask))  # NOTE: Outputs hex values
+
+        if apply and self._is_filters_dirty:
+            self.apply_filters()
+
+        return ret
+
+    @Decorators.ensure_open
     def apply_filters(self):
-        self._bus.set_filters(self._filters)
+        log.info("Applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
 
+        self._bus.set_filters(list(self._filters))
+        self._is_filters_dirty = False
+
+    @Decorators.ensure_open
     def receive(self, timeout=1):
         """
         """
@@ -149,6 +280,7 @@ class CANConn(object):
         return count
     """
 
+    @Decorators.ensure_open
     def send(self, *messages, **kwargs):
         """
         """
@@ -158,6 +290,7 @@ class CANConn(object):
             log.info("Sending CAN message: {}".format(msg))
             self._bus.send(msg, **kwargs)
 
+    @Decorators.ensure_open
     def query(self, *messages, **kwargs):
         """
         """
@@ -165,8 +298,7 @@ class CANConn(object):
         with self.ReplyReader(self._notifier) as reader:
 
             # Send all messages
-            for message in messages:
-                self.send(message)
+            self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
 
             # Await replies
             return reader.await(**kwargs)
@@ -185,7 +317,7 @@ class CANConn(object):
 
                 self.setup(bitrate=profile.get("bitrate", 500000))
 
-                if self.obd_query("01", "00", is_ext_id=profile.get("is_ext_id", False))
+                if self.obd_query(0x01, 0x00, is_ext_id=profile.get("is_ext_id", False))
                     self._obd_profile = profile
 
                     break
@@ -196,27 +328,30 @@ class CANConn(object):
         return self._obd_profile
     """
 
-    def obd_query(self, service, pid, id="7DF", is_ext_id=None, auto_format=True, **kwargs):
+    @Decorators.ensure_open
+    def obd_query(self, mode, pid, id=0x7DF, is_ext_id=None, auto_format=True, auto_filter=True, **kwargs):
         """
         """
 
         if is_ext_id == None:
-            is_ext_id = self._obd_profile.get("is_ext_id", False)
+            is_ext_id = self._settings.get("is_ext_id", False)  # TODO HN: Where to get this from?
 
-        data = bytearray([int(service, 16), int(pid, 16)])
+        data = bytearray([mode, pid])
         if auto_format:
             data = bytearray([len(data)]) + data
 
-        msg = can.Message(arbitration_id=int(str(id), 16), data=data, is_extended_id=is_ext_id)
+        if auto_filter:
+            # Ensure filter to listen for OBD responses only (IDs in range 0x7E8-0x7EF)
+            self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)
+            
+            # TODO HN: 29bit: 18DAF100,1FFFFF00
 
-        # TODO HN: Setup filters to listen for OBD responses only
-        self.add_filter(id=0x7E0, is_ext_id=is_ext_id)
-        self.add_filter(id=0x7E8, is_ext_id=is_ext_id)
-
-        res = self.query(msg, **kwargs)
+        msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
+        res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
 
         return res
 
+    @Decorators.ensure_open
     def monitor_until(self, on_msg_func, duration=1, limit=None, receive_timeout=0.2, skip_error_frames=False, keep_listening=False, buffer_size=0):
         """
         """
@@ -287,6 +422,7 @@ class CANConn(object):
                 self._monitor_listener = None
 
 
+    @Decorators.ensure_open
     def dump_until(self, file, duration=2, limit=None, receive_timeout=0.5, skip_error_frames=False, keep_listening=False, buffer_size=0, **kwargs):
         """
         """
@@ -305,7 +441,7 @@ class CANConn(object):
             ValueError("Unsupported file extension")
 
         try:
-            return self.monitor_until(writer,
+            return self.monitor_until.undecorated(self, writer,  # No need to call the 'ensure_open' decorator again
                 duration=duration,
                 limit=limit,
                 receive_timeout=receive_timeout,
@@ -315,6 +451,7 @@ class CANConn(object):
         finally:
             writer.stop()
 
+    @Decorators.ensure_open
     def play(self, *files, **kwargs):
         """
         """
@@ -347,53 +484,6 @@ class CANConn(object):
                 reader.stop()
 
         return total, sent
-
-    class ReplyReader(object):
-
-        def __init__(self, notifier):
-            self._notifier = notifier
-            self._listener = None
-
-        def __enter__(self):
-            self._listener = BufferedReader()
-
-            self._notifier.add_listener(self._listener)
-
-            return self
-
-        def __exit__(self, ex_type, ex_val, tb):
-            try:
-                self._notifier.remove_listener(self._listener)
-            except:
-                log.exception("Failed to remove listener from bus notifier")
-
-        def await(self, timeout=0.2, replies=None, strict=True):
-            ret = []
-
-            count = 0
-            while True:
-                count += 1
-
-                reply = self._listener.next(timeout=timeout)
-                if reply != None:
-                    if reply.is_error_frame:
-                        log.warning("Received CAN reply message marked as error frame: {:}".format(reply))
-
-                    ret.append(reply)
-                else:  # Timeout
-                    if strict:
-                        if replies > 0:
-                            raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
-                        elif count == 1:
-                            raise Exception("No CAN message reply received within timeout of {:} second(s)".format(timeout))
-
-                    break
-
-                # Stop if replies is met
-                if replies > 0 and count >= replies:
-                    break
-
-            return ret
 
 
 class BufferedReader(can.listener.Listener):
@@ -462,15 +552,15 @@ def dict_to_msg(src):
 
     return can.Message(**kwargs)
 
-def msg_to_str(src):
+def msg_to_str(src, separator="#"):
     # TODO HN: Also support CAN-FD
 
-    return "{:02x}#{:}".format(src.arbitration_id, binascii.hexlify(src.data))
+    return "{:02x}{:}{:}".format(src.arbitration_id, separator, binascii.hexlify(src.data))
 
-def str_to_msg(src):
+def str_to_msg(src, separator="#"):
     # TODO HN: Also support CAN-FD
 
-    id_str, data_str = src.split("#", 1)
+    id_str, data_str = src.split(separator, 1)
 
     id = int(id_str, 16)
     data = bytearray.fromhex(data_str)
@@ -483,22 +573,22 @@ def str_to_msg(src):
         arbitration_id=id,
         data=data)
 
-def decode_msg_from(val):
+def decode_msg_from(val, **kwargs):
     if isinstance(val, can.Message):
         return val
     elif isinstance(val, string_types):
-        return str_to_msg(val)
+        return str_to_msg(val, **kwargs)
     elif isinstance(val, dict):
-        return dict_to_msg(val)
+        return dict_to_msg(val, **kwargs)
     else:
         raise ValueError("Unsupported type")
 
-def encode_msg_to(kind, msg):
+def encode_msg_to(kind, msg, **kwargs):
     if kind == "obj":
         return msg
     elif kind == "str":
-        return msg_to_str(msg)
+        return msg_to_str(msg, **kwargs)
     elif kind == "dict":
-        return msg_to_dict(msg)
+        return msg_to_dict(msg, **kwargs)
     else:
         raise ValueError("Unsupported type")
