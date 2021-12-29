@@ -338,14 +338,19 @@ class SocketCANInterface(STN11XX):
         raise NotImplementedError("Not supported by SocketCAN interface")
 
     def send(self, cmd, delay=None, read_timeout=None, interrupt_delay=None, raw_response=False):
-        
+        ret = []
+
         # Respond OK on all AT/ST commands
         if cmd[:2].upper() in ["AT", "ST"]:
-            log.info("Returning OK to AT/ST command: {:}".format(cmd))
+            if cmd.upper() == "ATRV":
+                res = __salt__["spm.query"]("volt_readout")
+                ret.append("{:.2f}V".format(res["current"]))
+            else:
+                ret.append(self.OK)
 
-            return [self.OK]
+            log.info("Returning {:} to AT/ST command '{:}'".format(ret, cmd))
 
-        ret = []
+            return ret
 
         if self._runtime_settings.get("expect_responses", True):
 
