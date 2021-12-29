@@ -10,6 +10,7 @@ from timeit import default_timer as timer
 
 log = logging.getLogger(__name__)
 
+DEBUG = log.isEnabledFor(logging.DEBUG)
 
 INTERFACE_STATE_UP   = "up"
 INTERFACE_STATE_DOWN = "down"
@@ -168,7 +169,7 @@ class CANConn(object):
 
         # Bring down interface, if not already
         if self.interface_state() != INTERFACE_STATE_DOWN:
-            __salt__["socketcan.down"](interface=channel)
+            __salt__["socketcan.down"](interface=self.channel)
 
     def interface_state(self, channel=None):
 
@@ -195,6 +196,7 @@ class CANConn(object):
 
         if self._filters:
             log.info("Clearing {:} CAN filter(s)".format(len(self._filters)))
+
             self._filters = []
             self._is_filters_dirty = True
 
@@ -232,8 +234,8 @@ class CANConn(object):
 
             self._filters.append(filter)
             self._is_filters_dirty = True
-        else:
-            log.info("CAN filter is already added: {{'id': '{:x}', 'is_ext_id': {:}, 'mask': '{:x}'}}".format(id, is_ext_id, mask))  # NOTE: Outputs hex values
+        elif DEBUG:
+            log.debug("CAN filter is already added: {{'id': '{:x}', 'is_ext_id': {:}, 'mask': '{:x}'}}".format(id, is_ext_id, mask))  # NOTE: Outputs hex values
 
         if apply and self._is_filters_dirty:
             self.apply_filters()
@@ -242,7 +244,8 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def apply_filters(self):
-        log.info("Applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
+        if DEBUG:
+            log.debug("Applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
 
         self._bus.set_filters(list(self._filters))
         self._is_filters_dirty = False
@@ -258,36 +261,16 @@ class CANConn(object):
 
         return msg
 
-    """
-    def receive_until(self, on_msg_func, duration=1, limit=100, timeout=0.2, skip_error_frames=False):
-        #TODO HN: Might not make any sense without a listener?
-
-        count = 0
-        start = timer()
-        while True:
-            msg = self._bus.recv(timeout=timeout)
-            if msg != None:
-                if not msg.is_error_frame or not skip_error_frames:
-                    on_msg_func(msg)
-                    count += 1
-
-                    if limit and count >= limit:
-                        break
-
-            if timer() - start >= duration:
-                break
-
-        return count
-    """
-
     @Decorators.ensure_open
     def send(self, *messages, **kwargs):
         """
         """
 
         for msg in messages:
-
+            # TODO HN
+            #if DEBUG:
             log.info("Sending CAN message: {}".format(msg))
+
             self._bus.send(msg, **kwargs)
 
     @Decorators.ensure_open
@@ -343,7 +326,7 @@ class CANConn(object):
         if auto_filter:
             # Ensure filter to listen for OBD responses only (IDs in range 0x7E8-0x7EF)
             self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)
-            
+
             # TODO HN: 29bit: 18DAF100,1FFFFF00
 
         msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
@@ -498,7 +481,8 @@ class BufferedReader(can.listener.Listener):
 
     def on_message_received(self, msg):
         try:
-            # TODO HN: Remove this
+            # TODO HN
+            #if DEBUG:
             log.info("CAN buffered reader got message: {:}".format(msg))
 
             self._buffer.put(msg, False)
