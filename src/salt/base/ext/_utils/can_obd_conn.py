@@ -237,7 +237,9 @@ class SocketCANInterface(STN11XX):
         protocol_dict = protocol if isinstance(protocol, dict) else {"id": protocol}
         protocol_cls = self.supported_protocols().get(protocol_dict.get("id", None), None)
 
-        self._port.setup(channel=channel, bitrate=protocol_dict.get("baudrate", getattr(protocol_cls, "DEFAULT_BAUDRATE", 500000)))
+        self._port.setup(
+            channel=channel or getattr(protocol_cls, "INTERFACE", "can0"),
+            bitrate=protocol_dict.get("baudrate", None) or getattr(protocol_cls, "DEFAULT_BAUDRATE", 500000))
 
         # Open connection
         try:
