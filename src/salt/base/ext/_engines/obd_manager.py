@@ -64,8 +64,8 @@ context = {
 # Message processor
 edmp = EventDrivenMessageProcessor("obd", context=context, default_hooks={"workflow": "extended", "handler": "query"})
 
-# OBD connection
-conn = OBDConn()
+# OBD connection is instantiated during start
+conn = None
 
 # ELM327 proxy instance
 proxy = elm327_proxy.ELM327Proxy()
@@ -414,8 +414,8 @@ def protocol_handler(set=None, baudrate=None, verify=False):
     ret = {}
 
     if set == None and baudrate == None:
-        ret["supported"] = OrderedDict({"AUTO": {"name": "Autodetect", "interface": "ELM327"}})
-        ret["supported"].update({k: {"name": v.NAME, "interface": v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in conn.supported_protocols().iteritems()})
+        ret["supported"] = OrderedDict({"AUTO": {"name": "Autodetect", "interface": conn.protocol_autodetect_interface}})
+        ret["supported"].update({k: {"name": v.NAME, "interface": getattr(v, "INTERFACE", None) or v.__module__[v.__module__.rfind(".") + 1:].upper()} for k, v in conn.supported_protocols().iteritems()})
 
     if set != None:
         conn.change_protocol(set, baudrate=baudrate, verify=verify)
@@ -460,12 +460,12 @@ def setup_handler(**kwargs):
 
 
 @edmp.register_hook()
-def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=False, filtering=False, protocol=None, baudrate=None, verify=False, type="raw"):
+def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=False, filtering=False, protocol=None, baudrate=None, verify=False, type="raw", **kwargs):
     """
     Monitors messages on bus until limit or duration is reached.
 
     Optional arguments:
-      - wait (bool): Wait for each message/line to read according to the default timeout of the serial connection (default 1 second). Otherwise there will only be waiting on the first line. line/message. Default value is 'False'.
+      - wait (bool): Wait for each message/line to read according to the default timeout of the serial connection (default 1 second). Otherwise there will only be waiting on the first line/message. Default value is 'False'.
       - limit (int): The maximum number of messages to read. Default value is '500'.
       - duration (float): How many seconds to monitor? If not set there is no limitation.
       - mode (int): The STN monitor mode. Default is '0'.
@@ -489,7 +489,7 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
         _ensure_filtering(filtering)
 
     # Monitor until limit is reached
-    res = conn.monitor_continuously(wait=wait, limit=limit, duration=duration, mode=mode, auto_format=auto_format, filtering=filtering)
+    res = conn.monitor_continuously(wait=wait, limit=limit, duration=duration, mode=mode, auto_format=auto_format, filtering=filtering, **kwargs)
 
     # Update context with summary
     ctx = context["monitor"]
@@ -633,6 +633,9 @@ def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=Fals
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
     """
+
+    if type(conn) != OBDConn:
+        raise Exception("Only relevant when using STN interface")
 
     ret = {}
 
@@ -1534,8 +1537,19 @@ def start(**settings):
             reactors=settings.get("reactors", []))
         edmp.measure_stats = settings.get("measure_stats", False) 
 
+        # Initialize OBD connection
+        global conn
+        if "can_conn" in settings:
+            from can_obd_conn import SocketCAN_OBDConn
+            conn = SocketCAN_OBDConn(__salt__)
+
+            conn.on_status = lambda status, data: edmp.trigger_event(data, "system/obd/{:s}".format(status))
+        else:
+            conn = OBDConn()
+
+            conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
+
         # Configure OBD connection
-        conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
         conn.on_closing = lambda: edmp.worker_threads.do_for_all_by("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
         # IMPORTANT: If the STN UART wake trigger is enabled remember to ensure the RPi does not accidentally re-awaken the STN during shutdown!
         if "stn_state_pin" in settings:
@@ -1559,7 +1573,9 @@ def start(**settings):
                         raise Warning("OBD connection is currently used by export subprocess")
 
             conn.on_ensure_open = on_ensure_open
-        conn.setup(protocol=settings.get("protocol", {}), advanced=settings.get("advanced", {}), **settings["serial_conn"])
+        conn.setup(protocol=settings.get("protocol", {}),
+            advanced=settings.get("advanced", {}),
+            **(settings["can_conn"] if isinstance(conn, SocketCAN_OBDConn) else settings["serial_conn"]))
 
         # Start ELM327 proxy if configured
         if "elm327_proxy" in settings:

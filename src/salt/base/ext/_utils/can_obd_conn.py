@@ -237,7 +237,9 @@ class SocketCANInterface(STN11XX):
         protocol_dict = protocol if isinstance(protocol, dict) else {"id": protocol}
         protocol_cls = self.supported_protocols().get(protocol_dict.get("id", None), None)
 
-        self._port.setup(channel=channel, bitrate=protocol_dict.get("baudrate", getattr(protocol_cls, "DEFAULT_BAUDRATE", 500000)))
+        self._port.setup(
+            channel=channel or getattr(protocol_cls, "INTERFACE", "can0"),
+            bitrate=protocol_dict.get("baudrate", None) or getattr(protocol_cls, "DEFAULT_BAUDRATE", 500000))
 
         # Open connection
         try:
@@ -300,8 +302,9 @@ class SocketCANInterface(STN11XX):
     def set_protocol(self, ident, **kwargs):
         ret = super(STN11XX, self).set_protocol(ident, **kwargs)  # NOTE: Calls ELM327's method (skipping STN11XX's)
 
-        # Automatic filtering mode is considered switched on
+        # Automatic filtering mode is on per default
         self._runtime_settings["auto_filtering"] = True
+        self._ensure_auto_filtering()
 
         # No custom filters are set
         self._runtime_settings.pop("can_pass_filters", None)
@@ -337,14 +340,19 @@ class SocketCANInterface(STN11XX):
         raise NotImplementedError("Not supported by SocketCAN interface")
 
     def send(self, cmd, delay=None, read_timeout=None, interrupt_delay=None, raw_response=False):
-        
+        ret = []
+
         # Respond OK on all AT/ST commands
         if cmd[:2].upper() in ["AT", "ST"]:
-            log.info("Returning OK to AT/ST command: {:}".format(cmd))
+            if cmd.upper() == "ATRV":
+                res = __salt__["spm.query"]("volt_readout")
+                ret.append("{:.2f}V".format(res["current"]))
+            else:
+                ret.append(self.OK)
 
-            return [self.OK]
+            log.info("Returning {:} to AT/ST command '{:}'".format(ret, cmd))
 
-        ret = []
+            return ret
 
         if self._runtime_settings.get("expect_responses", True):
 
@@ -427,7 +435,12 @@ class SocketCANInterface(STN11XX):
             formatter=enrich,
             **kwargs)
 
-    #def auto_filtering(self, enable=None):
+    def auto_filtering(self, enable=None):
+        ret = super(SocketCANInterface, self).auto_filtering(enable=enable)
+        if ret:
+            self._ensure_auto_filtering()
+
+        return ret
 
     #def list_filters(self, type="ALL"):
 
@@ -460,9 +473,19 @@ class SocketCANInterface(STN11XX):
                 else:
                     filter["id"] = val
 
-            filter.setdefault("is_ext_id", len(filter["id"]) > 6)
+            # Ensure hex strings are converted to integers
+            if "id" in filter and isinstance(filter["id"], string_types):
+                filter["id"] = int(filter["id"], 16)
+            if "mask" in filter and isinstance(filter["mask"], string_types):
+                filter["mask"] = int(filter["mask"], 16)
 
-            self._port.add_filter(**filter)
+            filter.setdefault("is_ext_id", self._protocol.HEADER_BITS > 11)
+
+            # Clear before adding if automatic filtering is enabled
+            if self._runtime_settings.get("auto_filtering", True):
+                self._port.clear_filters()
+
+            self._port.ensure_filter(**filter)
 
         super(SocketCANInterface, self).can_pass_filters(clear=clear, add=add)
 
@@ -498,7 +521,7 @@ class SocketCANInterface(STN11XX):
         else:
             protocol_cls = ident
 
-        res_0100 = self._port.obd_query("01", "00", is_ext_id=protocol_cls.HEADER_BITS > 11)
+        res_0100 = self._port.obd_query(0x01, 0x00, is_ext_id=protocol_cls.HEADER_BITS > 11)
         if not res_0100:
             msg = "No data received when trying to verify connectivity of protocol '{:}'".format(ident)
             if test:
@@ -516,7 +539,7 @@ class SocketCANInterface(STN11XX):
         protocol_cls = self.supported_protocols()[ident]
         baudrate = baudrate or protocol_cls.DEFAULT_BAUDRATE
 
-        self._port.reopen(channel=protocol_cls.INTERFACE, bitrate=baudrate)
+        self._port.setup(channel=protocol_cls.INTERFACE, bitrate=baudrate)
 
         if verify:
 
@@ -543,9 +566,10 @@ class SocketCANInterface(STN11XX):
         for protocol_cls in self.CAN_TRY_PROTOCOLS:
             log.info("Trying with protocol '{:}' on SocketCAN interface '{:}'".format(protocol_cls.ID, protocol_cls.INTERFACE))
 
-            self._port.reopen(channel=protocol_cls.INTERFACE, bitrate=protocol_cls.DEFAULT_BAUDRATE)
+            self._port.setup(channel=protocol_cls.INTERFACE, bitrate=protocol_cls.DEFAULT_BAUDRATE)
 
-            # TODO HN: Try to listen for activity before sending anything!
+            # TODO HN: Try to listen for activity before sending anything based on verify?
+            # Also 'socketcan.show' might give indication of protocol state before receiving/verify?
 
             # Verify protocol connectivity
             try:
@@ -592,6 +616,10 @@ class SocketCANInterface(STN11XX):
         return can.Message(arbitration_id=int(header, 16),
             data=data,
             is_extended_id=self._protocol.HEADER_BITS > 11)
+
+    def _ensure_auto_filtering(self):
+        self._port.ensure_filter(id=0x7E8, is_ext_id=self._protocol.HEADER_BITS > 11, mask=0x7F8, clear=True)
+        # TODO HN: 29bit: 18DAF100,1FFFFF00
 
 
 def can_message_formatter(msg):

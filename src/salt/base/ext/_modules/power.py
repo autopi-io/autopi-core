@@ -26,7 +26,6 @@ def status():
 
     ret = {
         "spm": {},
-        "stn": {},
         "rpi": {},
     }
 
@@ -42,24 +41,34 @@ def status():
     res = __salt__["spm.query"]("version")
     ret["spm"]["version"] = res["value"]
 
-    # STN config
-    res = __salt__["stn.power_config"]()
-    ret["stn"]["trigger_config"] = {
-        k: v.split(",")[1] for k, v in res.iteritems() \
-            if (k.endswith("_wake") or k.endswith("_sleep")) and v.startswith("ON")
-    }
+    if __opts__.get("spm.version", 2.0) < 3.0:
 
-    # STN trigger
-    res = __salt__["stn.power_trigger_status"]()
-    ret["stn"]["last_trigger"] = {
-        k: v for k, v in res.iteritems() if not k.startswith("_")
-    }
+        # STN config
+        res = __salt__["stn.power_config"]()
+        ret["stn"]["trigger_config"] = {
+            k: v.split(",")[1] for k, v in res.iteritems() \
+                if (k.endswith("_wake") or k.endswith("_sleep")) and v.startswith("ON")
+        }
 
-    # STN battery
-    res = __salt__["obd.battery"]()
-    ret["stn"]["battery"] = {
-        k: v for k, v in res.iteritems() if not k.startswith("_")
-    }
+        # STN trigger
+        res = __salt__["stn.power_trigger_status"]()
+        ret["stn"]["last_trigger"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
+
+        # STN battery
+        res = __salt__["obd.battery"]()
+        ret["stn"]["battery"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
+
+    else:
+
+        # SPM battery
+        res = __salt__["obd.battery"]()  # Same command as above
+        ret["spm"]["battery"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
 
     # RPI uptime
     res = __salt__["status.uptime"]()
@@ -68,13 +77,13 @@ def status():
     return ret
 
 
-def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
+def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
     """
     Power down system and put device into sleep state.
 
     Optional arguments:
       - interval (int): Sleep interval in seconds. Default is '60'.
-      - delay (str): Delay in seconds before powering down. Default is '10'.
+      - delay (str): Delay in seconds before powering down. Default is '60'.
       - modem_off (bool): Power off 3V3 supply to modem on mPCIe slot. Default is 'False'.
       - acc_off (bool): Put accelerometer into standby. Default is 'False'.
       - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
@@ -157,7 +166,11 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     # Plan a system shutdown in case STN never sleeps
     # (it could get interrupted by another STN wake trigger)
     try:
-        __salt__["system.shutdown"](int(delay / 60) + 2)
+
+        if __opts__.get("spm.version", 2.0) < 3.0:
+            __salt__["system.shutdown"](int(delay / 60) + 2)
+        else:
+            __salt__["system.shutdown"](max(int(delay / 60), 1))
 
         # Broadcast reason to all terminals
         __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
@@ -165,10 +178,12 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
         log.exception("Failed to plan system shutdown")
 
     try:
-        # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
-        # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
-        #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
-        __salt__["stn.sleep"](delay)
+
+        if __opts__.get("spm.version", 2.0) < 3.0:
+            # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
+            # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
+            #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
+            __salt__["stn.sleep"](delay)
 
     finally:  # If STN command fails we still want to send below event
 
@@ -193,12 +208,12 @@ def sleep(interval=60, delay=10, modem_off=False, acc_off=False, confirm=False, 
     return ret
 
 
-def hibernate(delay=10, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
+def hibernate(delay=60, confirm=False, reason="unknown", allow_auto_update=True, **kwargs):
     """
     Power down system and put device into hibernate state.
 
     Optional arguments:
-      - delay (str): Delay in seconds before powering down. Default is '10'.
+      - delay (str): Delay in seconds before powering down. Default is '60'.
       - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
       - reason (str): Reason code that tells why we decided to hibernate. Default is 'unknown'.
     """
