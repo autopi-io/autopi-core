@@ -128,6 +128,22 @@ gpio-{{ key }}-configured:
       - module: reboot-requested-after-boot-config-changed
 {%- endfor %}
 
+{%- if salt["pillar.get"]("power:firmware:version")|float >= 2.0 %}
+can1-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=mcp251xfd,spi0-1.*$"
+    - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=15,oscillator=40000000,speed=20000000"
+    - append_if_not_found: true
+
+can0-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=mcp251xfd,spi0-0.*$"
+    - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"
+    - append_if_not_found: true
+{%- endif %}
+
 reboot-upon-changes-required:
   module.wait:
     - name: power.request_reboot
