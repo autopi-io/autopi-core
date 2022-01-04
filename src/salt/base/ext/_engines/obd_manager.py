@@ -1539,15 +1539,18 @@ def start(**settings):
 
         # Initialize OBD connection
         global conn
+        conn_settings = {}
         if "can_conn" in settings:
             from can_obd_conn import SocketCAN_OBDConn
             conn = SocketCAN_OBDConn(__salt__)
-
             conn.on_status = lambda status, data: edmp.trigger_event(data, "system/obd/{:s}".format(status))
+
+            conn_settings = settings["can_conn"]
         else:
             conn = OBDConn()
-
             conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
+
+            conn_settings = settings["serial_conn"]
 
         # Configure OBD connection
         conn.on_closing = lambda: edmp.worker_threads.do_for_all_by("*", lambda t: t.pause(), force_wildcard=True)  # Pause all worker threads
@@ -1575,7 +1578,7 @@ def start(**settings):
             conn.on_ensure_open = on_ensure_open
         conn.setup(protocol=settings.get("protocol", {}),
             advanced=settings.get("advanced", {}),
-            **(settings["can_conn"] if isinstance(conn, SocketCAN_OBDConn) else settings["serial_conn"]))
+            **conn_settings)
 
         # Start ELM327 proxy if configured
         if "elm327_proxy" in settings:
