@@ -34,16 +34,11 @@ spm-test:
     - name: spm.query
     - args:
       - version
+    {%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
     - validate: ret["value"] in ["1.1.1.0", "2.0", "2.1", "2.2"]
-
-obd-test:
-  test.module:
-    - name: obd.query
-    - args:
-      - elm_voltage
-    - kwargs:
-        protocol: None
-    - validate: ret["value"] > 12.0
+    {%- else %}
+    - validate: ret["value"] in ["3.0"]
+    {%- endif %}
 
 acc-xyz-test:
   test.module:
@@ -71,21 +66,94 @@ rpi-temp-test:
       - ret["cpu"]["value"] > 30.0
       - ret["gpu"]["value"] > 30.0
 
+{%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
+
+obd-test:
+  test.module:
+    - name: obd.query
+    - args:
+      - elm_voltage
+    - kwargs:
+        protocol: None
+    - validate: ret["value"] > 12.0
+
 stn-test:
   test.module:
     - name: stn.power_config
     - validate: ret["ctrl_mode"] == "NATIVE"
 
-power-test:
+power-status-test:
   test.module:
     - name: power.status
-    - validate: '"rpi" in ret'
-    - validate: '"spm" in ret'
-    - validate: '"stn" in ret'
+    - validate:
+      - '"rpi" in ret'
+      - '"spm" in ret'
+      - '"stn" in ret'
 
 rtc-i2c-present-test:
   cmd.run:
     - name: "i2cdetect -y 1 0x68 0x68 | grep UU"
+
+{%- else %}
+
+power-status-test:
+  test.module:
+    - name: power.status
+    - validate:
+      - '"rpi" in ret'
+      - '"spm" in ret'
+      - ret["spm"]["last_state"]["up"] == "on"
+      - ret["spm"]["last_trigger"]["up"] == "plug"
+
+spm-volt-readout-test:
+  test.module:
+    - name: spm.query
+    - args:
+      - volt_readout
+    - validate: abs(ret["current"] - 12.80) <= 0.1
+
+spm-volt-trigger-flags-test:
+  test.module:
+    - name: spm.query
+    - args:
+      - volt_trigger_flags
+    - validate:
+      - not ret["unsaved"]["hibernate_level"]
+      - not ret["unsaved"]["wake_change"]
+      - not ret["unsaved"]["wake_level"]
+
+rtc-i2c-present-test:
+  cmd.run:
+    - name: "i2cdetect -y 1 0x51 0x51 | grep UU"
+
+crypto-i2c-present-test:
+  cmd.run:
+    - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
+
+ensure-can-termination-test:
+  test.module:
+    - name: spm.query
+    - args:
+      - usr_pins
+    - kwargs:
+        high: can0_term,can1_term
+    - validate:
+      - ret["output"]["can0_term"]
+      - ret["output"]["can1_term"]
+
+force-setup-can0-interface-test:
+  cmd.run:
+    - "ip link set can0 down && ip link set can0 up type can bitrate 500000"
+
+force-setup-can1-interface-test:
+  cmd.run:
+    - "ip link set can1 down && ip link set can1 up type can bitrate 500000"
+
+# TODO: cmd.run|shell: 'candump -T 3 can1' in a named screen session
+# TODO: cmd.run|shell: 'cansend can0 7DF#02010C'
+# TODO: cmd.run|shell: Reattch to aboce screen session and assert that messages was received
+
+{%- endif %}
 
 # Not required when testing HW because the command fails before RTC time has been set the first time (from NTP server)
 {%- if salt['pillar.get']('state', '') %}
