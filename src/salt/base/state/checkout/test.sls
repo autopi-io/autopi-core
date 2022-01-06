@@ -143,11 +143,11 @@ ensure-can-termination-test:
 
 force-setup-can0-interface-test:
   cmd.run:
-    - "ip link set can0 down && ip link set can0 up type can bitrate 500000"
+    - name: "ip link set can0 down && ip link set can0 up type can bitrate 500000"
 
 force-setup-can1-interface-test:
   cmd.run:
-    - "ip link set can1 down && ip link set can1 up type can bitrate 500000"
+    - name: "ip link set can1 down && ip link set can1 up type can bitrate 500000"
 
 # TODO: cmd.run|shell: 'candump -T 3 can1' in a named screen session
 # TODO: cmd.run|shell: 'cansend can0 7DF#02010C'
