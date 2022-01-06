@@ -126,6 +126,15 @@ rtc-i2c-present-test:
   cmd.run:
     - name: "i2cdetect -y 1 0x51 0x51 | grep UU"
 
+rtc-linux-device-present-test:
+  cmd.run:
+    - name: "ls -la /dev/rtc"
+
+# we expect to NOT have that line in dmesg
+rtc-dmesg-does-not-report-missing-chip-test:
+  cmd.run:
+    - name: "dmesg | grep -c \"RTC chip is not present\" | grep 0"
+
 crypto-i2c-present-test:
   cmd.run:
     - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
