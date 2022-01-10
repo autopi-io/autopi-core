@@ -158,9 +158,28 @@ force-setup-can1-interface-test:
   cmd.run:
     - name: "ip link set can1 down && ip link set can1 up type can bitrate 500000"
 
-# TODO: cmd.run|shell: 'candump -T 3 can1' in a named screen session
-# TODO: cmd.run|shell: 'cansend can0 7DF#02010C'
-# TODO: cmd.run|shell: Reattch to aboce screen session and assert that messages was received
+ensure-can-interface-communication-candump-requisite:
+  file.directory:
+    - name: /opt/autopi/checkout
+    - makedirs: True
+  cmd.run:
+    - name: "candump -T 3000 -n 1 can1 > /opt/autopi/checkout/communication-test.dump"
+    - bg: True # run this as a background task in order to move forward with the rest of the tests
+
+ensure-can-interface-communication-cansend-requisite:
+  cmd.run:
+    - name: "cansend can0 7DF#02010C" # should this also be run as a background task?
+    - require:
+      - ensure-can-interface-communication-candump-requisite
+
+ensure-can-interface-communication-test:
+  cmd.run:
+    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /opt/autopi/checkout/communication-test.dump"
+    - require:
+      - ensure-can-termination-test
+      - ensure-can-interface-communication-candump-requisite
+      - ensure-can-interface-communication-cansend-requisite
+
 
 {%- endif %}
 
