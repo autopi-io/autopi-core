@@ -247,7 +247,7 @@ def motion_event_trigger(result, g_change=0.075, duration=1):
         return
 
     if result.get("_type", None) != "xyz":
-        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(key, result))
+        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(result))
 
         return
 
