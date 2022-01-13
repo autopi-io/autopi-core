@@ -1,4 +1,10 @@
+import logging
 import salt_more
+
+import salt.loader
+
+
+log = logging.getLogger(__name__)
 
 
 def configured(name, args=[], kwargs={}):
@@ -49,3 +55,29 @@ def configured(name, args=[], kwargs={}):
 
     return ret
 
+
+def serialized(name, args=[], kwargs={}, **serialize_kwargs):
+    """
+    """
+
+    ret = {
+        "name": name,
+        "result": None,
+        "changes": {},
+        "comment": ""
+    }
+
+    res = salt_more.call_error_safe(__salt__["{:s}".format(name)], *args, **kwargs)
+    if "error" in res:
+        ret["result"] = False
+        ret["comment"] = "Failed to execute module: {:}".format(res["error"])
+        return ret
+
+    if not "target" in serialize_kwargs:
+        ret["result"] = False
+        ret["comment"] = "No 'target' specified"
+        return ret
+
+    serialize_kwargs.setdefault("dataset", res)
+
+    return __states__["file.serialize"](serialize_kwargs["target"], saltenv=__env__, **serialize_kwargs)
