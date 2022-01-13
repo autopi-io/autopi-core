@@ -7,13 +7,13 @@ audio-test:
 # Test modem as default unless none is specified in pillar
 {%- if salt['pillar.get']('setup:mpcie:module', 'ec2x') %}
 
-assert-modem-ttyusb:
+assert-modem-tty-usb-test:
   cmd.run:
     - name: "ls /dev/ | grep -e \"ttyUSB0\" && ls /dev/ | grep -e \"ttyUSB1\" && ls /dev/ | grep -e \"ttyUSB2\" && ls /dev/ | grep -e \"ttyUSB3\""
 
 # Only required when testing HW
 {%- if not salt['pillar.get']('setup:mpcie:module', '') %}
-sim-card-present:
+sim-card-present-test:
   cmd.run:
     - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
 {%- endif %}
@@ -46,9 +46,15 @@ acc-xyz-test:
     - args:
       - xyz
     - validate:
+      {%- if salt['pillar.get']('state', '') %}
       - abs(ret["x"] - -1.0) < 0.1
       - abs(ret["y"] - 0.0) < 0.1
       - abs(ret["z"] - 0.0) < 0.1
+      {%- else %}
+      - abs(ret["x"] - 0.0) < 0.1
+      - abs(ret["y"] - 0.0) < 0.1
+      - abs(ret["z"] - -1.0) < 0.1
+      {%- endif %}
 
 acc-interrupt-timeout-check:
   test.module:
@@ -126,20 +132,11 @@ rtc-i2c-present-test:
   cmd.run:
     - name: "i2cdetect -y 1 0x51 0x51 | grep UU"
 
-rtc-linux-device-present-test:
-  cmd.run:
-    - name: "ls -la /dev/rtc"
-
-# we expect to NOT have that line in dmesg
-rtc-dmesg-does-not-report-missing-chip-test:
-  cmd.run:
-    - name: "dmesg | grep -c \"RTC chip is not present\" | grep 0"
-
 crypto-i2c-present-test:
   cmd.run:
     - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
 
-ensure-can-termination-test:
+can-term-setup-test:
   test.module:
     - name: spm.query
     - args:
@@ -150,42 +147,53 @@ ensure-can-termination-test:
       - ret["output"]["can0_term"]
       - ret["output"]["can1_term"]
 
-force-setup-can0-interface-test:
+can0-iface-init-test:
+  cmd.run:
+    - name: "dmesg | grep 'can0.*successfully initialized'"
+
+can1-iface-init-test:
+  cmd.run:
+    - name: "dmesg | grep 'can1.*successfully initialized'"
+
+can0-iface-setup-test:
   cmd.run:
     - name: "ip link set can0 down && ip link set can0 up type can bitrate 500000"
 
-force-setup-can1-interface-test:
+can1-iface-setup-test:
   cmd.run:
     - name: "ip link set can1 down && ip link set can1 up type can bitrate 500000"
 
-ensure-can-interface-communication-candump-requisite:
+can1-iface-dump-test:
   file.directory:
     - name: /opt/autopi/checkout
     - makedirs: True
   cmd.run:
-    - name: "candump -T 3000 -n 1 can1 > /opt/autopi/checkout/communication-test.dump"
-    - bg: True # run this as a background task in order to move forward with the rest of the tests
+    - name: "candump -T 3000 -n 1 can1 > /opt/autopi/checkout/can1.dump"
+    - bg: True  # Run this as a background task in order to move forward with the rest of the tests
 
-ensure-can-interface-communication-cansend-requisite:
+can0-iface-send-test:
   cmd.run:
-    - name: "cansend can0 7DF#02010C" # should this also be run as a background task?
+    - name: "cansend can0 7DF#02010C"
     - require:
-      - ensure-can-interface-communication-candump-requisite
+      - can-term-setup-test
 
-ensure-can-interface-communication-test:
+can1-iface-recv-test:
   cmd.run:
-    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /opt/autopi/checkout/communication-test.dump"
+    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /opt/autopi/checkout/can1.dump"
     - require:
-      - ensure-can-termination-test
-      - ensure-can-interface-communication-candump-requisite
-      - ensure-can-interface-communication-cansend-requisite
-
+      - can1-iface-dump-test
+      - can0-iface-send-test
 
 {%- endif %}
 
-# Not required when testing HW because the command fails before RTC time has been set the first time (from NTP server)
-{%- if salt['pillar.get']('state', '') %}
-rtc-read-time-test:
+rtc-device-present-test:
   cmd.run:
-    - name: "hwclock -r"
-{%- endif %}
+    - name: "ls -la /dev/rtc"
+
+rtc-dmesg-not-missing-test:
+  cmd.run:
+    - name: "dmesg | grep -c \"RTC chip is not present\" | grep 0"  # We expect to NOT have that line in dmesg
+
+rtc-systohc-and-get-time-test:
+  cmd.run:
+    - name: "hwclock -r && hwclock -r"
