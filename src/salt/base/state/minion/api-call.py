@@ -55,24 +55,26 @@ def state_output(res):
 
     state_results = OrderedDict(sorted(res.items(), key=lambda item:item[1]['__run_num__']))
 
+    print("--------")
     for key in state_results.keys():
         if res[key]["result"]:
-            print("{:} [ OK   ] {:}: {:} {:}".format(Colors.OKGREEN, res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
-            print("")
+            print("{:}[ PASS ] {:}: {:} {:}".format(Colors.OKGREEN, res[key].get("__id__", "") or res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
         else:
-            print("{:} [ FAIL ] {:}: {:} {:}".format(Colors.FAIL, res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
+            print("{:}[ FAIL ] {:}: {:} {:}".format(Colors.FAIL, res[key].get("__id__", "") or res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
+            changes = res[key].get("changes", {})
+            if changes:
+                print(yaml.safe_dump(changes, default_flow_style=False), end="")
+
             errors.append(res[key])
-            print("")
 
-    print("")
-
-    if errors:
-        print(Colors.FAIL + "Errors found" + Colors.ENDC)
-    else:
-        print (Colors.OKGREEN + "Success" + Colors.ENDC)
+        print("--------")
 
     succeded = len(res.keys()) - len(errors)
-    print("Finished running {:} states, succeded: {:}, failed: {:}".format(len(res.keys()), succeded, len(errors)))
+    print("Finished running {:} states: {:} succeded, {:} failed".format(len(res.keys()), succeded, len(errors)))
+    if errors:
+        print(Colors.FAIL + "Errors found - see details above".upper() + Colors.ENDC)
+    else:
+        print(Colors.OKGREEN + "Success".upper() + Colors.ENDC)
 
 def try_eval(val):
     if val.lower() in ["true", "false", "yes", "no"]:
