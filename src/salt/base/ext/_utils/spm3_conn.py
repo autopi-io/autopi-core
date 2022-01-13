@@ -340,7 +340,7 @@ class SPM3Conn(I2CConn):
             if threshold == None or duration == None:
                 raise ValueError("Both threshold and duration must be specified")
 
-            self.write_block(REG_WAKE_VOLT_LEVEL, list(bytearray(struct.pack("<HH", int(threshold*100), duration))))
+            self.write_block(REG_WAKE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
         res = self.read_block(REG_WAKE_VOLT_LEVEL, 9)
         threshold, duration, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
@@ -361,7 +361,7 @@ class SPM3Conn(I2CConn):
             if threshold == None or duration == None:
                 raise ValueError("Both threshold and duration must be specified")
 
-            self.write_block(REG_HIBERNATE_VOLT_LEVEL, list(bytearray(struct.pack("<HH", int(threshold*100), duration))))
+            self.write_block(REG_HIBERNATE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
         res = self.read_block(REG_HIBERNATE_VOLT_LEVEL, 9)
         threshold, duration, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
