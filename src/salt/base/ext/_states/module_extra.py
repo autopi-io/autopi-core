@@ -1,8 +1,6 @@
 import logging
 import salt_more
 
-import salt.loader
-
 
 log = logging.getLogger(__name__)
 
