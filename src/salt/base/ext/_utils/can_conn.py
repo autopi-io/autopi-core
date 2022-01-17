@@ -64,7 +64,7 @@ class CANConn(object):
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await(self, timeout=0.2, replies=None, strict=True):
+        def await_replies(self, timeout=0.2, replies=None, strict=True):
             ret = []
 
             count = 0
@@ -284,7 +284,7 @@ class CANConn(object):
             self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
 
             # Await replies
-            return reader.await(**kwargs)
+            return reader.await_replies(**kwargs)
 
     """
     obd_profiles = [
