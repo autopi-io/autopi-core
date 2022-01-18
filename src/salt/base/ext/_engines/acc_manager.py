@@ -229,12 +229,11 @@ def alternating_readout_filter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def motion_event_trigger(result, g_change=0.075, duration=1):
+def motion_event_trigger(result, duration=1):
     """
     Triggers 'vehicle/motion/jolting' and 'vehicle/motion/steady' events based on accelerometer XYZ readings.
 
     Optional arguments:
-      - g_change (float): The amount of change in G force that will trigger a 'vehicle/motion/jolting' event. Default value is 0.075.
       - duration (float): How long in seconds should the G force change be observed over? Default value is 1.
     """
 
@@ -247,7 +246,7 @@ def motion_event_trigger(result, g_change=0.075, duration=1):
         return
 
     if result.get("_type", None) != "xyz":
-        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(key, result))
+        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(result))
 
         return
 
@@ -280,7 +279,7 @@ def motion_event_trigger(result, g_change=0.075, duration=1):
         # Calculate the largest possible difference within window
         min_val, max_val = min_max(window)
         diff = round(max_val - min_val, 2)
-        if abs(diff) >= g_change:
+        if abs(diff) >= context["settings"]["acc_jolting_threshold"]:
             changes[axis] = diff
 
     # Increment window cursor
@@ -337,6 +336,9 @@ def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting accelerometer manager with settings: {:}".format(settings))
+
+        # Store settings in context
+        context["settings"] = settings
 
         # Give process higher priority - this can lead to process starvation on RPi Zero (single core)
         psutil.Process(os.getpid()).nice(settings.get("process_nice", -2))
