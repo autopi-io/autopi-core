@@ -129,6 +129,13 @@ gpio-{{ key }}-configured:
 {%- endfor %}
 
 {%- if salt["pillar.get"]("power:firmware:version")|float >= 2.0 %}
+spi-module-enabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtparam=spi.*$"
+    - repl: "dtparam=spi=on"
+    - append_if_not_found: true
+
 can1-configured:
   file.replace:
     - name: /boot/config.txt
