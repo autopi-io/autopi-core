@@ -1,4 +1,13 @@
 
+# Set environment variables
+{% for key, val in salt["pillar.get"]("envvar_requirements", {}).iteritems() %}
+requirements-envvar-{{ loop.index0 }}:
+   environ.setenv:
+     - name: {{ key }}
+     - value: {{ val }}
+     - update_minion: True
+{% endfor %}
+
 salt-source-repo-file-removed:
   file.absent:
     - name: /etc/apt/sources.list.d/saltstack.list
