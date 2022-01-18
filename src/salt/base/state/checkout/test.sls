@@ -164,11 +164,8 @@ can1-iface-setup-test:
     - name: "ip link set can1 down && ip link set can1 up type can bitrate 500000"
 
 can1-iface-dump-test:
-  file.directory:
-    - name: /opt/autopi/checkout
-    - makedirs: True
   cmd.run:
-    - name: "candump -T 3000 -n 1 can1 > /opt/autopi/checkout/can1.dump"
+    - name: "candump -T 3000 -n 1 can1 > /tmp/can1.dump"
     - bg: True  # Run this as a background task in order to move forward with the rest of the tests
 
 can0-iface-send-test:
@@ -179,7 +176,7 @@ can0-iface-send-test:
 
 can1-iface-recv-test:
   cmd.run:
-    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /opt/autopi/checkout/can1.dump"
+    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /tmp/can1.dump"
     - require:
       - can1-iface-dump-test
       - can0-iface-send-test
