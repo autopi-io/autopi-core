@@ -170,13 +170,13 @@ can1-iface-dump-test:
 
 can0-iface-send-test:
   cmd.run:
-    - name: "cansend can0 7DF#02010C"
+    - name: "cansend can0 7DF#020707"
     - require:
       - can-term-setup-test
 
 can1-iface-recv-test:
   cmd.run:
-    - name: "grep \"can1  7DF   \\[3\\]  02 01 0C\" /tmp/can1.dump"
+    - name: "grep \"can1  7DF   \\[3\\]  02 07 07\" /tmp/can1.dump"
     - require:
       - can1-iface-dump-test
       - can0-iface-send-test
