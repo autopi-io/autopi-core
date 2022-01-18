@@ -18,7 +18,7 @@ pi-user-aliases-configured:
   file.managed:
     - name: /home/pi/.bash_aliases
     - contents:
-      - alias autopitest="autopi state.sls checkout.test"
+      - alias hwtest='autopi state.sls checkout.hw 2>&1 | tee ~/hwtest.out | less -r +G && sudo bash -c "cat /home/pi/hwtest.out >> "/media/usb/hwtest-$(sed -rn "s/^serial:\s([0-9a-f]+)$/\1/p" /tmp/cryptoauth.yml).out"" && echo "Wrote result to USB drive mounted at /media/usb/"'
     - user: pi
     - group: pi
 
