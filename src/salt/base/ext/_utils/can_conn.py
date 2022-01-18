@@ -312,27 +312,41 @@ class CANConn(object):
     """
 
     @Decorators.ensure_open
-    def obd_query(self, mode, pid, id=0x7DF, is_ext_id=None, auto_format=True, auto_filter=True, **kwargs):
+    def obd_query(self, mode, pid, id=None, is_ext_id=None, auto_format=True, auto_filter=True, **kwargs):
         """
         """
 
         if is_ext_id == None:
             is_ext_id = self._settings.get("is_ext_id", False)  # TODO HN: Where to get this from?
 
+        if id == None:
+            if is_ext_id:
+                id = 0x18DB33F1
+            else:
+                id = 0x7DF
+
         data = bytearray([mode, pid])
         if auto_format:
             data = bytearray([len(data)]) + data
 
+        # Ensure filter to listen for OBD responses only
         if auto_filter:
-            # Ensure filter to listen for OBD responses only (IDs in range 0x7E8-0x7EF)
-            self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)
-
-            # TODO HN: 29bit: 18DAF100,1FFFFF00
+            if is_ext_id:
+                self.ensure_filter(id=0x18DAF100, is_ext_id=is_ext_id, mask=0x1FFFFF00, clear=True)
+            else:
+                self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)  # IDs in range 0x7E8-0x7EF
 
         msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
 
         return res
+
+    @Decorators.ensure_open
+    def j1939_query():
+        """
+        """
+
+        pass
 
     @Decorators.ensure_open
     def monitor_until(self, on_msg_func, duration=1, limit=None, receive_timeout=0.2, skip_error_frames=False, keep_listening=False, buffer_size=0):
