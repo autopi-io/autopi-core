@@ -11,13 +11,22 @@ udev-usb-rules-configured:
     - watch_in:
       - module: reboot-requested-after-udev-changes
 
-{%- if salt["grains.get"]("osmajorrelease") == 9 %}
 # Required by 'usbmount' to work
+{%- if salt["grains.get"]("osmajorrelease") == 9 %}
 udev-mount-flag-shared-configured:
   file.replace:
     - name: /lib/systemd/system/systemd-udevd.service
     - pattern: "^#?MountFlags=.*$"
     - repl: "MountFlags=shared"
+    - append_if_not_found: true
+    - watch_in:
+      - module: reboot-requested-after-udev-changes
+{%- elif salt["grains.get"]("osmajorrelease") >= 10 %}
+udev-no-private-mounts-configured:
+  file.replace:
+    - name: /lib/systemd/system/systemd-udevd.service
+    - pattern: "^#?PrivateMounts=.*$"
+    - repl: "PrivateMounts=no"
     - append_if_not_found: true
     - watch_in:
       - module: reboot-requested-after-udev-changes
