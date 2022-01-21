@@ -1131,7 +1131,6 @@ def operator_selection(search=False, mode=None, op_format=None, operator=None, a
 
         # parse response
         split_res = selected_operator_res["data"][7:].split(",")
-        log.info("FEDERLIZER: split_res: {}".format(split_res))
 
         # required data returned by AT command
         ret = {}
