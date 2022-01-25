@@ -521,7 +521,9 @@ class SocketCANInterface(STN11XX):
         else:
             protocol_cls = ident
 
-        res_0100 = self._port.obd_query(0x01, 0x00, is_ext_id=protocol_cls.HEADER_BITS > 11)
+        log.info("PROTOCOL.HEADER_BITS: {:}".format(protocol_cls.HEADER_BITS))
+
+        res_0100 = self._port.obd_query(0x01, 0x00, is_ext_id=protocol_cls.HEADER_BITS > 11, strict=False, skip_error_frames=True)
         if not res_0100:
             msg = "No data received when trying to verify connectivity of protocol '{:}'".format(ident)
             if test:
@@ -534,7 +536,7 @@ class SocketCANInterface(STN11XX):
         return [can_message_formatter(r) for r in res_0100]
 
     def _manual_protocol(self, ident, verify=False, baudrate=None):
-        log.info("############### MANUAL PROTOCOL")
+        log.info("############### MANUAL PROTOCOL")  # TODO HN: Remove this
 
         protocol_cls = self.supported_protocols()[ident]
         baudrate = baudrate or protocol_cls.DEFAULT_BAUDRATE
@@ -557,7 +559,7 @@ class SocketCANInterface(STN11XX):
         return protocol
 
     def _auto_protocol(self, verify=True, **kwargs):
-        log.info("############### AUTODETECTING PROTOCOL")
+        log.info("############### AUTODETECTING PROTOCOL")  # TODO HN: Remove this
 
         if not verify:
             ValueError("SocketCAN interface cannot autodetect protocol without verify")
@@ -567,9 +569,6 @@ class SocketCANInterface(STN11XX):
             log.info("Trying with protocol '{:}' on SocketCAN interface '{:}'".format(protocol_cls.ID, protocol_cls.INTERFACE))
 
             self._port.setup(channel=protocol_cls.INTERFACE, bitrate=protocol_cls.DEFAULT_BAUDRATE)
-
-            # TODO HN: Try to listen for activity before sending anything based on verify?
-            # Also 'socketcan.show' might give indication of protocol state before receiving/verify?
 
             # Verify protocol connectivity
             try:
@@ -582,7 +581,7 @@ class SocketCANInterface(STN11XX):
                     protocol.baudrate = protocol_cls.DEFAULT_BAUDRATE
 
                     return protocol
-            except SocketCANError as ex:
+            except Exception as ex:
                 log.info("Unable to verify protocol '{:}' on SocketCAN interface '{:}': {:}".format(protocol_cls.ID, protocol_cls.INTERFACE, ex))
 
         raise SocketCANError("Unable to autodetect protocol")
@@ -601,12 +600,15 @@ class SocketCANInterface(STN11XX):
 
     def _build_can_msg(self, cmd):
 
-        header = self._runtime_settings.get("header", self.OBDII_HEADER)
+        header = self._runtime_settings.get("header", None)
+        if header == None:
+            header = "18DB33F1" if self._protocol.HEADER_BITS > 11 else "7DF"
+        else:
 
-        # CAN priority
-        prio = self._runtime_settings.get("can_priority", None)
-        if prio != None:
-            header = str(prio) + str(header)
+            # CAN priority
+            prio = self._runtime_settings.get("can_priority", None)
+            if prio != None:
+                header = str(prio) + str(header)
 
         # CAN automatic formatting
         data = bytearray.fromhex(cmd)
@@ -618,8 +620,10 @@ class SocketCANInterface(STN11XX):
             is_extended_id=self._protocol.HEADER_BITS > 11)
 
     def _ensure_auto_filtering(self):
-        self._port.ensure_filter(id=0x7E8, is_ext_id=self._protocol.HEADER_BITS > 11, mask=0x7F8, clear=True)
-        # TODO HN: 29bit: 18DAF100,1FFFFF00
+        if self._protocol.HEADER_BITS > 11:
+            self._port.ensure_filter(id=0x18DAF100, is_ext_id=True, mask=0x1FFFFF00, clear=True)
+        else:
+            self._port.ensure_filter(id=0x7E8, is_ext_id=False, mask=0x7F8, clear=True)
 
 
 def can_message_formatter(msg):
