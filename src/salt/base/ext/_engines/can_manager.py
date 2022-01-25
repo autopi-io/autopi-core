@@ -3,6 +3,7 @@ import logging
 
 from can_conn import CANConn, decode_msg_from, encode_msg_to
 from messaging import EventDrivenMessageProcessor
+from six import string_types
 
 
 log = logging.getLogger(__name__)
@@ -16,20 +17,26 @@ conn = None
 
 
 @edmp.register_hook()
-def connection_handler():
+def connection_handler(autodetect=None, **kwargs):
     """
     """
 
+    if autodetect != None:
+        if autodetect == True:
+            conn.autodetect()
+        elif isinstance(autodetect, string_types):
+            conn.autodetect(*autodetect.split(","))
+        elif isinstance(autodetect, list):
+            conn.autodetect(*autodetect)
+        elif isinstance(autodetect, dict):
+            for key, val in autodetect.iteritems():
+                if conn.autodetect(key, **val):
+                    break
+
     ret = {
         "is_open": conn.is_open(),
-        "bus": {
-            "state": conn.bus_state()
-        },
-        "interface": {
-            "channel": conn.channel,
-            #"bitrate": conn.  # TODO HN
-            "state": conn.interface_state()
-        }
+        "bus": dict(conn.bus_metadata, state=conn.bus_state()),
+        "interface": dict(conn.settings, state=conn.interface_state())
     }
 
     return ret
@@ -155,11 +162,14 @@ def obd_query_handler(name, mode=None, pid=None, bytes=0, frames=None, strict=Fa
     lines = [encode_msg_to("str", msg, separator="") for msg in msgs]
 
     protocol = CANProtocol([])
-    protocol.HEADER_BITS = 29 if getattr(next(iter(msgs), None), "is_extented_id", False) else 11
+    if getattr(next(iter(msgs), None), "is_extended_id", False):
+        protocol.HEADER_BITS = 29
+    else:
+        protocol.HEADER_BITS = 11
 
     obd_msgs = protocol(lines)
     if not obd_msgs:
-        raise Exception("No OBD messages could be parsed")
+        raise Exception("No OBD messages could be parsed from lines {:}".format(lines))
 
     res = cmd(obd_msgs, filtering=False)
     if log.isEnabledFor(logging.DEBUG):

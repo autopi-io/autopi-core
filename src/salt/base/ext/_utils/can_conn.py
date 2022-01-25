@@ -105,12 +105,22 @@ class CANConn(object):
         self._filters = []
         self._is_filters_dirty = False
         self._monitor_listener = None
+        self._is_autodetecting = False
+
+    @property
+    def settings(self):
+        return dict(self._settings)
 
     @property
     def channel(self):
         return self._settings["channel"]
 
+    @property
+    def bus_metadata(self):
+        return dict(self._bus.metadata) if self._bus else {}
+
     def setup(self, **settings):
+        log.info("Applying settings {:}".format(settings))
 
         # Check for changes
         has_changes = False
@@ -133,24 +143,37 @@ class CANConn(object):
         self._settings.update(settings)
 
     def open(self):
-        settings = self._settings.copy()
-        log.info("Opening CAN connection using settings: {:}".format(settings))
 
-        channel = settings.pop("channel", "can0")
-        receive_own_messages = settings.pop("receive_own_messages", False)
-        notifier_timeout = settings.pop("notifier_timeout", 1.0)
+        local_settings = self._settings.copy()
+        channel = local_settings.pop("channel", "can0")
+        receive_own_messages = local_settings.pop("receive_own_messages", False)
+        notifier_timeout = local_settings.pop("notifier_timeout", 1.0)
+        autodetect = self._settings.pop("autodetect", False)
 
         # Ensure interface is down
         if self.interface_state() != INTERFACE_STATE_DOWN:
             __salt__["socketcan.down"](interface=channel)
 
-        # Bring up interface
-        __salt__["socketcan.up"](interface=channel, **settings)
+        if not self._is_autodetecting and autodetect:
+            if autodetect == True:
+                self.autodetect()
+            elif isinstance(autodetect, list):
+                self.autodetect(*autodetect)
+            elif isinstance(autodetect, dict):
+                for key, val in autodetect.iteritems():
+                    if self.autodetect(key, **val):
+                        break
+        else:
+            log.info("Opening CAN connection using settings {:}".format(self._settings))
 
-        self._bus = can.interfaces.socketcan.SocketcanBus(channel=channel, receive_own_messages=receive_own_messages)
-        self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
+            # Bring up interface
+            __salt__["socketcan.up"](interface=channel, **local_settings)
 
-        # TODO HN: Handle restart on error
+            self._bus = can.interfaces.socketcan.SocketcanBus(channel=channel, receive_own_messages=receive_own_messages)
+            self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
+            setattr(self._bus, "metadata", {})
+
+            # TODO HN: Handle restart on error
 
     def is_open(self):
         # TODO HN: Figure out how to do this
@@ -165,18 +188,111 @@ class CANConn(object):
 
         # Shut down bus, if present
         if self._bus:
-            self._bus.shutdown()
+            if DEBUG:
+                log.debug("Shutting down bus")
+
+            try:
+                self._bus.shutdown()
+            finally:
+                self._bus = None
+                self._notifier = None
 
         # Bring down interface, if not already
         if self.interface_state() != INTERFACE_STATE_DOWN:
             __salt__["socketcan.down"](interface=self.channel)
 
-    def interface_state(self, channel=None):
+    def autodetect(self, *args, **kwargs):
+        ret = False
 
-        # Get current state of interface
+        args = args or ["passive", "obd"]
+
+        if DEBUG:
+            log.debug("Autodetecting using arguments {:} and keyword arguments {:}".format(args, kwargs))
+
+        # Keep a copy of original settings
+        settings = dict(self._settings)
+
+        try:
+            self._is_autodetecting = True
+
+            for arg in args:
+                func = getattr(self, "_{:}_autodetect".format(arg), None)
+                if not func:
+                    raise ValueError("No autodetect method found for '{:}'".format(arg))
+
+                if func(**kwargs):
+                    ret = True
+
+                    break
+        finally:
+            self._is_autodetecting = False
+
+            # Restore settings if unsuccessful
+            if not ret:
+                self._settings = settings
+
+        return ret
+
+    def _passive_autodetect(self, channel=None, try_bitrates=[500000, 250000, 125000, 1000000], receive_timeout=0.2):
+        channel = channel or self.channel
+
+        for bitrate in try_bitrates:
+            self.setup(channel=channel, bitrate=bitrate)
+
+            try:
+                msg = self.receive(timeout=receive_timeout, expect=False)
+                if msg:
+                    self._bus.metadata["is_autodetected"] = True
+                    self._bus.metadata["is_extended_id"] = msg.is_extended_id
+
+                    log.info("Passive autodetect was successful using settings {:}".format(self._settings))
+
+                    return True
+                else:
+                    log.info("Passive autodetect did not receive any messages within timeout of {:} second(s) using settings {:}".format(receive_timeout, self._settings))
+            except Exception as ex:
+                log.info("Passive autodetect failed to receive CAN message using settings {:}: {:}".format(self._settings, ex))
+
+        log.warning("Passive autodetect failed")
+        self.close()
+
+        return False
+
+    def _obd_autodetect(self, channel=None, try_bitrates=[500000, 250000], receive_timeout=0.2):
+        channel = channel or self.channel
+
+        for bitrate in try_bitrates:
+            self.setup(channel=channel, bitrate=bitrate)
+
+            # Query for supported OBD PIDs
+            for id_bits in [11, 29]:
+                try:
+                    msgs = self.obd_query(0x01, 0x00, is_ext_id=id_bits > 11, timeout=receive_timeout, strict=False, skip_error_frames=True)
+                    if msgs:
+                        self._bus.metadata["is_autodetected"] = True
+                        self._bus.metadata["is_extended_id"] = id_bits > 11
+                        self._bus.metadata["is_obd_supported"] = True
+
+                        log.info("OBD autodetect for {:}bit CAN ID was successful using settings {:}".format(id_bits, self._settings))
+
+                        return True
+                    else:
+                        log.info("OBD autodetect for {:}bit CAN ID did not receive any reply messages within timeout of {:} second(s) using settings {:}".format(id_bits, receive_timeout, self._settings))
+
+                except Exception as ex:
+                    log.info("OBD autodetect for {:}bit CAN ID failed to query for supported PIDs using settings {:}: {:}".format(id_bits, self._settings, ex))
+
+        log.warning("OBD autodetect failed")
+        self.close()
+
+        return False
+
+    def interface_state(self, channel=None):
         channel = channel or self.channel
         state = __salt__["socketcan.show"](interface=channel).get("operstate", "").lower()
-        log.info("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
+
+        if DEBUG:
+            log.debug("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
 
         return state
 
@@ -251,21 +367,15 @@ class CANConn(object):
         self._is_filters_dirty = False
 
     @Decorators.ensure_open
-    def receive(self, timeout=1):
-        """
-        """
-
+    def receive(self, timeout=1, expect=True):
         msg = self._bus.recv(timeout=timeout)
-        if not msg:
+        if expect and not msg:
             raise Exception("No CAN message received within timeout of {:} second(s)".format(timeout))
 
         return msg
 
     @Decorators.ensure_open
     def send(self, *messages, **kwargs):
-        """
-        """
-
         for msg in messages:
             # TODO HN
             #if DEBUG:
@@ -275,8 +385,9 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def query(self, *messages, **kwargs):
-        """
-        """
+        ret = []
+
+        skip_error_frames = kwargs.pop("skip_error_frames", False)
 
         with self.ReplyReader(self._notifier) as reader:
 
@@ -284,40 +395,19 @@ class CANConn(object):
             self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
 
             # Await replies
-            return reader.await_replies(**kwargs)
+            for msg in reader.await_replies(**kwargs):
+                if msg.is_error_frame and skip_error_frames:
+                    log.warning("Query is skipping error frame: {:}".format(msg))
+                else:
+                    ret.append(msg)
 
-    """
-    obd_profiles = [
-        {"bitrate": 500000, "is_ext_id": False}
-        {"bitrate": 500000, "is_ext_id": True}
-        {"bitrate": 250000, "is_ext_id": False}
-        {"bitrate": 250000, "is_ext_id": True}
-    ]
-
-    def obd_profile(self, autodetect=False):
-        if autodetect:
-            for profile in obd_profiles:
-
-                self.setup(bitrate=profile.get("bitrate", 500000))
-
-                if self.obd_query(0x01, 0x00, is_ext_id=profile.get("is_ext_id", False))
-                    self._obd_profile = profile
-
-                    break
-
-            if not self._obd_profile:
-                raise Exception("Unable to autodetect an OBD profile")
-
-        return self._obd_profile
-    """
+        return ret
 
     @Decorators.ensure_open
     def obd_query(self, mode, pid, id=None, is_ext_id=None, auto_format=True, auto_filter=True, **kwargs):
-        """
-        """
 
         if is_ext_id == None:
-            is_ext_id = self._settings.get("is_ext_id", False)  # TODO HN: Where to get this from?
+            is_ext_id = self._bus.metadata.get("is_extended_id", False)
 
         if id == None:
             if is_ext_id:
@@ -343,15 +433,13 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def j1939_query():
-        """
-        """
+
+        # TODO HN
 
         pass
 
     @Decorators.ensure_open
     def monitor_until(self, on_msg_func, duration=1, limit=None, receive_timeout=0.2, skip_error_frames=False, keep_listening=False, buffer_size=0):
-        """
-        """
 
         if not duration and not limit:
             raise ValueError("Duration and/or limit must be specified")
@@ -421,8 +509,6 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def dump_until(self, file, duration=2, limit=None, receive_timeout=0.5, skip_error_frames=False, keep_listening=False, buffer_size=0, **kwargs):
-        """
-        """
 
         if file.endswith(".asc"):
             writer = can.io.ASCWriter(file, **kwargs)
@@ -450,8 +536,6 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def play(self, *files, **kwargs):
-        """
-        """
 
         ignore_timestamps    = kwargs.get("ignore_timestamps", False)
         min_gap              = kwargs.get("min_gap", 0.0001)
