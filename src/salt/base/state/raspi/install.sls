@@ -7,6 +7,7 @@ include:
   - .hwclock
   - .config
   - .swap
+  - .patch
 
 hosts-file-configured:
   host.only:
