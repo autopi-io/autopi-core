@@ -132,7 +132,7 @@ def play_handler(*files, **kwargs):
 
 
 @edmp.register_hook()
-def obd_query_handler(name, mode=None, pid=None, bytes=0, frames=None, strict=False, unit=None, **kwargs):
+def obd_query_handler(name, mode=None, pid=None, bytes=0, frames=None, strict=False, decoder=None, unit=None, **kwargs):
     """
     """
 

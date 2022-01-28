@@ -21,6 +21,19 @@ BUS_STATES = {
     can.bus.BusState.ERROR:   "error"
 }
 
+FRAME_TYPE_SF = 0x00  # Single frame
+FRAME_TYPE_FF = 0x10  # First frame of multi-frame message
+FRAME_TYPE_CF = 0x20  # Consecutive frame(s) of multi-frame message
+
+FRAME_TYPES = {
+    FRAME_TYPE_SF: "single",
+    FRAME_TYPE_FF: "first",
+    FRAME_TYPE_CF: "consecutive"
+}
+
+FLOW_CONTROL_CUSTOM = "custom"
+FLOW_CONTROL_OBD = "obd"
+
 
 class CANConn(object):
 
@@ -47,37 +60,40 @@ class CANConn(object):
 
     class ReplyReader(object):
 
-        def __init__(self, notifier):
-            self._notifier = notifier
+        def __init__(self, outer):
+            self.outer = outer
+
             self._listener = None
 
         def __enter__(self):
             self._listener = BufferedReader()
-
-            self._notifier.add_listener(self._listener)
+            self.outer._notifier.add_listener(self._listener)
 
             return self
 
         def __exit__(self, ex_type, ex_val, tb):
             try:
-                self._notifier.remove_listener(self._listener)
+                self.outer._notifier.remove_listener(self._listener)
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await_replies(self, timeout=0.2, replies=None, strict=True):
+        def await_replies(self, timeout=0.2, flow_control=True, replies=None, strict=True, **kwargs):
             ret = []
+
+            if isinstance(flow_control, list):
+                for name in flow_control:
+                    func = self.outer._flow_control_id_resolvers.get(name, None)
+                    if not func:
+                        raise ValueError("No flow control ID resolver found for '{:}'".format(name))
+
+                    kwargs.setdefault("id_resolvers", []).append(func)
 
             count = 0
             while True:
                 count += 1
 
-                reply = self._listener.next(timeout=timeout)
-                if reply != None:
-                    if reply.is_error_frame:
-                        log.warning("Received CAN reply message marked as error frame: {:}".format(reply))
-
-                    ret.append(reply)
-                else:  # Timeout
+                msg = self._listener.next(timeout=timeout)
+                if msg == None:  # Timeout
                     if strict:
                         if replies > 0:
                             raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
@@ -86,9 +102,26 @@ class CANConn(object):
 
                     break
 
+                frame_type = None
+                if msg.is_error_frame:
+                    log.warning("Received CAN reply message marked as an error frame: {:}".format(msg))
+                elif msg.is_remote_frame:
+                    log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
+                else:  # Data frame
+                    frame_type = msg.data[0] & 0xF0
+
+                    # TODO HN
+                    #if DEBUG:
+                    log.info("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
+
+                ret.append(msg)
+
                 # Stop if replies is met
                 if replies > 0 and count >= replies:
                     break
+
+                if flow_control and frame_type == FRAME_TYPE_FF:
+                    self.outer.send_flow_control_reply_for(msg, **kwargs)
 
             return ret
 
@@ -104,6 +137,11 @@ class CANConn(object):
         self._notifier = None
         self._filters = []
         self._is_filters_dirty = False
+        self._flow_control_id_mappings = {}
+        self._flow_control_id_resolvers = {
+            FLOW_CONTROL_CUSTOM: lambda msg: self._flow_control_id_mappings.get(msg.arbitration_id, None),
+            FLOW_CONTROL_OBD: obd_flow_control_id_for
+        }
         self._monitor_listener = None
         self._is_autodetecting = False
 
@@ -379,17 +417,40 @@ class CANConn(object):
         for msg in messages:
             # TODO HN
             #if DEBUG:
-            log.info("Sending CAN message: {}".format(msg))
+            log.info("Sending CAN message {:}".format(msg))
 
             self._bus.send(msg, **kwargs)
+
+    def send_flow_control_reply_for(self, message, accept_frames=0x00, separation_time=0x00, id_resolvers=[]):
+        if message.data[0] & 0xF0 != FRAME_TYPE_FF:
+            raise ValueError("CAN message must be of frame type '{:}'".format(FRAME_TYPES[FRAME_TYPE_FF]))
+
+        for id_resolver in id_resolvers or [self._custom_flow_control_id_resolver]:
+            arb_id = id_resolver(message)
+            if arb_id != None:
+                msg = can.Message(
+                    is_extended_id=message.is_extended_id,
+                    arbitration_id=arb_id,
+                    data=bytearray([0x30, accept_frames, separation_time]))
+
+                # TODO HN: Wait a little before sending flow control frame?
+
+                self.send(msg)
+
+                return True
+
+        log.warning("Unable to resolve flow control ID for CAN message {:}".format(message))
+
+        return False
 
     @Decorators.ensure_open
     def query(self, *messages, **kwargs):
         ret = []
 
         skip_error_frames = kwargs.pop("skip_error_frames", False)
+        skip_remote_frames = kwargs.pop("skip_remote_frames", False)
 
-        with self.ReplyReader(self._notifier) as reader:
+        with self.ReplyReader(self) as reader:
 
             # Send all messages
             self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
@@ -397,7 +458,9 @@ class CANConn(object):
             # Await replies
             for msg in reader.await_replies(**kwargs):
                 if msg.is_error_frame and skip_error_frames:
-                    log.warning("Query is skipping error frame: {:}".format(msg))
+                    log.warning("Query is skipping error frame {:}".format(msg))
+                if msg.is_remote_frame and skip_remote_frames:
+                    log.info("Query is skipping remote frame {:}".format(msg))
                 else:
                     ret.append(msg)
 
@@ -425,6 +488,9 @@ class CANConn(object):
                 self.ensure_filter(id=0x18DAF100, is_ext_id=is_ext_id, mask=0x1FFFFF00, clear=True)
             else:
                 self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)  # IDs in range 0x7E8-0x7EF
+
+        # Setup default flow control
+        kwargs.setdefault("flow_control", [FLOW_CONTROL_CUSTOM, FLOW_CONTROL_OBD])
 
         msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
@@ -579,9 +645,8 @@ class BufferedReader(can.listener.Listener):
 
     def on_message_received(self, msg):
         try:
-            # TODO HN
-            #if DEBUG:
-            log.info("CAN buffered reader got message: {:}".format(msg))
+            if DEBUG:
+                log.debug("CAN buffered reader got message {:}".format(msg))
 
             self._buffer.put(msg, False)
 
@@ -674,3 +739,18 @@ def encode_msg_to(kind, msg, **kwargs):
         return msg_to_dict(msg, **kwargs)
     else:
         raise ValueError("Unsupported type")
+
+def obd_flow_control_id_for(msg):
+    ret = None
+
+    if msg.is_extended_id:
+        if (msg.arbitration_id & 0x1FFFFF00) == 0x18DAF100:
+            ret = 0x18DA00F1 + ((msg.arbitration_id & 0xFF) << 8)
+    else:
+        if (msg.arbitration_id & 0x7F8) == 0x7E8:
+            ret = msg.arbitration_id - 0x08  # TX_ID = RX_ID - 8
+
+    if not ret:
+        log.info("Unable to determine OBD flow control ID for CAN message {:}".format(msg))
+
+    return ret
