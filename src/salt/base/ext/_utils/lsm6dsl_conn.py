@@ -69,6 +69,9 @@ FIFO_CTRL5_MODE_MASK = 0x07
 CTRL1_XL_ODR_MASK = 0xF0
 CTRL1_XL_FS_MASK  = 0x0C
 
+CTRL2_G_ODR_MASK = 0xF0
+CTRL2_G_FS_MASK = 0x0C
+
 CTRL3_C_BOOT_MASK      = (0x01 << 7)
 CTRL3_C_BDU_MASK       = (0x01 << 6)
 CTRL3_C_H_LACTIVE_MASK = (0x01 << 5)
@@ -135,6 +138,59 @@ XL_FS_SCALE_MAP = {
     8:  0.244,
     16: 0.488,
 }
+
+# Gyro Output Data Rates
+GYRO_ODR_OFF     = (0x0 << 4)
+GYRO_ODR_12_5HZ  = (0x1 << 4)
+GYRO_ODR_26HZ    = (0x2 << 4)
+GYRO_ODR_52HZ    = (0x3 << 4)
+GYRO_ODR_104HZ   = (0x4 << 4)
+GYRO_ODR_208HZ   = (0x5 << 4)
+GYRO_ODR_416HZ   = (0x6 << 4)
+GYRO_ODR_833HZ   = (0x7 << 4)
+GYRO_ODR_1_66KHZ = (0x8 << 4)
+GYRO_ODR_3_33KHZ = (0x9 << 4)
+GYRO_ODR_6_66KHZ = (0xA << 4)
+GYRO_ODR_DEFAULT = GYRO_ODR_OFF
+
+# Gyro Output Data Rate (ODR) map
+CTRL2_G_ODR_MAP = {
+    GYRO_ODR_OFF:     0,
+    GYRO_ODR_12_5HZ:  12.5,
+    GYRO_ODR_26HZ:    26,
+    GYRO_ODR_52HZ:    52,
+    GYRO_ODR_104HZ:   104,
+    GYRO_ODR_208HZ:   208,
+    GYRO_ODR_416HZ:   416,
+    GYRO_ODR_833HZ:   833,
+    GYRO_ODR_1_66KHZ: 1660,
+    GYRO_ODR_3_33KHZ: 3330,
+    GYRO_ODR_6_66KHZ: 6660,
+}
+
+# Gyro Full-Scale Values
+GYRO_FS_250DPS   = (0x0 << 2)
+GYRO_FS_500DPS   = (0x1 << 2)
+GYRO_FS_1000DPS  = (0x2 << 2)
+GYRO_FS_2000DPS  = (0x3 << 2)
+GYRO_FS_DEFAULT  = GYRO_FS_250DPS
+
+# Gyro Full-Scale map
+CTRL2_G_FS_MAP = {
+    GYRO_FS_250DPS:  250,
+    GYRO_FS_500DPS:  500,
+    GYRO_FS_1000DPS: 1000,
+    GYRO_FS_2000DPS: 2000,
+}
+
+GYRO_FS_SCALE_MAP = {
+    125:  4.375, # TODO add support for 125dps for gyroscope
+    250:  8.75,
+    500:  17.50,
+    1000: 35,
+    2000: 70,
+}
+
 
 # FIFO gyro decimations
 DEC_FIFO_GYRO_NOT_IN_FIFO = (0x0 << 3)
@@ -264,6 +320,13 @@ INT2_SOURCES = {
 
 
 class LSM6DSLConn(I2CConn):
+    """
+    The link below can provide an example implementation.
+    https://github.com/stm32duino/LSM6DSL/blob/main/src/LSM6DSL_ACC_GYRO_Driver.c
+
+    The sensitivity values (xl_scale and gyro_scale) can be found in the data sheet PDF of the chip
+    on page 21, table 3 - Mechanical Characteristics.
+    """
 
     def __init__(self, settings):
         super(LSM6DSLConn, self).__init__()
@@ -272,8 +335,11 @@ class LSM6DSLConn(I2CConn):
 
         self._xl_fs = None
         self._xl_scale = None
-
         self._xl_odr = None
+
+        self._gyro_fs = None
+        self._gyro_scale = None
+        self._gyro_odr = None
 
         self.init(settings)
 
@@ -338,8 +404,10 @@ class LSM6DSLConn(I2CConn):
                     self.intr(source, pin, value=True)
 
         self.acc_full_scale(value=self._settings.get("range", self._settings.get("acc_full_scale", CTRL1_XL_FS_MAP[XL_FS_DEFAULT])))
-
         self.acc_output_data_rate(value=self._settings.get("rate", self._settings.get("acc_output_data_rate", CTRL1_XL_ODR_MAP[XL_ODR_DEFAULT])))
+
+        self.gyro_full_scale(value=self._settings.get("gyro_full_scale", CTRL2_G_FS_MAP[GYRO_FS_DEFAULT]))
+        self.gyro_output_data_rate(value=self._settings.get("gyro_output_data_rate", CTRL2_G_ODR_MAP[GYRO_ODR_DEFAULT]))
 
     def reset(self, confirm=False):
         if not confirm:
@@ -414,16 +482,24 @@ class LSM6DSLConn(I2CConn):
         ret = {}
 
         buf = self.read(OUTX_L_XL, length=6)
-
-        x = self._signed_int((buf[0] | (buf[1] << 8)), bits=16) * self._xl_scale / 1000.0
-        y = self._signed_int((buf[2] | (buf[3] << 8)), bits=16) * self._xl_scale / 1000.0
-        z = self._signed_int((buf[4] | (buf[5] << 8)), bits=16) * self._xl_scale / 1000.0
+        x, y, z = self._calculate_acc(buf)
 
         ret["x"] = round(x, decimals)
         ret["y"] = round(y, decimals)
         ret["z"] = round(z, decimals)
 
         return ret
+
+    def _calculate_acc(self, raw_acc):
+        """
+        Calculates the real life accelerometer values based on the raw data readout.
+        """
+
+        x = self._signed_int((raw_acc[0] | (raw_acc[1] << 8)), bits=16) * self._xl_scale / 1000.0
+        y = self._signed_int((raw_acc[2] | (raw_acc[3] << 8)), bits=16) * self._xl_scale / 1000.0
+        z = self._signed_int((raw_acc[4] | (raw_acc[5] << 8)), bits=16) * self._xl_scale / 1000.0
+
+        return x, y, z
 
     def acc_output_data_rate(self, value=None):
         """
@@ -467,6 +543,100 @@ class LSM6DSLConn(I2CConn):
         self._xl_scale = XL_FS_SCALE_MAP[self._xl_fs]
 
         return self._xl_fs
+
+    def gyro_xyz(self, decimals=4):
+        ret = {}
+
+        buf = self.read(OUTX_L_G, length=6)
+        x, y, z = self._calculate_gyro(buf)
+
+        ret['x'] = round(x, decimals)
+        ret['y'] = round(y, decimals)
+        ret['z'] = round(z, decimals)
+
+        return ret
+
+    def _calculate_gyro(self, raw_gyro):
+        """
+        Calculates the real life gyroscope values based on the raw data readout.
+        """
+
+        x = self._signed_int((raw_gyro[0] | (raw_gyro[1] << 8)), bits=16) * self._gyro_scale / 1000.0
+        y = self._signed_int((raw_gyro[2] | (raw_gyro[3] << 8)), bits=16) * self._gyro_scale / 1000.0
+        z = self._signed_int((raw_gyro[4] | (raw_gyro[5] << 8)), bits=16) * self._gyro_scale / 1000.0
+
+        return x, y, z
+
+    def gyro_output_data_rate(self, value=None):
+        """
+        Gets or sets the output data rate (ODR) for the gyroscope. If value is not provided, the
+        current ODR will be read. Otherwise, the value will be set as the new ODR. Returns the
+        current ODR value.
+
+        Parameters:
+        - value: None or a number. View possible values in `CTRL2_G_ODR_MAP`
+        """
+
+        if value == None:
+            # read current value
+            res = self.read(CTRL2_G) & CTRL2_G_ODR_MASK
+
+        else:
+            # set new value
+            val = dict_key_by_value(CTRL2_G_ODR_MAP, value)
+            res = self.read_write(CTRL2_G, CTRL2_G_ODR_MASK, val) & CTRL2_G_ODR_MASK
+
+        self._gyro_odr = CTRL2_G_ODR_MAP[res]
+        return self._gyro_odr
+
+    def gyro_full_scale(self, value=None):
+        """
+        Gets or sets the full scale (FS) for the gyroscope. If value is not provided, the current
+        FS will be read.
+
+        Parameters:
+        - value: None or a number. View possible values in `CTRL2_G_FS_MAP`
+        """
+
+        if value == None:
+            # read current value
+            res = self.read(CTRL2_G) & CTRL2_G_FS_MASK
+
+        else:
+            # set new value
+            val = dict_key_by_value(CTRL2_G_FS_MAP, value)
+            res = self.read_write(CTRL2_G, CTRL2_G_FS_MASK, val) & CTRL2_G_FS_MASK
+
+        self._gyro_fs = CTRL2_G_FS_MAP[res]
+        self._gyro_scale = GYRO_FS_SCALE_MAP[self._gyro_fs]
+
+        return self._gyro_fs
+
+    def gyro_acc_xyz(self, decimals=4, **kwargs):
+        """
+        Readout both gyroscope and accelerometer data in one read. This is a utility function to minimize
+        number of readouts if you need both gyro and acc data.
+        """
+
+        buf = self.read(OUTX_L_G, length=12)
+
+        gyro_x, gyro_y, gyro_z = self._calculate_gyro(buf[:6])
+        acc_x, acc_y, acc_z = self._calculate_acc(buf[6:])
+
+        ret = {
+            "acc": {
+                "x": round(acc_x, decimals),
+                "y": round(acc_y, decimals),
+                "z": round(acc_z, decimals),
+            },
+            "gyro": {
+                "x": round(gyro_x, decimals),
+                "y": round(gyro_y, decimals),
+                "z": round(gyro_z, decimals),
+            },
+        }
+
+        return ret
 
     def fifo_status(self):
         """
@@ -563,41 +733,3 @@ class LSM6DSLConn(I2CConn):
             res = self.read_write(FIFO_CTRL5, FIFO_CTRL5_MODE_MASK, val) & FIFO_CTRL5_MODE_MASK
         
         return FIFO_CTRL5_MODE_MAP[res]
-
-    """
-    def gyro_xyz(self):
-        ret = {}
-
-        buf = self.read(OUTX_L_G, length=6)
-
-        x = self._signed_int((buf[0] | (buf[1] << 8)), bits=16) / 1000.0
-        y = self._signed_int((buf[2] | (buf[3] << 8)), bits=16) / 1000.0
-        z = self._signed_int((buf[4] | (buf[5] << 8)), bits=16) / 1000.0
-
-        ret['x'] = round(x, 2)
-        ret['y'] = round(y, 2)
-        ret['z'] = round(z, 2)
-
-        return ret
-
-
-    def gyro_mode(self, active=None):
-        if active == None:
-            result = self.read(CTRL2_G)
-            return result
-        
-        if active:
-            ### 250 dps
-            #self.write(CTRL2_G, 0x50)
-
-            ### 500 dps
-            #self.write(CTRL2_G, 0x54)
-
-            ### 1000 dps
-            #self.write(CTRL2_G, 0x58)
-
-            ### 2000 dps
-            self.write(CTRL2_G, 0x5C)
-        else:
-            self.write(CTRL2_G, 0)
-    """
