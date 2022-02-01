@@ -372,7 +372,11 @@ class SocketCANInterface(STN11XX):
             if self._runtime_settings.get("print_spaces", True):
                 msg_formatter = can_message_with_spaces_formatter
 
-            res = self._port.query(self._build_can_msg(cmd), replies=replies, timeout=timeout, strict=False)
+            res = self._port.query(self._build_can_msg(cmd),
+                replies=replies,
+                timeout=timeout,
+                flow_control=[self._port.FLOW_CONTROL_CUSTOM, self._port.FLOW_CONTROL_OBD],
+                strict=False)
             if res:
                 ret = [msg_formatter(r) for r in res]
             elif not raw_response:
@@ -491,28 +495,26 @@ class SocketCANInterface(STN11XX):
 
     def can_block_filters(self, clear=False, add=None):
         if add:
-            raise NotImplementedError("Not supported by SocketCAN interface")
+            raise NotImplementedError("Not supported by SocketCAN interface - only pass filters are supported")
 
     def can_flow_control_filters(self, clear=False, add=None):
-
-        # TODO HN: Find out if we should support this?
-
         if add:
-            raise NotImplementedError("Not supported by SocketCAN interface")
+            raise NotImplementedError("Not supported by SocketCAN interface - add pass filters instead")
 
     def j1939_pgn_filters(self, clear=False, add=None):
-
-        # TODO HN: We should support this!
-
         if add:
-            raise NotImplementedError("Not supported by SocketCAN interface")
+            raise NotImplementedError("Not supported by SocketCAN interface - add pass filters instead")
 
     def can_flow_control_id_pairs(self, clear=False, add=None):
 
-        # TODO HN: Find out if we should support this?
+        if clear:
+            self._port.flow_control_id_mappings.clear()
 
         if add:
-            raise NotImplementedError("Not supported by SocketCAN interface")
+            tx_id, rx_id = str(add).replace(" ", "").split(",")
+            self._port.flow_control_id_mappings[int(rx_id, 16)] = int(tx_id, 16)
+
+        super(SocketCANInterface, self).can_flow_control_id_pairs(clear=clear, add=add)
 
     def _verify_protocol(self, ident, test=False):
 
@@ -520,8 +522,6 @@ class SocketCANInterface(STN11XX):
             protocol_cls = self.supported_protocols()[ident]
         else:
             protocol_cls = ident
-
-        log.info("PROTOCOL.HEADER_BITS: {:}".format(protocol_cls.HEADER_BITS))
 
         res_0100 = self._port.obd_query(0x01, 0x00, is_ext_id=protocol_cls.HEADER_BITS > 11, strict=False, skip_error_frames=True)
         if not res_0100:
