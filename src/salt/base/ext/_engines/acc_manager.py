@@ -9,6 +9,7 @@ import psutil
 import RPi.GPIO as gpio
 import salt.loader
 import threading
+import math
 
 from common_util import abs_file_path, factory_rendering, min_max
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
@@ -326,6 +327,46 @@ def roll_pitch_enricher(result):
         # Perform calculations
         result["roll"] = math.atan2(result["y"], result["z"]) * 57.3
         result["pitch"] = math.atan2(-result["x"], math.sqrt(result["y"] * result["y"] + result["z"] * result["z"])) * 57.3
+
+    return result
+
+
+@edmp.register_hook(synchronize=False)
+def device_orientation_enricher(result):
+    """
+    Adds device orientation (in degrees) which attempts to report back the exact orientation of the
+    device to the ground.
+
+    NOTE: This enricher is still a work-in-progress and is not considered stable. The calculations
+    here are based on this article: http://www.starlino.com/imu_guide.html
+    """
+
+    error = extract_error_from(result)
+    if error:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Motion event trigger got error result: {:}".format(result))
+        return
+
+    if result.get("_type", None) != "xyz":
+        log.error("Motion event trigger got unsupported XYZ type result: {:}".format(result))
+        return
+
+    R = math.sqrt(
+        math.pow(result["x"], 2) + \
+        math.pow(result["y"], 2) + \
+        math.pow(result["z"], 2))
+
+    cos_x = result["x"] / R
+    cos_y = result["y"] / R
+    cos_z = result["z"] / R
+
+    acos_x = math.acos(cos_x)
+    acos_y = math.acos(cos_y)
+    acos_z = math.acos(cos_z)
+
+    result["deg_x"] = math.degrees(acos_x)
+    result["deg_y"] = math.degrees(acos_y)
+    result["deg_z"] = math.degrees(acos_z)
 
     return result
 
