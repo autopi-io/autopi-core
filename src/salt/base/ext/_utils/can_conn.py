@@ -31,11 +31,11 @@ FRAME_TYPES = {
     FRAME_TYPE_CF: "consecutive"
 }
 
-FLOW_CONTROL_CUSTOM = "custom"
-FLOW_CONTROL_OBD = "obd"
-
 
 class CANConn(object):
+
+    FLOW_CONTROL_CUSTOM = "custom"
+    FLOW_CONTROL_OBD = "obd"
 
     class Decorators(object):
 
@@ -49,8 +49,12 @@ class CANConn(object):
 
                 try:
                     return func(self, *args, **kwargs)
-                except:
-                    # TODO HN: Figure out if we should close here?
+                except can.CanError as err:
+
+                    # Store last error on bus
+                    if self._bus:
+                        self._bus.last_error = err
+
                     raise
 
             # Add reference to the original undecorated function
@@ -77,7 +81,7 @@ class CANConn(object):
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await_replies(self, timeout=0.2, flow_control=True, replies=None, strict=True, **kwargs):
+        def await_replies(self, timeout=0.2, flow_control=False, replies=None, strict=True, **kwargs):
             ret = []
 
             if isinstance(flow_control, list):
@@ -128,6 +132,8 @@ class CANConn(object):
     def __init__(self, __salt__):
         globals()["__salt__"] = __salt__
 
+        self.flow_control_id_mappings = {}
+
         self._settings = {
             "channel": "can0",
             "bitrate": 500000
@@ -137,10 +143,9 @@ class CANConn(object):
         self._notifier = None
         self._filters = []
         self._is_filters_dirty = False
-        self._flow_control_id_mappings = {}
         self._flow_control_id_resolvers = {
-            FLOW_CONTROL_CUSTOM: lambda msg: self._flow_control_id_mappings.get(msg.arbitration_id, None),
-            FLOW_CONTROL_OBD: obd_flow_control_id_for
+            self.FLOW_CONTROL_CUSTOM: lambda msg: self.flow_control_id_mappings.get(msg.arbitration_id, None),
+            self.FLOW_CONTROL_OBD: obd_reply_id_for
         }
         self._monitor_listener = None
         self._is_autodetecting = False
@@ -182,15 +187,14 @@ class CANConn(object):
 
     def open(self):
 
+        # Ensure closed
+        self.close()
+
         local_settings = self._settings.copy()
         channel = local_settings.pop("channel", "can0")
         receive_own_messages = local_settings.pop("receive_own_messages", False)
         notifier_timeout = local_settings.pop("notifier_timeout", 1.0)
         autodetect = self._settings.pop("autodetect", False)
-
-        # Ensure interface is down
-        if self.interface_state() != INTERFACE_STATE_DOWN:
-            __salt__["socketcan.down"](interface=channel)
 
         if not self._is_autodetecting and autodetect:
             if autodetect == True:
@@ -210,19 +214,28 @@ class CANConn(object):
             self._bus = can.interfaces.socketcan.SocketcanBus(channel=channel, receive_own_messages=receive_own_messages)
             self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
             setattr(self._bus, "metadata", {})
-
-            # TODO HN: Handle restart on error
+            setattr(self._bus, "last_error", None)
 
     def is_open(self):
-        # TODO HN: Figure out how to do this
-        return self._bus != None \
-            and self._bus.state != can.bus.BusState.ERROR
+        if self._bus != None:
+            if self._bus.last_error != None:
+                try:
+                    log.warning("Checking the state of the interface due to the latest CAN connection error: {:}".format(self._bus.last_error))
+
+                    if self.interface_state() != INTERFACE_STATE_UP:
+                        return False
+                finally:
+                    self._bus.last_error = None
+            
+            return self._bus.state != can.bus.BusState.ERROR
+
+        return False
 
     def ensure_open(self):
         if not self.is_open():
             self.open()
 
-    def close(self):
+    def close(self, force=False):
 
         # Shut down bus, if present
         if self._bus:
@@ -235,8 +248,8 @@ class CANConn(object):
                 self._bus = None
                 self._notifier = None
 
-        # Bring down interface, if not already
-        if self.interface_state() != INTERFACE_STATE_DOWN:
+        # Bring down interface
+        if force or self.interface_state() != INTERFACE_STATE_DOWN:
             __salt__["socketcan.down"](interface=self.channel)
 
     def autodetect(self, *args, **kwargs):
@@ -433,8 +446,6 @@ class CANConn(object):
                     arbitration_id=arb_id,
                     data=bytearray([0x30, accept_frames, separation_time]))
 
-                # TODO HN: Wait a little before sending flow control frame?
-
                 self.send(msg)
 
                 return True
@@ -459,7 +470,7 @@ class CANConn(object):
             for msg in reader.await_replies(**kwargs):
                 if msg.is_error_frame and skip_error_frames:
                     log.warning("Query is skipping error frame {:}".format(msg))
-                if msg.is_remote_frame and skip_remote_frames:
+                elif msg.is_remote_frame and skip_remote_frames:
                     log.info("Query is skipping remote frame {:}".format(msg))
                 else:
                     ret.append(msg)
@@ -490,7 +501,7 @@ class CANConn(object):
                 self.ensure_filter(id=0x7E8, is_ext_id=is_ext_id, mask=0x7F8, clear=True)  # IDs in range 0x7E8-0x7EF
 
         # Setup default flow control
-        kwargs.setdefault("flow_control", [FLOW_CONTROL_CUSTOM, FLOW_CONTROL_OBD])
+        kwargs.setdefault("flow_control", [self.FLOW_CONTROL_CUSTOM, self.FLOW_CONTROL_OBD])
 
         msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
@@ -740,7 +751,7 @@ def encode_msg_to(kind, msg, **kwargs):
     else:
         raise ValueError("Unsupported type")
 
-def obd_flow_control_id_for(msg):
+def obd_reply_id_for(msg):
     ret = None
 
     if msg.is_extended_id:
@@ -748,9 +759,9 @@ def obd_flow_control_id_for(msg):
             ret = 0x18DA00F1 + ((msg.arbitration_id & 0xFF) << 8)
     else:
         if (msg.arbitration_id & 0x7F8) == 0x7E8:
-            ret = msg.arbitration_id - 0x08  # TX_ID = RX_ID - 8
+            ret = msg.arbitration_id - 0x08
 
     if not ret:
-        log.info("Unable to determine OBD flow control ID for CAN message {:}".format(msg))
+        log.info("Unable to determine OBD reply ID for CAN message {:}".format(msg))
 
     return ret
