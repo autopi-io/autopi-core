@@ -4,6 +4,7 @@ import re
 import salt.exceptions
 import subprocess
 
+from messaging import extract_error_from
 
 log = logging.getLogger(__name__)
 
@@ -58,45 +59,37 @@ def clients(interface="uap0"):
     return ret
 
 
-def check_clients():
-    """
-    Checks which clients have connected or disconnected since the last check.
-
-    Needs to be used in a process with a long living context (e.g. a service - *event_reactor*).
-    If the command is run seperately it won't remember which clients were connected since the last
-    time it was ran.
-    """
-
-    ctx_connected_clients = __context__.get("hostapd.connected_clients", set())
-    res = clients()
-
-    currently_connected_clients = set(mac for mac in res.keys())
-
-    ret = {
-        "newly_connected_clients": list(currently_connected_clients - ctx_connected_clients),
-        "newly_disconnected_clients": list(ctx_connected_clients - currently_connected_clients),
-    }
-
-    __context__["hostapd.connected_clients"] = currently_connected_clients
-
-    return ret
-
-
 def clients_changed_trigger(result):
     """
     Triggers 'system/hostapd/connected' and 'system/hostapd/disconnected' events.
+
+    Expect response to be in the format given as the hostapd.clients function's return format.
+
+    Events are triggered based on previously connected hostapd clients which are kept track of in
+    the context.
     """
 
-    connected_event_tag = "system/hostapd/connected"
-    disconnected_event_tag = "system/hostapd/disconnected"
-
-    if not result:
+    error = extract_error_from(result)
+    if error:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Motion event trigger got error result: {}".format(result))
         return
 
-    if len(result.get("newly_connected_clients", [])) > 0:
-        connected_clients_data = { "values": result["newly_connected_clients"] }
-        __salt__["minionutil.trigger_event"](connected_event_tag, data=connected_clients_data)
+    ctx = __context__.setdefault("hostapd.clients_changed_trigger", {})
 
-    if len(result.get("newly_disconnected_clients", [])) > 0:
-        disconnected_clients_data = { "values": result["newly_disconnected_clients"] }
-        __salt__["minionutil.trigger_event"](disconnected_event_tag, data=disconnected_clients_data)
+    previously_connected_clients = ctx.get("connected_clients", set())
+    currently_connected_clients = set(mac for mac in result.keys())
+
+    newly_connected_clients = list(currently_connected_clients - previously_connected_clients)
+    newly_disconnected_clients = list(previously_connected_clients - currently_connected_clients)
+
+    for mac in newly_connected_clients:
+        tag = "system/hostapd/client/{}/connected".format(mac)
+        __salt__["minionutil.trigger_event"](tag)
+
+    for mac in newly_disconnected_clients:
+        tag = "system/hostapd/client/{}/disconnected".format(mac)
+        __salt__["minionutil.trigger_event"](tag)
+
+    # update context
+    ctx["connected_clients"] = currently_connected_clients
