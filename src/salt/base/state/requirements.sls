@@ -4,7 +4,7 @@
 requirements-envvar-{{ loop.index0 }}:
    environ.setenv:
      - name: {{ key }}
-     - value: {{ val }}
+     - value: "{{ val }}"
      - update_minion: True
 {% endfor %}
 
