@@ -5,13 +5,14 @@ import time
 from i2c_conn import I2CConn
 
 
+# Registers
 REG_HEARTBEAT             = 0x00  # Read-only
 REG_STATUS                = 0x01  # Read-only
 REG_STATS                 = 0x02  # Read-only
 REG_VERSION               = 0x03  # Read-only
 REG_WAKE_FLAGS            = 0x04  # Read-only
 REG_VOLT_READOUT          = 0x05  # Read/write
-REG_VOLT_TRIGGER_FLAGS    = 0x06  # Read-only
+REG_VOLT_CONFIG_FLAGS     = 0x06  # Read-only
 REG_SYS_PINS              = 0x07  # Read/write
 REG_USR_PINS              = 0x08  # Read/write
 REG_EXT_PINS              = 0x09  # Read/write
@@ -19,7 +20,9 @@ REG_SLEEP_DURATION        = 0x0A  # Read/write
 REG_WAKE_VOLT_CHANGE      = 0x0B  # Read/write
 REG_WAKE_VOLT_LEVEL       = 0x0C  # Read/write
 REG_HIBERNATE_VOLT_LEVEL  = 0x0D  # Read/write
-# Registers
+REG_VOLT_LIMIT            = 0x0E  # Read/write
+REG_VOLT_FACTOR           = 0x0F  # Read/write
+REG_VOLT_EWMA_ALPHA       = 0x10  # Read/write
 
 # Wake flags
 WAKE_FLAG_UNKNOWN  = (1 << 0x00)
@@ -28,6 +31,11 @@ WAKE_FLAG_RTC      = (1 << 0x02)
 WAKE_FLAG_ACC      = (1 << 0x03)
 WAKE_FLAG_EXT      = (1 << 0x04)
 WAKE_FLAG_MODEM    = (1 << 0x05)
+
+# Volt meter parameters
+VOLT_METER_LIMIT       = (1 << 0x00)
+VOLT_METER_FACTOR      = (1 << 0x01)
+VOLT_METER_EWMA_ALPHA  = (1 << 0x02)
 
 # Volt triggers
 VOLT_TRIGGER_HIBERNATE_LEVEL  = (1 << 0x00)
@@ -89,7 +97,13 @@ WAKE_FLAGS = {
     "modem":    WAKE_FLAG_MODEM
 }
 
-VOLT_TRIGGERS = {
+VOLT_METER_FLAGS = {
+    "limit":       VOLT_METER_LIMIT,
+    "factor":      VOLT_METER_FACTOR,
+    "ewma_alpha":  VOLT_METER_EWMA_ALPHA
+}
+
+VOLT_TRIGGER_FLAGS = {
     "wake_change":      VOLT_TRIGGER_WAKE_CHANGE,
     "wake_level":       VOLT_TRIGGER_WAKE_LEVEL,
     "hibernate_level":  VOLT_TRIGGER_HIBERNATE_LEVEL
@@ -273,19 +287,74 @@ class SPM3Conn(I2CConn):
 
         return ret
 
-    def volt_trigger_flags(self):
+    def volt_config_flags(self):
         """
-        Get flags related to volt trigger.
+        Get status flags related to voltage configuration.
         """
 
-        res = self.read_block(REG_VOLT_TRIGGER_FLAGS, 3)
-        load_failed, unsaved, crc = struct.unpack("<BBB", bytearray(res))
+        res = self.read_block(REG_VOLT_CONFIG_FLAGS, 5)
+        meter_load_failed, meter_unsaved, trigger_load_failed, trigger_unsaved, crc = struct.unpack("<BBBBB", bytearray(res))
 
-        ret = {}
-        ret["load_failed"] = {k: bool(load_failed & v) for k, v in VOLT_TRIGGERS.iteritems()}
-        ret["unsaved"] = {k: bool(unsaved & v) for k, v in VOLT_TRIGGERS.iteritems()}
+        ret = {
+            "meter": {
+                "load_failed": {k: bool(meter_load_failed & v) for k, v in VOLT_METER_FLAGS.iteritems()},
+                "unsaved": {k: bool(meter_unsaved & v) for k, v in VOLT_METER_FLAGS.iteritems()}
+            },
+            "trigger": {
+                "load_failed": {k: bool(trigger_load_failed & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()},
+                "unsaved": {k: bool(trigger_unsaved & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()}
+            }
+        }
 
         return ret
+
+    def volt_limit(self, value=None):
+        """
+        Get or set maximum voltage limit.
+        """
+
+        if value != None:
+            if not 0 < value <= 30.8:
+                raise ValueError("Invalid range")
+
+            self.write_block(REG_VOLT_LIMIT, list(bytearray(struct.pack("<I", int(value*100000000)))))
+
+        res = self.read_block(REG_VOLT_LIMIT, 7)
+        value, crc16, crc8 = struct.unpack("<IHB", bytearray(res))
+
+        return round(float(value)/100000000, 2)
+
+    def volt_factor(self, value=None):
+        """
+        Get or set factor to correct voltage readout values. Disabled when set to zero.
+        """
+
+        if value != None:
+            if not 0 <= value < 2:
+                raise ValueError("Invalid range")
+
+            self.write_block(REG_VOLT_FACTOR, list(bytearray(struct.pack("<H", int(value*1000)))))
+
+        res = self.read_block(REG_VOLT_FACTOR, 5)
+        value, crc16, crc8 = struct.unpack("<HHB", bytearray(res))
+
+        return round(float(value)/1000, 3)
+
+    def volt_ewma_alpha(self, value=None):
+        """
+        Get or set alpha variable of EWMA (Exponentially Weighted Moving Average) filter used when calculating voltage. Disabled when set to zero.
+        """
+
+        if value != None:
+            if not 0 <= value <= 1:
+                raise ValueError("Invalid range")
+
+            self.write_block(REG_VOLT_EWMA_ALPHA, list(bytearray(struct.pack("<B", int(value*100)))))
+
+        res = self.read_block(REG_VOLT_EWMA_ALPHA, 4)
+        value, crc16, crc8 = struct.unpack("<BHB", bytearray(res))
+
+        return round(float(value)/100, 2)
 
     def sys_pins(self, **kwargs):
         """
@@ -310,7 +379,7 @@ class SPM3Conn(I2CConn):
 
     def wake_volt_change(self, difference=None, period=None):
         """
-        Wake up by volt change.
+        Get or set trigger to wake up by voltage change.
         """
 
         ret = {}
@@ -331,7 +400,7 @@ class SPM3Conn(I2CConn):
 
     def wake_volt_level(self, threshold=None, duration=None):
         """
-        Wake up when above volt level.
+        Get or set trigger to wake up when above voltage level.
         """
 
         ret = {}
@@ -352,7 +421,7 @@ class SPM3Conn(I2CConn):
 
     def hibernate_volt_level(self, threshold=None, duration=None):
         """
-        Hibernate when below volt level.
+        Get or set trigger to hibernate when below voltage level.
         """
 
         ret = {}
@@ -373,7 +442,7 @@ class SPM3Conn(I2CConn):
 
     def sleep_duration(self, value=None):
         """
-        Set sleep duration in milliseconds.
+        Get or set sleep duration (in milliseconds).
         """
 
         if value != None:
