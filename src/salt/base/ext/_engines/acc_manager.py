@@ -332,7 +332,7 @@ def roll_pitch_enricher(result):
 
 
 @edmp.register_hook(synchronize=False)
-def device_orientation_enricher(result):
+def orientation_enricher(result):
     """
     Adds device orientation (in degrees) which attempts to report back the exact orientation of the
     device to the ground.
