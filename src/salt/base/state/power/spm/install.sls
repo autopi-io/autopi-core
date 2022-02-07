@@ -22,3 +22,13 @@ spm-release-installed:
     {%- endif %}
     - version: "{{ salt["pillar.get"]("power:firmware:version") }}"
 {%- endif %}
+
+{%- if salt["pillar.get"]("power:firmware:version")|float >= 3.0 %}
+spm-bod-fuse-configured:
+  module_extra.configured:
+    - name: avrdude.fuse
+    - args:
+      - h
+    - kwargs:
+        value: "0xdd"
+{%- endif %}
