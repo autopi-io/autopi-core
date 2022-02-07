@@ -288,13 +288,10 @@ def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"):
     try:
         context["geofence"]["fences"] = read_geofence_file(path)
         context["geofence"]["error"] = None 
-        ret["updated_settings"] = context["geofence"]
 
     except Exception as err:
         log.error(err)
         ret["error"] = err.__str__()
-
-    log.info("Successfully loaded geofences")
 
     return ret
 

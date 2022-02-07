@@ -32,7 +32,7 @@ def get_distance_between_points(point1, point2):
 
 def is_in_circle(location, circle_center, circle_radius):
     """
-    Returns true if location is within radius in km of the circle center formatted as {"lat": lat, "lon": lon}
+    Returns true if location is within radius in km of the circle center
     """
     dist = get_distance_between_points(location, circle_center)
     return dist <= circle_radius
@@ -40,12 +40,10 @@ def is_in_circle(location, circle_center, circle_radius):
 
 def is_in_polygon(location, polygon_corners):
     """
-    Returns true if location is within the specified polygon formatted as [{"lat": lat, "lon": lon}, ...]
+    Returns true if location is within the specified polygon
     """
     location_latlon = LatLon(location["lat"], location["lon"])
-    polygon_corners_latlon = [LatLon(corner["lat"], corner["lon"]) for corner in polygon_corners]
-
-    return location_latlon.isenclosedBy(polygon_corners_latlon)
+    return location_latlon.isenclosedBy(polygon_corners)
 
 
 def read_geofence_file(file_path):
@@ -75,6 +73,9 @@ def read_geofence_file(file_path):
                 fence["state"] = None
                 fence["last_reading"] = None
                 fence["repeat_count"] = 0
+
+                if fence["shape"] == "SHAPE_POLYGON":
+                    fence["coordinates"] = [LatLon(corner["lat"], corner["lon"]) for corner in fence["coordinates"]]
 
                 ret_arr.append(fence)
 
