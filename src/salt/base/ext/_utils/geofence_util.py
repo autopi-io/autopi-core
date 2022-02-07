@@ -5,10 +5,12 @@ from math import radians, cos, sin, sqrt, atan2
 
 log = logging.getLogger(__name__)
 
+
 def get_distance_between_points(point1, point2):
     """
     Returns the geographical distance in km between 2 coordinates formatted as ("lat": lat, "lon": lon)
     """
+    # Thanks, https://stackoverflow.com/a/19412565
 
     R = 6373.0
 
@@ -46,13 +48,12 @@ def is_in_polygon(location, polygon_corners):
     return location_latlon.isenclosedBy(polygon_corners_latlon)
 
 
-
 def read_geofence_file(file_path):
     """
-    Reads the specified yaml file containing geofences, and returns an array containing them
+    Reads the specified yaml file containing geofences, adds fields necessary for state tracking
     """
 
-    log.info("Setting up geofences")
+    log.info("Reading geofences file {}".format(file_path))
     
     ret_arr = []
 
@@ -70,15 +71,18 @@ def read_geofence_file(file_path):
             if log.isEnabledFor(logging.DEBUG):
                 log.debug("Read fence {} ({})".format(fence["id"], fence["name"]))
 
-            if fence["shape"] == "SHAPE_POLYGON" or fence["shape"] == "SHAPE_CIRCLE":
+            if fence["shape"] == "SHAPE_POLYGON" or fence["shape"] == "SHAPE_CIRCLE":    
                 fence["state"] = None
                 fence["last_reading"] = None
                 fence["repeat_count"] = 0
+
                 ret_arr.append(fence)
+
             else:
                 log.warn("Invalid geofence shape of '{}' for fence '{}'".format(fence["shape"], fence["name"]))
 
     except Exception as err:
-        log.warn("Failed while initializing geofence objects: {}".format(err))
+        log.warn("Failed while reading geofences file: {}".format(err))
+        raise err
 
     return ret_arr

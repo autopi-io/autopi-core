@@ -254,23 +254,49 @@ def geofence_event_trigger(result):
         else:
             fresh_state = "outside"
 
-        # Increase repeat count if last reading is the same as current, otherwise reset to 0
+        # Update or reset repeat counter
         if fence["last_reading"] == fresh_state:
             fence["repeat_count"] += 1
 
             # Trigger event and update fence state if repeat count has been reached
             if (fence["repeat_count"] >= ctx["repeat_count_to_trigger_change"] and
                 fence["state"] != fresh_state):
+    
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Changing state for geofence {} ({}) to {}".format(fence["id"], fence["name"], fresh_state))
+
                 fence["state"] = fresh_state
 
                 edmp.trigger_event(
                     {"reason": ctx["error"], "fence": fence["id"]} if ctx["error"] else {"fence": fence["id"]},
                     "vehicle/geofence/{:s}".format(fence["state"]))
         
-        # Otherwise, set last reading and repeat count for next iteration
         else: 
             fence["last_reading"] = fresh_state
             fence["repeat_count"] = 0
+
+
+@edmp.register_hook(synchronize=False)
+def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"):
+    """
+    Loads geofence file
+    """
+    log.info("Loading geofence settings from {}".format(path))
+    
+    ret = {}
+
+    try:
+        context["geofence"]["fences"] = read_geofence_file(path)
+        context["geofence"]["error"] = None 
+        ret["updated_settings"] = context["geofence"]
+
+    except Exception as err:
+        log.error(err)
+        ret["error"] = err.__str__()
+
+    log.info("Successfully loaded geofences")
+
+    return ret
 
 
 @intercept_exit_signal
@@ -282,8 +308,8 @@ def start(**settings):
         # Initialize serial connection
         conn.init(settings["serial_conn"])
 
-        # Read geofences
-        context["geofence"]["fences"] = read_geofence_file("/etc/salt/minion.d/geofences.yaml")
+        # Initialize geofences
+        load_geofences_handler()
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
