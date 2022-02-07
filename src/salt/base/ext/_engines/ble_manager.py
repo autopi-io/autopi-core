@@ -86,7 +86,7 @@ def interface_handler(*args):
             # Give device some time to recover
             time.sleep(.1)
 
-            iface.start()
+            _start_interface()
         elif arg == "history":
             ret["history"] = {
                 "commands": [cmd.as_dict() for cmd in iface.command_history],
@@ -198,9 +198,41 @@ def flash_firmware_handler(bin_file, write=False, erase=False, verify=True):
         mode_handler(value="normal")
 
         # Ensure interface is started
-        iface.start()
+        _start_interface()
 
     return ret
+
+
+def _start_interface(retries=6, reset_on=4):
+    """
+    This handler will attempt to start the interface with some retry functionality.
+
+    Parameters:
+    - retries (int): The number of retries this function will do. Default: 6
+    - reset_on (int): The retry attempt that this function will attempt to reset the BLE chip. Default: 4
+    """
+    if type(retries) != int or type(reset_on) != int:
+        raise TypeError("Retries and reset_on needs to be integer numbers")
+
+    for i in range(retries):
+        # Ensure interface is stopped before attempting to start or reset mode
+        iface.stop()
+
+        # Reset interface on the fourth attempt
+        if i == reset_on-1:
+            log.warning("Resetting GATTTerminalInterface during startup sequence")
+            mode_handler(value="reset")
+            time.sleep(.2)
+
+        try:
+            iface.start()
+            break # If above statement doesn't throw an error, we're good to go
+        except Exception as e:
+            if i == retries-1:
+                # Last attempt, give full stack trace of exception
+                log.exception("GATTTerminalInterface failed to start {} time(s).".format(i+1))
+            else:
+                log.warning("GATTTerminalInterface failed to start {} time(s). {}".format(i+1, e))
 
 
 @intercept_exit_signal
@@ -255,13 +287,10 @@ def start(**settings):
         iface.on_authenticate = on_authenticate
         iface.on_execute = on_execute
 
-        try:
-            iface.start()
+        # Start the interface
+        _start_interface()
 
-            # Signal ready
-            gpio.output(READY_PIN, gpio.HIGH)
-        except:
-            log.exception("Failed to start terminal interface")
+        gpio.output(READY_PIN, iface.is_running)
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
