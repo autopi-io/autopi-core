@@ -157,17 +157,7 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
         log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
 
-        params = ["avrdude", "-p {:s}".format(part_id), "-c autopi", "-U flash:w:{:s}".format(hex_file)]
-        if no_write:
-            params.append("-n")
-
-        res = __salt__["cmd.run_all"](" ".join(params))
-
-        if res["retcode"] == 0:
-            ret["output"] = res["stderr"]
-        else:
-            ret["error"] = res["stderr"]
-            ret["output"] = res["stdout"]
+        ret = __salt__["avrdude.flash"](hex_file, part_id=part_id, raise_on_error=False, no_write=no_write)
 
         if not no_write:
             log.info("Flashed firmware release '{:}'".format(hex_file))

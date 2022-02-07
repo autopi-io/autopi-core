@@ -29,8 +29,8 @@ def show(interface="can0", details=False, stats=False):
 
     Optional arguments:
       - interface (str): CAN interface. Default is 'can0'.
-      - details (boot): Include details. Default is 'False'.
-      - stats (boot): Include statistics. Default is 'False'.
+      - details (bool): Include details. Default is 'False'.
+      - stats (bool): Include statistics. Default is 'False'.
     """
 
     opts = ["-json"]
