@@ -130,10 +130,18 @@ def load_settings_handler():
     with open("/opt/autopi/rfid/settings.yaml", "r") as settings_file:
         new_settings = yaml.load(settings_file)
 
-    context["authorized_tokens"] = new_settings.get("authorized_tokens", [])
+    # Need this to be with default None because auth_tokens can look like this:
+    # authorized_tokens: null
+    # `null` will override a default value of an empty array
+    authorized_tokens = new_settings.get("authorized_tokens", None) or []
+
+    # Apply settings
+    context["authorized_tokens"] = authorized_tokens
 
     ret["settings_updated"] = True
-    ret["value"] = new_settings
+    ret["value"] = {
+        "authorized_tokens": authorized_tokens
+    }
 
     return ret
 
@@ -152,7 +160,7 @@ def start(**settings):
 
         # Init RFID settings
         res = load_settings_handler()
-        if not res.get("settupgs_updated", False):
+        if not res.get("settings_updated", False):
             log.warning("RFID specific settings couldn't be loaded.")
 
         # Init RFID reader
