@@ -107,6 +107,10 @@ log = logging.getLogger(__name__)
 
 class SPM2Conn(I2CConn):
 
+    @property
+    def revision(self):
+        return 2
+
     def read_block(self, register, length):
         res = super(SPM2Conn, self).read_block(register, length)
 

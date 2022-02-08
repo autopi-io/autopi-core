@@ -58,6 +58,10 @@ TRIGGERS = {
 
 class SPMConn(GPIOSPIConn):
 
+    @property
+    def revision(self):
+        return 1
+
     def __init__(self):
         super(SPMConn, self).__init__(gpio_pin.SPI_CLK, gpio_pin.SPI_MOSI, gpio_pin.SPI_MISO, gpio_mode=gpio_pin.MODE)
 

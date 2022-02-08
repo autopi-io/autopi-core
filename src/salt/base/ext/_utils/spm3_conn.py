@@ -179,6 +179,10 @@ log = logging.getLogger(__name__)
 
 class SPM3Conn(I2CConn):
 
+    @property
+    def revision(self):
+        return 3
+
     def read_block(self, register, length, check_crc=True):
         res = super(SPM3Conn, self).read_block(register, length)
 
@@ -292,19 +296,19 @@ class SPM3Conn(I2CConn):
         Get status flags related to voltage configuration.
         """
 
-        res = self.read_block(REG_VOLT_CONFIG_FLAGS, 5)
-        meter_load_failed, meter_unsaved, trigger_load_failed, trigger_unsaved, crc = struct.unpack("<BBBBB", bytearray(res))
-
         ret = {
-            "meter": {
-                "load_failed": {k: bool(meter_load_failed & v) for k, v in VOLT_METER_FLAGS.iteritems()},
-                "unsaved": {k: bool(meter_unsaved & v) for k, v in VOLT_METER_FLAGS.iteritems()}
-            },
-            "trigger": {
-                "load_failed": {k: bool(trigger_load_failed & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()},
-                "unsaved": {k: bool(trigger_unsaved & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()}
-            }
+            "failed": {},
+            "unsaved": {}
         }
+
+        res = self.read_block(REG_VOLT_CONFIG_FLAGS, 5)
+        vmeter_failed, vmeter_unsaved, vtrigger_failed, vtrigger_unsaved, crc = struct.unpack("<BBBBB", bytearray(res))
+
+        ret["failed"].update({k: bool(vmeter_failed & v) for k, v in VOLT_METER_FLAGS.iteritems()})
+        ret["failed"].update({k: bool(vtrigger_failed & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()})
+
+        ret["unsaved"].update({k: bool(vmeter_unsaved & v) for k, v in VOLT_METER_FLAGS.iteritems()})
+        ret["unsaved"].update({k: bool(vtrigger_unsaved & v) for k, v in VOLT_TRIGGER_FLAGS.iteritems()})
 
         return ret
 

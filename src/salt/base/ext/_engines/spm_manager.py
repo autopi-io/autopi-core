@@ -67,10 +67,10 @@ def heartbeat_handler():
         if context["state"] != "on":
 
             # Get current status
-            res = call_retrying(conn.status, limit=3, wait=0.2, context=context.setdefault("errors", {}))
+            status = call_retrying(conn.status, limit=3, wait=0.2, context=context.setdefault("errors", {}))
 
             old_state = context["state"]
-            new_state = res["last_state"]["up"]
+            new_state = status["last_state"]["up"]
 
             # On first time only
             if old_state == None:
@@ -89,12 +89,24 @@ def heartbeat_handler():
                     log.warning("Unable to trigger last system off event: {:}".format(ex))
 
                 # Trigger recover state event
-                if res["last_trigger"]["down"] not in ["none", "rpi"]:
-                    log.warning("Recovery due to SPM trigger '{:}'".format(res["last_trigger"]["down"]))
+                if status["last_trigger"]["down"] not in ["none", "rpi"]:  # TODO HN: Figure out this
+                    log.warning("Recovery due to SPM trigger '{:}'".format(status["last_trigger"]["down"]))
 
                     edmp.trigger_event({
-                        "trigger": res["last_trigger"]["down"]
+                        "trigger": status["last_trigger"]["down"]
                     }, "system/power/recover")
+
+                # Check if any config params have failed (SPM3 only)
+                if conn.revision >= 3:
+                    try:
+                        config_flags = call_retrying(conn.volt_config_flags, limit=3, wait=0.2, context=context.setdefault("errors", {}))
+                        failed_params = [k for k, v in config_flags["failed"].iteritems() if v]
+                        if failed_params:
+                            edmp.trigger_event({
+                                "params": failed_params
+                            }, "system/power/config_failed")
+                    except:
+                        log.exception("Failed to determine if any configuration parameters have failed")
 
             # Check if state has changed
             if old_state != new_state:
@@ -102,8 +114,8 @@ def heartbeat_handler():
 
                 # Trigger state event
                 edmp.trigger_event({
-                    "trigger": res["last_trigger"]["up"],
-                    "awaken": res["last_state"]["down"]
+                    "trigger": status["last_trigger"]["up"],
+                    "awaken": status["last_state"]["down"]
                 }, "system/power/{:}{:}".format("_" if new_state in ["booting"] else "", new_state))
 
     finally:
