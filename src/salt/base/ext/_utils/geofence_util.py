@@ -1,5 +1,6 @@
 import yaml
 import logging
+
 from pygeodesy.sphericalNvector import LatLon
 from math import radians, cos, sin, sqrt, atan2
 
@@ -42,7 +43,7 @@ def is_in_polygon(location, polygon_corners):
     """
     Returns true if location is within the specified polygon
     """
-    location_latlon = LatLon(location["lat"], location["lon"])
+    location_latlon = LatLon(location["lat"], location["lon"])  # TODO EP: LatLon is instantiated each time - can this be cached? If so, this function is kind of redundant.
     return location_latlon.isenclosedBy(polygon_corners)
 
 
@@ -59,7 +60,7 @@ def read_geofence_file(file_path):
     try:
         file = open(file_path, "r")
         fence_file_dict = yaml.load(file)
-        file.close()
+        file.close()  # TODO EP: A little nicer to use Python's 'with' statement
 
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Creating fences from: {}".format(fence_file_dict))

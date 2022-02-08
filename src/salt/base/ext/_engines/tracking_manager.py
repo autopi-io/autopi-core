@@ -3,12 +3,11 @@ import logging
 import pynmea2
 import salt.loader
 
-
+from geofence_util import read_geofence_file, is_in_circle, is_in_polygon
 from messaging import EventDrivenMessageProcessor, extract_error_from
 from salt_more import SuperiorCommandExecutionError
 from serial_conn import SerialConn
 from threading_more import intercept_exit_signal
-from geofence_util import read_geofence_file, is_in_circle, is_in_polygon
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +30,9 @@ edmp = EventDrivenMessageProcessor("tracking", context=context, default_hooks={"
 
 # Serial connection
 conn = SerialConn()
+
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 
 @edmp.register_hook(synchronize=False)
 def status_handler():
@@ -163,7 +165,7 @@ def position_event_trigger(result):
 
     # Check for error result
     error = extract_error_from(result)
-    if log.isEnabledFor(logging.DEBUG) and error:
+    if DEBUG and error:
         log.debug("Position event trigger is unable to determine GNSS location: {:}".format(error))
 
     ctx = context["position"]
@@ -232,7 +234,7 @@ def geofence_event_trigger(result):
     Triggers when the same reading (inside/outside) is repeated [repeat_count_to_trigger_change] times
     """
 
-    if log.isEnabledFor(logging.DEBUG):
+    if DEBUG:
         log.debug("Checking geofences")
 
     if isinstance(result, Exception):
@@ -244,7 +246,7 @@ def geofence_event_trigger(result):
 
     # Check if the vehicle has entered/exited of any of the geofences
     for fence in ctx["fences"]:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Checking geofence {} ({})".format(fence["id"], fence["name"]))
 
         # Check if vehicle is inside or outside given geofence
@@ -262,11 +264,12 @@ def geofence_event_trigger(result):
             if (fence["repeat_count"] >= ctx["repeat_count_to_trigger_change"] and
                 fence["state"] != fresh_state):
     
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Changing state for geofence {} ({}) to {}".format(fence["id"], fence["name"], fresh_state))
 
                 fence["state"] = fresh_state
 
+                # TODO EP: Could we use event tag pattern 'vehicle/geofence/{id/name}/[inside|outside]'?
                 edmp.trigger_event(
                     {"reason": ctx["error"], "fence": fence["id"]} if ctx["error"] else {"fence": fence["id"]},
                     "vehicle/geofence/{:s}".format(fence["state"]))
@@ -277,7 +280,7 @@ def geofence_event_trigger(result):
 
 
 @edmp.register_hook(synchronize=False)
-def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"):
+def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"): # TODO EP: Name the file itself 'settings.yaml' like the RFID impl.
     """
     Loads geofence file
     """
@@ -289,7 +292,7 @@ def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"):
         context["geofence"]["fences"] = read_geofence_file(path)
         context["geofence"]["error"] = None 
 
-    except Exception as err:
+    except Exception as err:  # TODO EP: Is not really needed, handlers can throw exceptions, and will be logged
         log.error(err)
         ret["error"] = err.__str__()
 
@@ -299,12 +302,13 @@ def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"):
 @intercept_exit_signal
 def start(**settings):
     try:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Starting tracking manager with settings: {:}".format(settings))
 
         # Initialize serial connection
         conn.init(settings["serial_conn"])
 
+        # TODO EP: Maybe just lazy load geofences on the first time they are to be used, this will help improve startup time of this engine
         # Initialize geofences
         load_geofences_handler()
 

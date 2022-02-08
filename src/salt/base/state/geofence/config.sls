@@ -1,6 +1,7 @@
-fences-configured:
+
+geofence-settings-configured:
  file.managed:
-   - name: /opt/autopi/geofence/geofences.yaml
+   - name: /opt/autopi/geofence/geofences.yaml  # TODO EP: Name the file itself 'settings.yaml' like the RFID impl.
    - source: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_api:aut
 h_token'))) }}/dongle/{{ salt['grains.get']('id') }}/salt/geofence?format=yaml
    - source_hash: {{ salt['pillar.get']('cloud_api:url')|replace("https://", "https+token://{:s}@".format(salt['pillar.get']('cloud_ap
@@ -11,6 +12,6 @@ geofence-settings-loaded:
   module.run:
     - name: tracking.load_geofences
     - require:
-      - file: /opt/autopi/geofence/geofences.yaml
+      - file: geofence-settings-configured
     - onchanges:
-      - file: /opt/autopi/geofence/geofences.yaml
+      - file: geofence-settings-configured
