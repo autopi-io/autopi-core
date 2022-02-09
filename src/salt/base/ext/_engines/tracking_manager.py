@@ -21,7 +21,8 @@ context = {
     "geofence": {
         "error": None,
         "repeat_count_to_trigger_change": 3,
-        "fences": []
+        "fences": [],
+        "loaded": False
     }
 }
 
@@ -244,6 +245,10 @@ def geofence_event_trigger(result):
     ctx = context["geofence"]
     current_location = result["loc"]
 
+    if not ctx["loaded"]:
+        load_geofences_handler()
+        ctx["loaded"] = True
+
     # Check if the vehicle has entered/exited of any of the geofences
     for fence in ctx["fences"]:
         if DEBUG:
@@ -268,11 +273,10 @@ def geofence_event_trigger(result):
                     log.debug("Changing state for geofence {} ({}) to {}".format(fence["id"], fence["name"], fresh_state))
 
                 fence["state"] = fresh_state
-
-                # TODO EP: Could we use event tag pattern 'vehicle/geofence/{id/name}/[inside|outside]'?
+                
                 edmp.trigger_event(
-                    {"reason": ctx["error"], "fence": fence["id"]} if ctx["error"] else {"fence": fence["id"]},
-                    "vehicle/geofence/{:s}".format(fence["state"]))
+                    {"reason": ctx["error"]} if ctx["error"] else {},
+                    "vehicle/geofence/{:d}/{:s}".format(fence["id"], fence["state"]))
         
         else: 
             fence["last_reading"] = fresh_state
@@ -280,23 +284,16 @@ def geofence_event_trigger(result):
 
 
 @edmp.register_hook(synchronize=False)
-def load_geofences_handler(path="/opt/autopi/geofence/geofences.yaml"): # TODO EP: Name the file itself 'settings.yaml' like the RFID impl.
+def load_geofences_handler(path="/opt/autopi/geofence/config.yaml"):
     """
     Loads geofence file
     """
     log.info("Loading geofence settings from {}".format(path))
-    
-    ret = {}
 
-    try:
-        context["geofence"]["fences"] = read_geofence_file(path)
-        context["geofence"]["error"] = None 
+    context["geofence"]["fences"] = read_geofence_file(path)
+    context["geofence"]["error"] = None 
 
-    except Exception as err:  # TODO EP: Is not really needed, handlers can throw exceptions, and will be logged
-        log.error(err)
-        ret["error"] = err.__str__()
-
-    return ret
+    return {}
 
 
 @intercept_exit_signal
@@ -307,10 +304,6 @@ def start(**settings):
 
         # Initialize serial connection
         conn.init(settings["serial_conn"])
-
-        # TODO EP: Maybe just lazy load geofences on the first time they are to be used, this will help improve startup time of this engine
-        # Initialize geofences
-        load_geofences_handler()
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,

@@ -1,6 +1,7 @@
 import yaml
 import logging
 
+from os.path import exists as file_exists
 from pygeodesy.sphericalNvector import LatLon
 from math import radians, cos, sin, sqrt, atan2
 
@@ -43,7 +44,7 @@ def is_in_polygon(location, polygon_corners):
     """
     Returns true if location is within the specified polygon
     """
-    location_latlon = LatLon(location["lat"], location["lon"])  # TODO EP: LatLon is instantiated each time - can this be cached? If so, this function is kind of redundant.
+    location_latlon = LatLon(location["lat"], location["lon"])
     return location_latlon.isenclosedBy(polygon_corners)
 
 
@@ -51,40 +52,35 @@ def read_geofence_file(file_path):
     """
     Reads the specified yaml file containing geofences, adds fields necessary for state tracking
     """
-
-    log.info("Reading geofences file {}".format(file_path))
-    
     ret_arr = []
 
     # Try to read and parse the geofence file
-    try:
-        file = open(file_path, "r")
-        fence_file_dict = yaml.load(file)
-        file.close()  # TODO EP: A little nicer to use Python's 'with' statement
+    if file_exists(file_path):
+        with open(file_path, "r") as file:
+            fence_file_dict = yaml.load(file)
 
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Creating fences from: {}".format(fence_file_dict))
-
-        # Verify and add state, last_readiang, repeat_count fields used by tracking manager
-        for fence in fence_file_dict:
             if log.isEnabledFor(logging.DEBUG):
-                log.debug("Read fence {} ({})".format(fence["id"], fence["name"]))
+                log.debug("Creating fences from: {}".format(fence_file_dict))
 
-            if fence["shape"] == "SHAPE_POLYGON" or fence["shape"] == "SHAPE_CIRCLE":    
-                fence["state"] = None
-                fence["last_reading"] = None
-                fence["repeat_count"] = 0
+            # Verify and add state, last_readiang, repeat_count fields used by tracking manager
+            for fence in fence_file_dict:
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Read fence {} ({})".format(fence["id"], fence["name"]))
 
-                if fence["shape"] == "SHAPE_POLYGON":
-                    fence["coordinates"] = [LatLon(corner["lat"], corner["lon"]) for corner in fence["coordinates"]]
+                if fence["shape"] == "SHAPE_POLYGON" or fence["shape"] == "SHAPE_CIRCLE":    
+                    fence["state"] = None
+                    fence["last_reading"] = None
+                    fence["repeat_count"] = 0
 
-                ret_arr.append(fence)
+                    if fence["shape"] == "SHAPE_POLYGON":
+                        fence["coordinates"] = [LatLon(corner["lat"], corner["lon"]) for corner in fence["coordinates"]]
 
-            else:
-                log.warn("Invalid geofence shape of '{}' for fence '{}'".format(fence["shape"], fence["name"]))
+                    ret_arr.append(fence)
 
-    except Exception as err:
-        log.warn("Failed while reading geofences file: {}".format(err))
-        raise err
+                else:
+                    log.warn("Invalid geofence shape of '{}' for fence '{}'".format(fence["shape"], fence["name"]))
+
+    else:
+        log.warn("Could not find geofence file. Reutrning empty array.")
 
     return ret_arr
