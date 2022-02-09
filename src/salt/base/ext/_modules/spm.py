@@ -43,7 +43,7 @@ def reset():
 
 def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90):
     """
-    Flashes new SPM firmware to ATtiny.
+    Flashes new SPM firmware to the ATtiny.
     """
 
     ret = {}
@@ -63,6 +63,18 @@ def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90
         ret["output"] = res.get("output", None)
 
     return ret
+
+
+def fuse(name, part_id, value=None, confirm=False):
+    """
+    Manage fuse of the ATtiny.
+    """
+
+    if value != None and not confirm:
+        raise salt.exceptions.CommandExecutionError(
+            "This command will set the '{:}fuse' of the ATtiny - add parameter 'confirm=true' to continue anyway".format(name))
+
+    return client.send_sync(_msg_pack(name, part_id, value=value, _handler="fuse"))
 
 
 def led_pwm(**kwargs):

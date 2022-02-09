@@ -2,6 +2,15 @@
 include:
   - .test
 
+spm-bod-fuse-configured:
+  module_extra.configured:
+    - name: spm.fuse
+    - args:
+      - h
+      - t88
+    - kwargs:
+        value: "0xdd"
+
 cryptoauth-info-serialized:
   module_extra.serialized:
     - name: cryptoauth.query

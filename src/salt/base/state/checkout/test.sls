@@ -29,7 +29,7 @@ qmi-test:
 
 {%- endif %}
 
-spm-test:
+spm-version-test:
   test.module:
     - name: spm.query
     - args:
@@ -37,7 +37,7 @@ spm-test:
     {%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
     - validate: ret["value"] in ["1.1.1.0", "2.0", "2.1", "2.2"]
     {%- else %}
-    - validate: ret["value"] in ["3.0"]
+    - validate: ret["value"] in ["3.1"]
     {%- endif %}
 
 acc-xyz-test:
@@ -118,15 +118,20 @@ spm-volt-readout-test:
       - volt_readout
     - validate: abs(ret["current"] - 12.80) <= 0.1
 
-spm-volt-trigger-flags-test:
+spm-volt-config-flags-test:
   test.module:
     - name: spm.query
     - args:
-      - volt_trigger_flags
+      - volt_config_flags
     - validate:
+      - not ret["unsaved"]["limit"]
+      - not ret["unsaved"]["factor"]
+      - not ret["unsaved"]["ewma_alpha"]
       - not ret["unsaved"]["hibernate_level"]
       - not ret["unsaved"]["wake_change"]
       - not ret["unsaved"]["wake_level"]
+    - require:
+      - spm-version-test
 
 rtc-i2c-present-test:
   cmd.run:

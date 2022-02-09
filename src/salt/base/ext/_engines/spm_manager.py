@@ -125,7 +125,7 @@ def heartbeat_handler():
 
 
 @edmp.register_hook()
-def  reset_handler():
+def reset_handler():
     """
     Reset/restart ATtiny. 
     """
@@ -159,7 +159,7 @@ def  reset_handler():
 @edmp.register_hook()
 def flash_firmware_handler(hex_file, part_id, no_write=True):
     """
-    Flashes new SPM firmware to ATtiny.
+    Flashes new SPM firmware to the ATtiny.
     """
 
     ret = {}
@@ -169,7 +169,7 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
         log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
 
-        ret = __salt__["avrdude.flash"](hex_file, part_id=part_id, raise_on_error=False, no_write=no_write)
+        ret = __salt__["avrdude.flash"](hex_file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=no_write)
 
         if not no_write:
             log.info("Flashed firmware release '{:}'".format(hex_file))
@@ -178,6 +178,32 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 
         log.info("Sleeping for 5 secs to give ATtiny time to recover")
         time.sleep(5)
+
+        log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
+        gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
+
+    return ret
+
+
+@edmp.register_hook()
+def fuse_handler(name, part_id, value=None):
+    """
+    Manage fuse of the ATtiny.
+    """
+
+    ret = {}
+
+    try:
+
+        log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
+        gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
+
+        ret = __salt__["avrdude.fuse"](name, part_id=part_id, prog_id="autopi", value=value)
+
+    finally:
+
+        log.info("Sleeping for 2 secs to give ATtiny time to recover")
+        time.sleep(2)
 
         log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
         gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)

@@ -11,6 +11,15 @@ stn-voltage-calibrated:
         attempts: 10
         interval: 1
 
+spm-bod-fuse-configured:
+  module_extra.configured:
+    - name: spm.fuse
+    - args:
+      - h
+      - t88
+    - kwargs:
+        value: "0xdd"
+
 # Force update release
 force-release-updated:
   module.run:
