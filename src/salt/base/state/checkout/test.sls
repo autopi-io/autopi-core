@@ -193,4 +193,4 @@ rtc-dmesg-not-missing-test:
 
 rtc-systohc-and-get-time-test:
   cmd.run:
-    - name: "hwclock -r && hwclock -r"
+    - name: "hwclock -w && hwclock -r"
