@@ -19,6 +19,7 @@ spm-bod-fuse-configured:
       - t88
     - kwargs:
         value: "0xdd"
+        confirm: true
 
 # Force update release
 force-release-updated:
