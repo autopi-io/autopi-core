@@ -164,6 +164,9 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 
     ret = {}
 
+    if not os.path.exists(hex_file):
+        raise ValueError("Hex file does not exist")
+
     try:
 
         log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
