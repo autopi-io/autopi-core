@@ -6,10 +6,10 @@ rfid-settings-configured:
     - formatter: yaml
     - show_changes: True
 
-{%- if salt['pillar.get']('rfid') %}
 rfid-settings-loaded:
   module.run:
     - name: rfid.load_settings
     - require:
       - file: rfid-settings-configured
-{%- endif %}
+    - onchanges:
+      - file: /opt/autopi/rfid/settings.yaml
