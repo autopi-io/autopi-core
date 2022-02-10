@@ -1,0 +1,4 @@
+68c68
+<         ret = int(outstr.splitlines()[0].split()[-1])
+---
+>         ret = int(outstr.splitlines()[0].split()[1])

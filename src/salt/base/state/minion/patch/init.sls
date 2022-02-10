@@ -148,6 +148,28 @@ utils-files-script-rolled-back:
     - onfail:
       - file: utils-files-script-patched
 
+utils-systemd-script-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/utils/systemd.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/utils/systemd.py
+    - force: true
+    - prereq:
+      - file: utils-systemd-script-patched
+utils-systemd-script-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/utils/systemd.py
+    - source: salt://minion/patch/utils/systemd.py.patch
+    - hash: 457281e669b913245cc2b2f9201e65f51539642d
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+utils-systemd-script-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/utils/systemd.py
+    - source: /usr/lib/python2.7/dist-packages/salt/utils/systemd.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: utils-systemd-script-patched
+
 log-setup-script-backed-up:
   file.copy:
     - name: /usr/lib/python2.7/dist-packages/salt/log/setup.py.{{ _timestamp }}
