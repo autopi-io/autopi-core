@@ -272,7 +272,7 @@ class SPM3Conn(I2CConn):
 
         return ret
 
-    def volt_readout(self, reset=False):
+    def volt_readout(self, reset=False, samples=1):
         """
         Readout of current, minimum and maximum voltage.
         """
@@ -282,12 +282,23 @@ class SPM3Conn(I2CConn):
         if reset:
             self.write_block(REG_VOLT_READOUT, [reset])
 
-        res = self.read_block(REG_VOLT_READOUT, 7)
-        current, minimum, maximum, crc = struct.unpack("<HhhB", bytearray(res))
-        
-        ret["current"] = round(float(current)/100, 2)
-        ret["minimum"] = round(float(minimum)/100, 2) if minimum > 0 else None
-        ret["maximum"] = round(float(maximum)/100, 2) if maximum > 0 else None
+        current_readings = []
+        maximum_readings = []
+        minimum_readings = []
+
+        for i in range(samples):
+            res = self.read_block(REG_VOLT_READOUT, 7)
+            current, minimum, maximum, crc = struct.unpack("<HhhB", bytearray(res))
+
+            current_readings.append(float(current)/100)
+            if minimum > 0:
+                minimum_readings.append(float(minimum)/100)
+            if maximum > 0:
+                maximum_readings.append(float(maximum)/100)
+
+        ret["current"] = round(sum(current_readings)/len(current_readings), 2)
+        ret["minimum"] = round(sum(minimum_readings)/len(minimum_readings), 2) if len(minimum_readings) > 0 else None
+        ret["maximum"] = round(sum(maximum_readings)/len(maximum_readings), 2) if len(maximum_readings) > 0 else None
 
         return ret
 
