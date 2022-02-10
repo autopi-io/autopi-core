@@ -1,7 +1,7 @@
 import yaml
 import logging
+import os
 
-from os.path import exists as file_exists
 from pygeodesy.sphericalNvector import LatLon
 from math import radians, cos, sin, sqrt, atan2
 
@@ -55,7 +55,7 @@ def read_geofence_file(file_path):
     ret_arr = []
 
     # Try to read and parse the geofence file
-    if file_exists(file_path):
+    if os.path.exists(file_path):
         with open(file_path, "r") as file:
             fence_file_dict = yaml.load(file)
 

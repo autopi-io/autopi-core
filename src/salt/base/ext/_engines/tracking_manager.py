@@ -284,7 +284,7 @@ def geofence_event_trigger(result):
 
 
 @edmp.register_hook(synchronize=False)
-def load_geofences_handler(path="/opt/autopi/geofence/config.yaml"):
+def load_geofences_handler(path="/opt/autopi/geofence/settings.yaml"):
     """
     Loads geofence file
     """
