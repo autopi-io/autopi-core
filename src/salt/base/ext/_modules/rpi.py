@@ -34,7 +34,7 @@ def temp_cpu():
     Current temperature of the ARM CPU.
     """
 
-    raw = __salt__["cp.get_file_str"]("/sys/class/thermal/thermal_zone0/temp")
+    raw = __salt__["file.read"]("/sys/class/thermal/thermal_zone0/temp")
 
     return {
         "value": float(raw) / 1000,
