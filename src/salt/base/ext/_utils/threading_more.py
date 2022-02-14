@@ -2,6 +2,7 @@ import datetime
 import logging
 import re
 import signal
+import sys
 import threading
 
 from timeit import default_timer as timer
@@ -30,18 +31,23 @@ def append_signal_handler_for(sig, func):
         old = signal.getsignal(sig)
 
     def wrapper(*args, **kwargs):
+        must_exit = False
 
         # Call old first
         if old != None:
             try:
                 old(*args, **kwargs)
             except SystemExit:
-                pass
+                must_exit = True
             except:
                 log.exception("Error in signal handler {:} for signal number {:}".format(old, sig))
 
         # Then call new
-        func(*args, **kwargs)
+        try:
+            func(*args, **kwargs)
+        finally:
+            if must_exit:
+                sys.exit()
 
     # Register wrapper
     signal.signal(sig, wrapper)
