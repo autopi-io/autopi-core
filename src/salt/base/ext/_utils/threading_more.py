@@ -25,26 +25,26 @@ def append_signal_handler_for(sig, func):
     Appends signal handler instead of replacing any existing. Remember this is only possible from main thread.
     """
 
-    # Check for existing handler
-    old = None
-    if callable(signal.getsignal(sig)):
-        old = signal.getsignal(sig)
+    # Check for an existing handler
+    curr_func = signal.getsignal(sig)
+    if not callable(curr_func):
+        curr_func = None
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, parent_func=curr_func):
         must_exit = False
 
-        # Call old first
-        if old != None:
+        # Call parent handler first
+        if parent_func != None:
             try:
-                old(*args, **kwargs)
+                parent_func(*args, **kwargs)
             except SystemExit:
                 must_exit = True
             except:
-                log.exception("Error in signal handler {:} for signal number {:}".format(old, sig))
+                log.exception("Error in parent signal handler {:} for signal number {:}".format(parent_func, sig))
 
-        # Then call new
+        # Then call child handler
         try:
-            func(*args, **kwargs)
+            func(*args)
         finally:
             if must_exit:
                 sys.exit()
