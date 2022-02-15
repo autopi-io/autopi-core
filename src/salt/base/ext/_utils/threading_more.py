@@ -30,21 +30,21 @@ def append_signal_handler_for(sig, func):
     if not callable(curr_func):
         curr_func = None
 
-    def wrapper(*args, parent_func=curr_func):
+    def wrapper(signum, frame, func=func, parent_func=curr_func):
         must_exit = False
 
-        # Call parent handler first
+        # First call parent handler
         if parent_func != None:
             try:
-                parent_func(*args, **kwargs)
+                parent_func(signum, frame)
             except SystemExit:
                 must_exit = True
             except:
-                log.exception("Error in parent signal handler {:} for signal number {:}".format(parent_func, sig))
+                log.exception("Error in parent signal handler {:} for signal number {:}".format(parent_func, signum))
 
-        # Then call child handler
+        # Then call handler
         try:
-            func(*args)
+            func(signum, frame)
         finally:
             if must_exit:
                 sys.exit()
@@ -58,7 +58,7 @@ def intercept_exit_signal(func):
     Decorator
     """
 
-    def handle_signal(sig, frame):
+    def handle_signal(signum, frame):
         for func in on_exit:
             try:
                 func()
