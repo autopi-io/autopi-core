@@ -211,7 +211,10 @@ class CANConn(object):
             # Bring up interface
             __salt__["socketcan.up"](interface=channel, **local_settings)
 
-            self._bus = can.interfaces.socketcan.SocketcanBus(channel=channel, receive_own_messages=receive_own_messages)
+            self._bus = can.interfaces.socketcan.SocketcanBus(
+                channel=channel,
+                receive_own_messages=receive_own_messages,
+                fd=local_settings.get("dbitrate", None) != None)
             self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
             setattr(self._bus, "metadata", {})
             setattr(self._bus, "last_error", None)
@@ -510,10 +513,7 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def j1939_query():
-
-        # TODO HN
-
-        pass
+        raise NotImplementedError("Not yet available")
 
     @Decorators.ensure_open
     def monitor_until(self, on_msg_func, duration=1, limit=None, receive_timeout=0.2, skip_error_frames=False, keep_listening=False, buffer_size=0):
@@ -711,24 +711,25 @@ def dict_to_msg(src):
     return can.Message(**kwargs)
 
 def msg_to_str(src, separator="#"):
-    # TODO HN: Also support CAN-FD
-
-    return "{:02x}{:}{:}".format(src.arbitration_id, separator, binascii.hexlify(src.data))
+    return "{:02x}{:}{:}".format(
+        src.arbitration_id,
+        separator * (2 if src.is_fd else 1),
+        binascii.hexlify(src.data))
 
 def str_to_msg(src, separator="#"):
-    # TODO HN: Also support CAN-FD
+    arb_id_str, data_str = src.split(separator, 1)
 
-    id_str, data_str = src.split(separator, 1)
+    arb_id = int(arb_id_str, 16)
+    is_fd = data_str.startswith(separator)
+    data = bytearray.fromhex(data_str[1:] if is_fd else data_str)
 
-    id = int(id_str, 16)
-    data = bytearray.fromhex(data_str)
-
-    # If ID is more than 11 bits, use extended ID (29bit headers)
-    is_ext_id = len(bin(id)) - 2 > 11
+    # If ID is more than 11 bits, use extended ID (29bit header)
+    is_ext_id = len(bin(arb_id)) - 2 > 11
 
     return can.Message(
         is_extended_id=is_ext_id,
-        arbitration_id=id,
+        arbitration_id=arb_id,
+        is_fd=is_fd,
         data=data)
 
 def decode_msg_from(val, **kwargs):

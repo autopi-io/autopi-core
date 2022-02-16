@@ -99,8 +99,9 @@ def monitor_handler(**kwargs):
 
     output = kwargs.pop("output", "str")
 
-    for msg in conn.monitor(**kwargs):
-        ret.setdefault("values", []).append(encode_msg_to(output, msg))
+    res = []
+    conn.monitor_until(lambda msg: res.append(encode_msg_to(output, msg)), **kwargs)
+    ret["values"] = res
 
     return ret
 
@@ -112,7 +113,7 @@ def dump_handler(file, **kwargs):
 
     ret = {}
 
-    ret["count"] = conn.dump(file, **kwargs)
+    ret["count"] = conn.dump_until(file, **kwargs)
 
     return ret
 
@@ -193,10 +194,9 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting CAN manager with settings: {:}".format(settings))
 
-        # TODO HN: Get from settings
         global conn
         conn = CANConn(__salt__)
-        conn.setup(channel="can0", bitrate=500000)
+        conn.setup(**settings.get("can_conn", {}))
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
