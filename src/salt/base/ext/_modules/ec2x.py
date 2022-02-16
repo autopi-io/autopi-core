@@ -1157,7 +1157,6 @@ def operator_selection(search=False, mode=None, op_format=None, operator=None, a
             MODES_MAP[mode], FORMATS_MAP[op_format], operator, ACTS_MAP[access_tech])
 
         res = query(at_cmd, timeout=180)
-        log.info("FEDERLIZER: res: {}".format(res))
 
         return
 
@@ -1248,7 +1247,6 @@ def network_registration_status():
     response_pattern = re.compile("^\+CREG:\s.*")
 
     res = query("AT+CREG?")
-    log.info("FEDERLIZER: received res: {}".format(res))
 
     if not response_pattern.match(res["data"]):
         raise Exception("Received unexpected response from AT+CREG? command: {}".format(res))
