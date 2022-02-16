@@ -246,10 +246,12 @@ def motion_event_trigger(result, duration=1):
 
         return
 
-    if result.get("_type", None) != "xyz":
+    if result.get("_type", None) not in ["xyz", "acc_xyz", "gyro_acc_xyz"]:
         log.error("Motion event trigger got unsupported XYZ type result: {:}".format(result))
-
         return
+
+    # use only accelerometer data, skip gyro
+    acc_data = result["acc"] if result["_type"] == "gyro_acc_xyz" else result
 
     ctx = __context__.setdefault("motion", {})
 
@@ -275,7 +277,7 @@ def motion_event_trigger(result, duration=1):
 
     # Store result in FIFO window for each axis
     for axis, window in ctx["axis_windows"].iteritems():
-        window[ctx["window_cursor"]] = result[axis]
+        window[ctx["window_cursor"]] = acc_data[axis]
 
         # Calculate the largest possible difference within window
         min_val, max_val = min_max(window)
