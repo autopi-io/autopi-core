@@ -4,6 +4,7 @@ import logging
 import re
 import salt.exceptions
 import salt.utils.event
+import sys
 import threading
 import threading_more
 import time
@@ -429,6 +430,10 @@ class MessageProcessor(object):
         elif len(args) > 0 and args[0] == "run":
             msg = kwargs
             return self.process(msg)
+
+        elif len(args) > 0 and args[0] == "exit":
+            sys.exit()
+            return {}
 
         raise Exception("Invalid or unknown command")
 
