@@ -2,6 +2,7 @@
 include:
   - .test
 
+{%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
 # Calibrate STN voltage
 stn-voltage-calibrated:
   stn.voltage_calibrated:
@@ -10,6 +11,16 @@ stn-voltage-calibrated:
     - retry:
         attempts: 10
         interval: 1
+{%- else %}
+# Calibrate SPM voltage
+spm-voltage-calibrated:
+  spm.voltage_calibrated:
+    - url: {{ salt['pillar.get']('reference_voltage_url') }}
+    - checks: 10
+    - retry:
+        attempts: 10
+        interval: 1
+{%- endif %}
 
 spm-bod-fuse-configured:
   module_extra.configured:
