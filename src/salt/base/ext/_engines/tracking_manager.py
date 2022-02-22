@@ -275,8 +275,8 @@ def geofence_event_trigger(result):
                 fence["state"] = fresh_state
                 
                 edmp.trigger_event(
-                    {"reason": ctx["error"]} if ctx["error"] else {},
-                    "vehicle/geofence/{:d}/{:s}".format(fence["id"], fence["state"]))
+                    {"fence_id": fence["id"]},
+                    "vehicle/geofence/{:s}/{:s}".format(fence["slug"], fence["state"]))
         
         else: 
             fence["last_reading"] = fresh_state
