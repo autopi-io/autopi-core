@@ -19,6 +19,8 @@ from timeit import default_timer as timer
 
 log = logging.getLogger(__name__)
 
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 context = {
     "interrupt": {
         "total": 0,
@@ -230,75 +232,139 @@ def alternating_readout_filter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def motion_event_trigger(result, duration=1):
+def motion_event_trigger(result, jolt_g_threshold=0.3, jolt_duration=1, shake_g_threshold=0.01, shake_duration=3, shake_percentage=90, debounce_delay=1):
     """
-    Triggers 'vehicle/motion/jolting' and 'vehicle/motion/steady' events based on accelerometer XYZ readings.
+    Triggers 'vehicle/motion/jolting', 'vehicle/motion/shaking' and 'vehicle/motion/steady' events based on accelerometer XYZ readings.
 
     Optional arguments:
-      - duration (float): How long in seconds should the G force change be observed over? Default value is 1.
+      - jolt_g_threshold (float): G force threshold for jolting detection. Disabled when set to zero. Default value is '0.3'.
+      - jolt_duration (float): How long in seconds should the G force threshold be observed over? Default value is '1'.
+      - shake_g_threshold (float): G force threshold for shaking detection. Disabled when set to zero. Default value is '0.01'.
+      - shake_duration (float): How long in seconds should the G force threshold be observed over? Default value is '3'.
+      - shake_percentage (float): Percentage of positive motion detections required within duration period to conclude shaking. Default value is '90'.
+      - debounce_delay (float): Minimum delay in seconds between triggering events. Default value is '1'.
     """
 
     # Check for error result
     error = extract_error_from(result)
     if error:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Motion event trigger got error result: {:}".format(result))
 
         return
 
     if result.get("_type", None) not in ["xyz", "acc_xyz", "gyro_acc_xyz"]:
         log.error("Motion event trigger got unsupported XYZ type result: {:}".format(result))
+
         return
 
-    # use only accelerometer data, skip gyro
-    acc_data = result["acc"] if result["_type"] == "gyro_acc_xyz" else result
+    # Use only accelerometer data, skip gyro
+    data = result["acc"] if result["_type"] == "gyro_acc_xyz" else result
 
-    ctx = __context__.setdefault("motion", {})
+    # Prepare settings
+    settings = context.get("settings", {}).get("motion_event_trigger", {})
 
-    # Prepare context
+    jolt_g_threshold = settings.get("jolt_g_threshold", jolt_g_threshold)
+    jolt_duration = settings.get("jolt_duration", jolt_duration)
+    shake_g_threshold = settings.get("shake_g_threshold", shake_g_threshold)
+    shake_duration = settings.get("shake_duration", shake_duration)
+    shake_percentage = settings.get("shake_percentage", shake_percentage)
+    debounce_delay = settings.get("debounce_delay", debounce_delay)
+    
+    reinit = settings.pop("reinit", False)
+
+    ctx = context.setdefault("motion_event_trigger", {})
+
+    # Prepare context (re-initializes if data rate has changed)
     data_rate = conn.rate  # In Hz
-    if data_rate != ctx.get("data_rate", 0):
-        window_size = max(int(data_rate * duration), 2)  # Minimum buffer size is 2
-
-        # (Re)initialize context
+    if reinit or data_rate != ctx.get("data_rate", 0):
         ctx["data_rate"] = data_rate
-        ctx["window_size"] = window_size
-        ctx["axis_windows"] = {k: [None] * window_size for k in ["x", "y", "z"]}
-        ctx["window_cursor"] = 0
 
-        if log.isEnabledFor(logging.DEBUG):
+        data_window_size = max(int(data_rate * jolt_duration), 2)  # NOTE: Minimum size is 2
+        ctx["data_window"] = {
+            "size": data_window_size,
+            "axes": {k: [0.0] * data_window_size for k in ["x", "y", "z"]},
+            "cursor": 0
+        }
+
+        diff_window_size = max(int(data_rate * shake_duration), 2)  # NOTE: Minimum size is 2
+        ctx["diff_window"] = {
+            "size": diff_window_size,
+            "axes": {k: [0.0] * diff_window_size for k in ["x", "y", "z"]},
+            "cursor": 0
+        }
+
+        ctx["shake_point"] = {
+            "sum": 0,
+            "limit": int(diff_window_size * (shake_percentage / 100.0))
+        }
+
+        if DEBUG:
             log.debug("(Re)initialized motion context: {:}".format(ctx))
 
-    changes = {}
+    # Reset window cursors
+    if ctx["data_window"]["cursor"] >= ctx["data_window"]["size"]:
+        ctx["data_window"]["cursor"] = 0
+    if ctx["diff_window"]["cursor"] >= ctx["diff_window"]["size"]:
+        ctx["diff_window"]["cursor"] = 0
 
-    # Reset window cursor
-    if ctx["window_cursor"] >= ctx["window_size"]:
-        ctx["window_cursor"] = 0
+    is_jolting = False
 
-    # Store result in FIFO window for each axis
-    for axis, window in ctx["axis_windows"].iteritems():
-        window[ctx["window_cursor"]] = acc_data[axis]
+    # Store and calculate results in FIFO windows for each axis
+    for axis in ["x", "y", "z"]:
 
-        # Calculate the largest possible difference within window
-        min_val, max_val = min_max(window)
-        diff = round(max_val - min_val, 2)
-        if abs(diff) >= context["settings"]["acc_jolting_threshold"]:
-            changes[axis] = diff
+        # Update data window
+        data_axis = ctx["data_window"]["axes"][axis]
+        data_cursor = ctx["data_window"]["cursor"]
+        data_axis[data_cursor] = data[axis]
 
-    # Increment window cursor
-    ctx["window_cursor"] += 1
+        # Calculate the difference between min and max of the data axis
+        if jolt_g_threshold > 0 and not is_jolting:
+            min_val, max_val = min_max(data_axis)
+            is_jolting = abs(max_val - min_val) >= jolt_g_threshold
+
+        if shake_g_threshold > 0:
+
+            # Calculate absolute difference since last measurement
+            data_cursor_prev = (ctx["data_window"]["size"] if data_cursor == 0 else data_cursor) - 1
+            abs_diff = abs(data_axis[data_cursor] - data_axis[data_cursor_prev])
+
+            # Update diff window
+            diff_axis = ctx["diff_window"]["axes"][axis]
+            diff_cursor = ctx["diff_window"]["cursor"]
+            ctx["shake_point"]["sum"] += (1 if abs_diff >= shake_g_threshold else 0) - (1 if diff_axis[diff_cursor] >= shake_g_threshold else 0)  # Add new and subtract old diff value
+            diff_axis[diff_cursor] = abs_diff
+
+    # NOTE: For every diff window entry the shake point can potentially be 3 (one for each axis)
+    is_shaking = shake_g_threshold > 0 and ctx["shake_point"]["sum"] >= ctx["shake_point"]["limit"]
+
+    # Increment window cursors
+    ctx["data_window"]["cursor"] += 1
+    ctx["diff_window"]["cursor"] += 1
 
     # Check if state has chaged since last known state
     old_state = ctx.get("state", "")
-    new_state = "jolting" if changes else "steady"
+    new_state = "jolting" if is_jolting else "shaking" if is_shaking else "steady"
 
     if old_state != new_state:
+
+        if debounce_delay:
+            now = timer()
+            if now >= ctx.get("debounce_timeout", now):
+
+                # Set next debounce timeout
+                ctx["debounce_timeout"] = now + debounce_delay
+            else:
+                if DEBUG:
+                    log.debug("Suppressing state change from '{:}' to '{:}' due to debounce delay".format(old_state, new_state))
+
+                return
+
         ctx["state"] = new_state
 
         # Trigger event
         __salt__["minionutil.trigger_event"](
-            "vehicle/motion/{:s}".format(ctx["state"]),
-            data=changes)
+            "vehicle/motion/{:s}".format(ctx["state"]))
 
 
 @edmp.register_hook(synchronize=False)
@@ -345,7 +411,7 @@ def orientation_enricher(result):
 
     error = extract_error_from(result)
     if error:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Motion event trigger got error result: {:}".format(result))
         return
 
@@ -377,7 +443,7 @@ def orientation_enricher(result):
 @intercept_exit_signal
 def start(**settings):
     try:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Starting accelerometer manager with settings: {:}".format(settings))
 
         # Store settings in context
