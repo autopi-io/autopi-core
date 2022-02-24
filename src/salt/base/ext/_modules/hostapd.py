@@ -61,19 +61,18 @@ def clients(interface="uap0"):
 
 def clients_changed_trigger(result):
     """
-    Triggers 'system/hostapd/connected' and 'system/hostapd/disconnected' events.
+    Triggers 'system/hostapd/client/<mac>/connected' and 'system/hostapd/client/<mac>/disconnected' events.
 
-    Expect response to be in the format given as the hostapd.clients function's return format.
-
-    Events are triggered based on previously connected hostapd clients which are kept track of in
-    the context.
+    The trigger expects the result to be given in the format of what hostapd.clients returns,
+    which is also the main use case for this trigger.
     """
 
-    error = extract_error_from(result)
-    if error:
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Motion event trigger got error result: {}".format(result))
-        return
+    if result: # No need to check for errors in empty results
+        error = extract_error_from(result)
+        if error:
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Motion event trigger got error result: {}".format(result))
+            return
 
     ctx = __context__.setdefault("hostapd.clients_changed_trigger", {})
 
@@ -91,5 +90,31 @@ def clients_changed_trigger(result):
         tag = "system/hostapd/client/{}/disconnected".format(mac)
         __salt__["minionutil.trigger_event"](tag)
 
-    # update context
+    # Update context
     ctx["connected_clients"] = currently_connected_clients
+
+
+def expect_allow_list_handler():
+    """
+    This handler triggers 'system/hostapd/client/<mac>/not_connected' events for clients that aren't
+    connected from the hostapd allow list.
+
+    In order for the handler to work properly the allow list must be stored in the default hostapd.accept
+    file, which will be the case if the allow list is set through the Advanced Settings in the Cloud.
+    """
+
+    hostapd_allow_list_path = "/etc/hostapd/hostapd.accept"
+
+    if not os.path.exists(hostapd_allow_list_path):
+        raise salt.exceptions.CommandExecutionError("File {} doesn't exist".format(hostapd_allow_list_path))
+
+    with open(hostapd_allow_list_path, 'r') as fd:
+        # Avoid adding an empty line to the allow list
+        allow_list = [ line for line in fd.read().split("\n") if line != "" ]
+
+    currently_connected_clients = clients()
+
+    for mac in allow_list:
+        if mac not in currently_connected_clients:
+            tag = "system/hostapd/client/{}/not_connected".format(mac)
+            __salt__["minionutil.trigger_event"](tag)
