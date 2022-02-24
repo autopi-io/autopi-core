@@ -89,7 +89,7 @@ def heartbeat_handler():
                     log.warning("Unable to trigger last system off event: {:}".format(ex))
 
                 # Trigger recover state event
-                if status["last_trigger"]["down"] not in ["none", "rpi"]:  # TODO HN: Figure out this
+                if status["last_trigger"]["down"] not in ["none", "rpi"]:
                     log.warning("Recovery due to SPM trigger '{:}'".format(status["last_trigger"]["down"]))
 
                     edmp.trigger_event({

@@ -274,9 +274,15 @@ class SocketCANInterface(STN11XX):
     #def close(self):
 
     def reopen(self):
-        # TODO HN: Take CAN connection down and up - and ensure runtime_settings is cleared?
 
-        raise NotImplementedError("Not supported by SocketCAN interface")
+        self.close()
+
+        self.open(channel=self._port or or getattr(protocol_cls, "INTERFACE", "can0"),
+            protocol={
+                "id": getattr(self._protocol, "ID", None),
+                "baudrate": getattr(self._protocol, "baudrate", None)
+            } if not getattr(self._protocol, "autodetected", True) else None
+        )
 
     #def restore_defaults(self):
 
@@ -327,7 +333,6 @@ class SocketCANInterface(STN11XX):
 
     #def set_can_auto_format(self, value):
 
-    # TODO HN: Find out how to support this!
     #def set_can_extended_address(self, value):
 
     #def set_can_priority(self, value):
@@ -372,11 +377,19 @@ class SocketCANInterface(STN11XX):
             if self._runtime_settings.get("print_spaces", True):
                 msg_formatter = can_message_with_spaces_formatter
 
+            kwargs = {}
+
+            # CAN extended address (flow control)
+            extended_address = self._runtime_settings.get("can_extended_address", None)
+            if extended_address != None:
+                kwargs["extended_address"] = int(str(extended_address), 16)
+
             res = self._port.query(self._build_can_msg(cmd),
                 replies=replies,
                 timeout=timeout,
                 flow_control=[self._port.FLOW_CONTROL_CUSTOM, self._port.FLOW_CONTROL_OBD],
-                strict=False)
+                strict=False,
+                **kwargs)
             if res:
                 ret = [msg_formatter(r) for r in res]
             elif not raw_response:
@@ -392,7 +405,6 @@ class SocketCANInterface(STN11XX):
     def monitor(self, mode=0, auto_format=False, filtering=False, raw_response=False, formatter=None, **kwargs):
         ret = []
 
-        # TODO HN: How to support CAN auto formatting?
         if auto_format:
             ValueError("CAN auto formatting is currently not supported by SocketCan OBD connection")
 
@@ -536,8 +548,6 @@ class SocketCANInterface(STN11XX):
         return [can_message_formatter(r) for r in res_0100]
 
     def _manual_protocol(self, ident, verify=False, baudrate=None):
-        log.info("############### MANUAL PROTOCOL")  # TODO HN: Remove this
-
         protocol_cls = self.supported_protocols()[ident]
         baudrate = baudrate or protocol_cls.DEFAULT_BAUDRATE
 
@@ -559,10 +569,10 @@ class SocketCANInterface(STN11XX):
         return protocol
 
     def _auto_protocol(self, verify=True, **kwargs):
-        log.info("############### AUTODETECTING PROTOCOL")  # TODO HN: Remove this
+        log.info("Initiates autodetection of OBD protocol")
 
         if not verify:
-            ValueError("SocketCAN interface cannot autodetect protocol without verify")
+            ValueError("SocketCAN interface cannot autodetect OBD protocol without verify")
 
         res_0100 = []
         for protocol_cls in self.CAN_TRY_PROTOCOLS:
@@ -582,9 +592,9 @@ class SocketCANInterface(STN11XX):
 
                     return protocol
             except Exception as ex:
-                log.info("Unable to verify protocol '{:}' on SocketCAN interface '{:}': {:}".format(protocol_cls.ID, protocol_cls.INTERFACE, ex))
+                log.info("Unable to verify OBD protocol '{:}' on SocketCAN interface '{:}': {:}".format(protocol_cls.ID, protocol_cls.INTERFACE, ex))
 
-        raise SocketCANError("Unable to autodetect protocol")
+        raise SocketCANError("Unable to autodetect OBD protocol")
 
     def _interrupt(self, *args, **kwargs):
         raise NotImplementedError("Not supported by SocketCAN interface")
@@ -614,6 +624,11 @@ class SocketCANInterface(STN11XX):
         data = bytearray.fromhex(cmd)
         if self._runtime_settings.get("can_auto_format", True):
             data = bytearray([len(data)]) + data
+
+        # CAN extended address
+        extended_address = self._runtime_settings.get("can_extended_address", None)
+        if extended_address != None:
+            data = bytearray([int(str(extended_address), 16)]) + data
 
         return can.Message(arbitration_id=int(header, 16),
             data=data,

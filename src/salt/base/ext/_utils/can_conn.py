@@ -114,9 +114,8 @@ class CANConn(object):
                 else:  # Data frame
                     frame_type = msg.data[0] & 0xF0
 
-                    # TODO HN
-                    #if DEBUG:
-                    log.info("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
+                    if DEBUG:
+                        log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
 
                 ret.append(msg)
 
@@ -431,23 +430,27 @@ class CANConn(object):
     @Decorators.ensure_open
     def send(self, *messages, **kwargs):
         for msg in messages:
-            # TODO HN
-            #if DEBUG:
-            log.info("Sending CAN message {:}".format(msg))
+            if DEBUG:
+                log.debug("Sending CAN message {:}".format(msg))
 
             self._bus.send(msg, **kwargs)
 
-    def send_flow_control_reply_for(self, message, accept_frames=0x00, separation_time=0x00, id_resolvers=[]):
+    def send_flow_control_reply_for(self, message, accept_frames=0x00, separation_time=0x00, extended_address=None, id_resolvers=[]):
         if message.data[0] & 0xF0 != FRAME_TYPE_FF:
             raise ValueError("CAN message must be of frame type '{:}'".format(FRAME_TYPES[FRAME_TYPE_FF]))
 
         for id_resolver in id_resolvers or [self._custom_flow_control_id_resolver]:
             arb_id = id_resolver(message)
             if arb_id != None:
+
+                data = [0x30, accept_frames, separation_time]
+                if extended_address != None:
+                    data = [extended_address] + data
+
                 msg = can.Message(
                     is_extended_id=message.is_extended_id,
                     arbitration_id=arb_id,
-                    data=bytearray([0x30, accept_frames, separation_time]))
+                    data=bytearray(data))
 
                 self.send(msg)
 
@@ -492,9 +495,12 @@ class CANConn(object):
             else:
                 id = 0x7DF
 
-        data = bytearray([mode, pid])
+        data = [mode, pid]
         if auto_format:
-            data = bytearray([len(data)]) + data
+            data = [len(data)] + data
+
+        if "extended_address" in kwargs:
+            data = [kwargs["extended_address"]] + data
 
         # Ensure filter to listen for OBD responses only
         if auto_filter:
@@ -506,7 +512,7 @@ class CANConn(object):
         # Setup default flow control
         kwargs.setdefault("flow_control", [self.FLOW_CONTROL_CUSTOM, self.FLOW_CONTROL_OBD])
 
-        msg = can.Message(arbitration_id=id, data=data, is_extended_id=is_ext_id)
+        msg = can.Message(arbitration_id=id, data=bytearray(data), is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
 
         return res
