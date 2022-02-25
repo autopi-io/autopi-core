@@ -64,8 +64,31 @@ def status():
 
     else:
 
+        ret["spm"]["volt_triggers"] = {}
+
+        # SPM wake volt change trigger
+        res = __salt__["spm.query"]("wake_volt_change")
+        ret["spm"]["volt_triggers"]["wake_change"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
+
+        # SPM wake volt level trigger
+        res = __salt__["spm.query"]("wake_volt_level")
+        ret["spm"]["volt_triggers"]["wake_level"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
+
+        # SPM hibernate volt level trigger
+        res = __salt__["spm.query"]("hibernate_volt_level")
+        ret["spm"]["volt_triggers"]["hibernate_level"] = {
+            k: v for k, v in res.iteritems() if not k.startswith("_")
+        }
+
+        # SPM voltage calibration factor
+        ret["spm"]["volt_factor"] = __salt__["spm.query"]("volt_factor").get("value", None)
+
         # SPM battery
-        res = __salt__["obd.battery"]()  # Same command as above
+        res = __salt__["spm.battery"]()
         ret["spm"]["battery"] = {
             k: v for k, v in res.iteritems() if not k.startswith("_")
         }

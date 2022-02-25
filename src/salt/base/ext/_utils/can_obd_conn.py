@@ -277,7 +277,7 @@ class SocketCANInterface(STN11XX):
 
         self.close()
 
-        self.open(channel=self._port or or getattr(protocol_cls, "INTERFACE", "can0"),
+        self.open(channel=self._port or getattr(protocol_cls, "INTERFACE", "can0"),
             protocol={
                 "id": getattr(self._protocol, "ID", None),
                 "baudrate": getattr(self._protocol, "baudrate", None)
@@ -351,7 +351,7 @@ class SocketCANInterface(STN11XX):
         if cmd[:2].upper() in ["AT", "ST"]:
             if cmd.upper() == "ATRV":
                 res = __salt__["spm.query"]("volt_readout")
-                ret.append("{:.2f}V".format(res["current"]))
+                ret.append("{:.2f}V".format(res["value"]))
             else:
                 ret.append(self.OK)
 

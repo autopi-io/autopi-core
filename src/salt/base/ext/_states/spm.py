@@ -122,7 +122,7 @@ def voltage_calibrated(name, url, checks=10):
         ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
         return ret
 
-    actual_V = res["current"]
+    actual_V = res["value"]
 
     # Check if actual voltage matches expected voltage
     if round(actual_V, 1) == round(expected_V, 1):
@@ -159,7 +159,7 @@ def voltage_calibrated(name, url, checks=10):
         ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
         return ret
 
-    actual_V = res["current"]
+    actual_V = res["value"]
 
     # Perform calibration
     calculated_volt_factor = round(expected_V / actual_V, 3)
@@ -191,7 +191,7 @@ def voltage_calibrated(name, url, checks=10):
             ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
             return ret
 
-        actual_V = res["current"]
+        actual_V = res["value"]
 
         ret["changes"]["after"] = {
             "volt_factor": calculated_volt_factor,

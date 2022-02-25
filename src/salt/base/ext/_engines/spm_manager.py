@@ -17,7 +17,7 @@ context = {
 }
 
 # Message processor
-edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"handler": "query"})
+edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"workflow": "extended", "handler": "query"})
 
 # SPM connection is instantiated during start
 conn = None
@@ -34,6 +34,8 @@ def query_handler(cmd, **kwargs):
     Arguments:
       - cmd (str): The SPM command to query.
     """
+
+    # TODO HN: Support query of multiple commands in one call.
 
     ret = {
         "_type": cmd.lower(),

@@ -32,6 +32,17 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
+def battery(**kwargs):
+    """
+    Gets current battery voltage
+    """
+
+    if __opts__.get("spm.version", 2.0) < 3.0:
+        raise salt.exceptions.CommandExecutionError("Only supported by SPM version 3.0 and above")
+
+    return client.send_sync(_msg_pack("volt_readout", _converter="battery", **kwargs))
+
+
 def reset():
     """
     Reset/restart ATtiny. 

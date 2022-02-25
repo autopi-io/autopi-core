@@ -1,9 +1,11 @@
-import logging
+import battery_util
 import dateutil.parser
+import logging
 import re
 
-from messaging import keyword_resolve
+from messaging import extract_error_from, filter_out_unchanged, keyword_resolve
 from salt_more import cached_loader
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
@@ -84,6 +86,88 @@ def skip_empty_filter(result):
             return
 
     return result
+
+
+def alternating_readout_filter(result):
+    """
+    Filter that only returns alternating/changed results.
+    """
+
+    return filter_out_unchanged(result, context=__context__.setdefault("readout", {}))
+
+
+def battery_converter(result):
+    """
+    Converts a voltage reading result with battery charge state and level.
+    """
+
+    voltage = result.get("value", None)
+
+    opt = __opts__.get("battery", {})
+    nominal_voltage = opt.get("nominal_voltage", battery_util.DEFAULT_NOMINAL_VOLTAGE)
+    critical_limit = opt.get("critical_limit", {}).get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
+
+    ret = {
+        "_type": "bat",
+        "level": battery_util.charge_percentage_for(voltage, nominal_voltage),
+        "state": battery_util.state_for(voltage, nominal_voltage, critical_limit),
+        "voltage": voltage
+    }
+
+    return ret
+
+
+def battery_event_trigger(result):
+    """
+    Looks for battery results and triggers 'vehicle/battery/*' event when voltage changes.
+    """
+
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+        log.error("Battery event trigger got error result: {:}".format(result))
+
+        state = "unknown"
+    else:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Battery event trigger got battery result: {:}".format(result))
+
+        state = result["state"]
+
+    # Check if state has chaged since last time
+    ctx = __context__.setdefault("hooklib.battery_event_trigger", {})
+    if not ctx or state != ctx.get("state", None):
+        ctx["state"] = state
+        ctx["data"] = None
+        ctx["timer"] = timer()
+        ctx["count"] = 1
+    else:
+        ctx["count"] += 1
+
+    event_thresholds = ctx.setdefault("event_thresholds", {})
+    if not event_thresholds:
+        event_thresholds["*"] = 3  # Default is three seconds
+        event_thresholds["unknown"] = 0
+        event_thresholds[battery_util.CRITICAL_LEVEL_STATE] = __opts__.get("battery", {}).get("critical_limit", {}).get("duration", 180)
+
+    # Proceed only when battery state is repeated at least once and timer threshold is reached
+    if ctx["count"] > 1 and timer() - ctx["timer"] >= event_thresholds.get(state, event_thresholds["*"]):
+
+        # Reset timer
+        ctx["timer"] = timer()
+
+        # Prepare event data
+        data = {}
+        if state in [battery_util.DISCHARGING_STATE, battery_util.CRITICAL_LEVEL_STATE]:
+            data["level"] = result["level"]
+        elif state == "unknown" and error:
+            data["reason"] = str(error)
+
+        # Trigger only event if level (in data) has changed
+        if data != ctx["data"]:
+            __salt__["minionutil.trigger_event"]("vehicle/battery/{:s}".format(state), data)
+
+            ctx["data"] = data
 
 
 def kernel_error_blacklist_filter(result):

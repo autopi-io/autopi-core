@@ -1650,7 +1650,7 @@ def start(**settings):
                 log.exception("Failed to stop ELM327 proxy")
 
         # Close OBD connection if open
-        if conn.is_open():
+        if conn and conn.is_open():
             try:
                 conn.close()
             except:

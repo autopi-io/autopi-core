@@ -29,7 +29,7 @@ def trigger_event(tag, data={}):
 
     log.info("Triggering event '{:s}': {:}".format(tag, data))
 
-    return __salt__["event.fire"](data, tag)
+    return __salt__["event.fire"](dict(data), tag)
 
 
 def run_job(name, *args, **kwargs):

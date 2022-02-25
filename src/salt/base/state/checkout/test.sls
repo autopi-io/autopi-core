@@ -116,7 +116,7 @@ spm-volt-readout-test:
     - name: spm.query
     - args:
       - volt_readout
-    - validate: abs(ret["current"] - 12.80) <= 0.1
+    - validate: abs(ret["value"] - 12.80) <= 0.1
 
 spm-volt-config-flags-test:
   test.module:

@@ -296,9 +296,9 @@ class SPM3Conn(I2CConn):
             if maximum > 0:
                 maximum_readings.append(float(maximum)/100)
 
-        ret["current"] = round(sum(current_readings)/len(current_readings), 2)
-        ret["minimum"] = round(sum(minimum_readings)/len(minimum_readings), 2) if len(minimum_readings) > 0 else None
-        ret["maximum"] = round(sum(maximum_readings)/len(maximum_readings), 2) if len(maximum_readings) > 0 else None
+        ret["value"] = round(sum(current_readings)/len(current_readings), 2)
+        ret["min"] = round(sum(minimum_readings)/len(minimum_readings), 2) if len(minimum_readings) > 0 else None
+        ret["max"] = round(sum(maximum_readings)/len(maximum_readings), 2) if len(maximum_readings) > 0 else None
 
         return ret
 
