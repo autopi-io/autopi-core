@@ -105,7 +105,7 @@ def battery_converter(result):
 
     opt = __opts__.get("battery", {})
     nominal_voltage = opt.get("nominal_voltage", battery_util.DEFAULT_NOMINAL_VOLTAGE)
-    critical_limit = opt.get("critical_limit", {}).get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
+    critical_limit = opt.get("critical_level", {}).get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
 
     ret = {
         "_type": "bat",
@@ -148,7 +148,7 @@ def battery_event_trigger(result):
     if not event_thresholds:
         event_thresholds["*"] = 3  # Default is three seconds
         event_thresholds["unknown"] = 0
-        event_thresholds[battery_util.CRITICAL_LEVEL_STATE] = __opts__.get("battery", {}).get("critical_limit", {}).get("duration", 180)
+        event_thresholds[battery_util.CRITICAL_LEVEL_STATE] = __opts__.get("battery", {}).get("critical_level", {}).get("duration", 180)
 
     # Proceed only when battery state is repeated at least once and timer threshold is reached
     if ctx["count"] > 1 and timer() - ctx["timer"] >= event_thresholds.get(state, event_thresholds["*"]):
