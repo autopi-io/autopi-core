@@ -154,7 +154,7 @@ def kernel(level="err", facilities=[], offset=None, clear=False):
         "^(?P<facility>{facilities:}):(?P<level>{levels:}): (?P<timestamp>{time_format:}) (?P<message>.+?)(?=\Z|^({facilities:}):({levels:}): )".format(
             levels="|".join(["{: <6}".format(l) for l in DMESG_LEVELS]),
             facilities="|".join(["{: <6}".format(f) for f in DMESG_FACILITIES]),
-            time_format="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{6}\+[0-9]{4}"
+            time_format="[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2},[0-9]{6}\+(?:[0-9]{4}|[0-9]{2}:[0-9]{2})"
         ),
         re.MULTILINE | re.DOTALL
     )
