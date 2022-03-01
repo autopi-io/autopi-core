@@ -1,6 +1,16 @@
 
+{%- if salt['pillar.get']('power:volt_factor', 0.0) %}
+spm-voltage-factor-configured:
+  module_extra.configured:
+    - name: spm.query
+    - args:
+        - volt_factor
+    - kwargs:
+        value: {{ salt['pillar.get']('power:volt_factor', 0.0) }}
+{%- endif %}
+
 # Wake upon engine started (battery charging)
-voltage-change-wake-trigger:
+spm-voltage-change-wake-trigger-configured:
   module_extra.configured:
     - name: spm.query
     - args:
@@ -10,7 +20,7 @@ voltage-change-wake-trigger:
         period: {{ salt['pillar.get']('power:wake_trigger:voltage_change_duration', default=1000) }}
 
 # Wake when engine is running (battery charging)
-voltage-level-wake-trigger:
+spm-voltage-level-wake-trigger-configured:
   module_extra.configured:
     - name: spm.query
     - args:
@@ -20,7 +30,7 @@ voltage-level-wake-trigger:
         duration: {{ salt['pillar.get']('power:wake_trigger:voltage_level_duration', default=3) * 1000 }}
 
 # Power off on low battery
-voltage-level-sleep-trigger:
+spm-voltage-level-sleep-trigger-configured:
   module_extra.configured:
     - name: spm.query
     - args:
