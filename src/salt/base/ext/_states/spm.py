@@ -79,16 +79,18 @@ def voltage_calibrated(name, url, checks=10):
             return res
 
         # Wait for new, correct value to appear
-        # TODO NV/HN: Should this have a maximum loop count?
-        while True:
+        for i in range(checks):
             time.sleep(.05)
             res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
             if "error" in res:
                 res["error"] = "Error calling volt_readout: {}".format(res["error"])
                 return res
 
-            if res["maximum"] != None and res["minimum"] != None:
+            if res["max"] != None and res["min"] != None:
                 return res
+
+        res["error"] = "Maximum number of retries ({}) exceeded, SPM couldn't get a new voltage reading.".format(checks)
+        return res
 
     ret = {
         "name": name,
