@@ -239,7 +239,8 @@ def geofence_event_trigger(result):
         log.debug("Checking geofences")
 
     if isinstance(result, Exception):
-        log.warn("No data from GPS, can not determine geofence status. Exception: {}".format(result))
+        if DEBUG:
+            log.debug("No data from GPS, can not determine geofence status. Exception: {}".format(result))
         return
 
     ctx = context["geofence"]
