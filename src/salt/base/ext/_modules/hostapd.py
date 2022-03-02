@@ -83,11 +83,11 @@ def clients_changed_trigger(result):
     newly_disconnected_clients = list(previously_connected_clients - currently_connected_clients)
 
     for mac in newly_connected_clients:
-        tag = "system/hostapd/client/{}/connected".format(mac)
+        tag = "system/hostapd/client/{}/connected".format(mac.replace(":", "-"))
         __salt__["minionutil.trigger_event"](tag)
 
     for mac in newly_disconnected_clients:
-        tag = "system/hostapd/client/{}/disconnected".format(mac)
+        tag = "system/hostapd/client/{}/disconnected".format(mac.replace(":", "-"))
         __salt__["minionutil.trigger_event"](tag)
 
     # Update context
@@ -116,5 +116,5 @@ def expect_allow_list_handler():
 
     for mac in allow_list:
         if mac not in currently_connected_clients:
-            tag = "system/hostapd/client/{}/not_connected".format(mac)
+            tag = "system/hostapd/client/{}/not_connected".format(mac.replace(":", "-"))
             __salt__["minionutil.trigger_event"](tag)
