@@ -71,7 +71,7 @@ def clients_changed_trigger(result):
         error = extract_error_from(result)
         if error:
             if log.isEnabledFor(logging.DEBUG):
-                log.debug("Motion event trigger got error result: {}".format(result))
+                log.debug("Clients changed trigger got error result: {}".format(result))
             return
 
     ctx = __context__.setdefault("hostapd.clients_changed_trigger", {})
