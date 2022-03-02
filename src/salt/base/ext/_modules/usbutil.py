@@ -30,6 +30,8 @@ def devices():
       vendor: 1d6b                        # the vendor number (hex) of the device
     """
 
+    ret = {}
+
     p = subprocess.Popen(["lsusb"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     out = p.stdout.read()
@@ -64,9 +66,8 @@ def devices():
             "name":    match.group("name"),
         })
 
-    return {
-        "values": devices
-    }
+    ret["values"] = devices
+    return ret
 
 
 def devices_changed_trigger(result):
