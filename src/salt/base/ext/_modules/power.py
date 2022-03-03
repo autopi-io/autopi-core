@@ -291,6 +291,10 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, refresh=None, **
             # Trigger a cleared event
             __salt__["minionutil.trigger_event"]("system/{:}/cleared".format(name.lstrip("_")), data={"reason": reason})
 
+        # Cancel any pending shutdown
+        if clear == "*":
+            __salt__["cmd.run"](["shutdown", "-c"], python_shell=False)
+
     # Add timer if requested
     if add != None or enable == True:
         name = "_sleep_timer/{:}".format(add or reason)
