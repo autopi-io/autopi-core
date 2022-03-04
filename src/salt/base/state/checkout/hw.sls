@@ -9,7 +9,7 @@ spm-bod-fuse-configured:
       - h
       - t88
     - kwargs:
-        value: "0xdd"
+        value: "0xde"
         confirm: true
 
 cryptoauth-info-serialized:
