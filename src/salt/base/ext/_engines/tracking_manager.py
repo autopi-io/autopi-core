@@ -256,7 +256,7 @@ def geofence_event_trigger(result):
             log.debug("Checking geofence {} ({})".format(fence["id"], fence["name"]))
 
         # Check if vehicle is inside or outside given geofence
-        if (fence["shape"] == "SHAPE_CIRCLE"  and is_in_circle(current_location, fence["coordinates"][0], fence["circle_radius"]) or
+        if (fence["shape"] == "SHAPE_CIRCLE"  and is_in_circle(current_location, fence["coordinates"][0], fence["circle_radius"] / 1000) or
             fence["shape"] == "SHAPE_POLYGON" and is_in_polygon(current_location, fence["coordinates"])):
             fresh_state = "inside"
         else:
