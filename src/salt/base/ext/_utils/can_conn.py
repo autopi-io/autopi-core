@@ -214,9 +214,15 @@ class CANConn(object):
                 channel=channel,
                 receive_own_messages=receive_own_messages,
                 fd=local_settings.get("dbitrate", None) != None)
-            self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
             setattr(self._bus, "metadata", {})
             setattr(self._bus, "stats", {})
+
+            if self._filters:
+                log.info("Re-applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
+                self._bus.set_filters(list(self._filters))
+                self._is_filters_dirty = False
+
+            self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
 
     def is_open(self):
         if self._bus != None:
@@ -228,8 +234,8 @@ class CANConn(object):
                 # Keep track of consecutive errors
                 consec_errs = self._bus.stats.setdefault("consecutive_errors", {})
                 consec_errs[last_err_msg] = consec_errs.get(last_err_msg, 0) + 1
-                if sum(consec_errs.values()) >= 10:
-                    log.warning("The CAN connection is no longer considered open due to 10 consecutive errors, digest: {:}".format(consec_errs))
+                if sum(consec_errs.values()) >= 5:
+                    log.warning("The CAN connection is no longer considered open due to 5 consecutive CAN errors, digest: {:}".format(consec_errs))
 
                     return False
 
@@ -498,6 +504,7 @@ class CANConn(object):
                 if DEBUG:
                     log.debug("Flushing transmit buffer due to no query response")
 
+                # NOTE: Does not appear to be implemented in the SocketCAN interface, so probably no effect
                 self._bus.flush_tx_buffer()
 
         return ret
