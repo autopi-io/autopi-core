@@ -53,7 +53,7 @@ class CANConn(object):
 
                     # Store last error on bus
                     if self._bus:
-                        self._bus.last_error = err
+                        self._bus.stats["last_error"] = err
 
                     raise
 
@@ -216,19 +216,31 @@ class CANConn(object):
                 fd=local_settings.get("dbitrate", None) != None)
             self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
             setattr(self._bus, "metadata", {})
-            setattr(self._bus, "last_error", None)
+            setattr(self._bus, "stats", {})
 
     def is_open(self):
         if self._bus != None:
-            if self._bus.last_error != None:
-                try:
-                    log.warning("Checking the state of the interface due to the latest CAN connection error: {:}".format(self._bus.last_error))
-
-                    if self.interface_state() != INTERFACE_STATE_UP:
-                        return False
-                finally:
-                    self._bus.last_error = None
             
+            # Check for any last error
+            if "last_error" in self._bus.stats:
+                last_err_msg = str(self._bus.stats.pop("last_error", None))
+
+                # Keep track of consecutive errors
+                consec_errs = self._bus.stats.setdefault("consecutive_errors", {})
+                consec_errs[last_err_msg] = consec_errs.get(last_err_msg, 0) + 1
+                if sum(consec_errs.values()) >= 10:
+                    log.warning("The CAN connection is no longer considered open due to 10 consecutive errors, digest: {:}".format(consec_errs))
+
+                    return False
+
+                log.warning("Checking the state of the interface due to the latest CAN connection error: {:}".format(last_err_msg))
+                if self.interface_state() != INTERFACE_STATE_UP:
+                    return False
+
+            # Clear any consecutive errors
+            elif "consecutive_errors" in self._bus.stats:
+                self._bus.stats.pop("consecutive_errors", None)
+
             return self._bus.state != can.bus.BusState.ERROR
 
         return False
@@ -467,19 +479,26 @@ class CANConn(object):
         skip_error_frames = kwargs.pop("skip_error_frames", False)
         skip_remote_frames = kwargs.pop("skip_remote_frames", False)
 
-        with self.ReplyReader(self) as reader:
+        try:
+            with self.ReplyReader(self) as reader:
 
-            # Send all messages
-            self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
+                # Send all messages
+                self.send.undecorated(self, *messages)  # No need to call the 'ensure_open' decorator again
 
-            # Await replies
-            for msg in reader.await_replies(**kwargs):
-                if msg.is_error_frame and skip_error_frames:
-                    log.warning("Query is skipping error frame {:}".format(msg))
-                elif msg.is_remote_frame and skip_remote_frames:
-                    log.info("Query is skipping remote frame {:}".format(msg))
-                else:
-                    ret.append(msg)
+                # Await replies
+                for msg in reader.await_replies(**kwargs):
+                    if msg.is_error_frame and skip_error_frames:
+                        log.warning("Query is skipping error frame {:}".format(msg))
+                    elif msg.is_remote_frame and skip_remote_frames:
+                        log.info("Query is skipping remote frame {:}".format(msg))
+                    else:
+                        ret.append(msg)
+        finally:
+            if not ret:
+                if DEBUG:
+                    log.debug("Flushing transmit buffer due to no query response")
+
+                self._bus.flush_tx_buffer()
 
         return ret
 
