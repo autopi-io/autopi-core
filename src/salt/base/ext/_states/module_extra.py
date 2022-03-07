@@ -29,7 +29,7 @@ def configured(name, args=[], kwargs={}):
         return ret
 
     old = {k: v for k, v in res.iteritems() if not k.startswith("_")}
-    new = kwargs
+    new = {k: v for k, v in kwargs.iteritems() if not k.startswith("_") and not k in ["confirm"]}
 
     if cmp(old, new) == 0:
         ret["result"] = True
