@@ -106,6 +106,9 @@ class CANConn(object):
 
                     break
 
+                # TODO HN: Sanity check that wo do not get messages outside filters?
+                #if self.outer.filters:
+
                 frame_type = None
                 if msg.is_error_frame:
                     log.warning("Received CAN reply message marked as an error frame: {:}".format(msg))
@@ -162,7 +165,9 @@ class CANConn(object):
         return dict(self._bus.metadata) if self._bus else {}
 
     def setup(self, **settings):
-        log.info("Applying settings {:}".format(settings))
+
+        if DEBUG:
+            log.debug("Applying settings {:}".format(settings))
 
         # Check for changes
         has_changes = False
@@ -183,6 +188,7 @@ class CANConn(object):
 
         # Update settings
         self._settings.update(settings)
+        log.info("Updated settings {:}".format(settings))
 
     def open(self):
 
@@ -208,7 +214,13 @@ class CANConn(object):
             log.info("Opening CAN connection using settings {:}".format(self._settings))
 
             # Bring up interface
-            __salt__["socketcan.up"](interface=channel, **local_settings)
+            try:
+                __salt__["socketcan.up"](interface=channel, **local_settings)
+            except:
+                log.exception("Failed to bring up '{:}' interface - forcing it down before trying again".format(channel))
+
+                __salt__["socketcan.down"](interface=channel)
+                __salt__["socketcan.up"](interface=channel, **local_settings)
 
             self._bus = can.interfaces.socketcan.SocketcanBus(
                 channel=channel,
@@ -268,7 +280,7 @@ class CANConn(object):
                 self._bus = None
                 self._notifier = None
 
-        # Bring down interface
+        # Bring down interface if not already or force
         if force or self.interface_state() != INTERFACE_STATE_DOWN:
             __salt__["socketcan.down"](interface=self.channel)
 
@@ -362,8 +374,7 @@ class CANConn(object):
         channel = channel or self.channel
         state = __salt__["socketcan.show"](interface=channel).get("operstate", "").lower()
 
-        if DEBUG:
-            log.debug("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
+        log.info("CAN interface '{:}' is currently in operation state '{:}'".format(channel, state))
 
         return state
 

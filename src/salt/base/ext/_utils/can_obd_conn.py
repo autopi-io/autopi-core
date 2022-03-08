@@ -717,6 +717,9 @@ class SocketCAN_OBDConn(OBDConn):
 
             raise
 
+    def ensure_protocol(self, ident, baudrate=None, verify=True):
+        super(SocketCAN_OBDConn, self).ensure_protocol(ident, baudrate=baudrate, verify=self._protocol_verify or verify)
+
     def supported_protocols(self):
         return SocketCANInterface.supported_protocols()
 

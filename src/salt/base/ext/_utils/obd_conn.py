@@ -239,7 +239,8 @@ class OBDConn(object):
         elif not ident in self.supported_protocols():
             raise ValueError("Unsupported protocol specified")
 
-        log.info("Changing to protocol ID {:} with baudrate {:}".format(ident, baudrate))
+        if DEBUG:
+            log.debug("Changing to protocol ID {:} with baudrate {:} and{:}performing verify".format(ident, baudrate, " " if verify else " NOT "))
 
         self._obd.change_protocol(ident, baudrate=baudrate, verify=verify)
 
