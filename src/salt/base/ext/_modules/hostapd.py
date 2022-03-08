@@ -61,7 +61,7 @@ def clients(interface="uap0"):
 
 def clients_changed_trigger(result):
     """
-    Triggers 'system/hostapd/client/<mac>/connected' and 'system/hostapd/client/<mac>/disconnected' events.
+    Triggers 'system/hotspot/client/<mac>/connected' and 'system/hotspot/client/<mac>/disconnected' events.
 
     The trigger expects the result to be given in the format of what hostapd.clients returns,
     which is also the main use case for this trigger.
@@ -83,11 +83,11 @@ def clients_changed_trigger(result):
     newly_disconnected_clients = list(previously_connected_clients - currently_connected_clients)
 
     for mac in newly_connected_clients:
-        tag = "system/hostapd/client/{}/connected".format(mac.replace(":", "-"))
+        tag = "system/hotspot/client/{}/connected".format(mac.replace(":", "-"))
         __salt__["minionutil.trigger_event"](tag)
 
     for mac in newly_disconnected_clients:
-        tag = "system/hostapd/client/{}/disconnected".format(mac.replace(":", "-"))
+        tag = "system/hotspot/client/{}/disconnected".format(mac.replace(":", "-"))
         __salt__["minionutil.trigger_event"](tag)
 
     # Update context
@@ -96,7 +96,7 @@ def clients_changed_trigger(result):
 
 def expect_allow_list_handler():
     """
-    This handler triggers 'system/hostapd/client/<mac>/not_connected' events for clients that aren't
+    This handler triggers 'system/hotspot/client/<mac>/not_connected' events for clients that aren't
     connected from the hostapd allow list.
 
     In order for the handler to work properly the allow list must be stored in the default hostapd.accept
@@ -116,5 +116,5 @@ def expect_allow_list_handler():
 
     for mac in allow_list:
         if mac not in currently_connected_clients:
-            tag = "system/hostapd/client/{}/not_connected".format(mac.replace(":", "-"))
+            tag = "system/hotspot/client/{}/not_connected".format(mac.replace(":", "-"))
             __salt__["minionutil.trigger_event"](tag)
