@@ -69,7 +69,7 @@ def heartbeat_handler():
         if context["state"] != "on":
 
             # Get current status
-            status = call_retrying(conn.status, limit=3, wait=0.2, context=context.setdefault("errors", {}))
+            status = call_retrying(conn.status, limit=10, wait=0.2, context=context.setdefault("errors", {}))
 
             old_state = context["state"]
             new_state = status["last_state"]["up"]
@@ -101,7 +101,7 @@ def heartbeat_handler():
                 # Check if any config params have failed (SPM3 only)
                 if conn.revision >= 3:
                     try:
-                        config_flags = call_retrying(conn.volt_config_flags, limit=3, wait=0.2, context=context.setdefault("errors", {}))
+                        config_flags = call_retrying(conn.volt_config_flags, limit=10, wait=0.2, context=context.setdefault("errors", {}))
                         failed_params = [k for k, v in config_flags["failed"].iteritems() if v]
                         if failed_params:
                             edmp.trigger_event({
@@ -123,7 +123,7 @@ def heartbeat_handler():
     finally:
 
         # Trigger heartbeat as normal
-        call_retrying(conn.heartbeat, limit=3, wait=0.2, context=context.setdefault("errors", {}))
+        call_retrying(conn.heartbeat, limit=10, wait=0.2, context=context.setdefault("errors", {}))
 
 
 @edmp.register_hook()
