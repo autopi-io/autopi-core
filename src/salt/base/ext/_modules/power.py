@@ -165,14 +165,6 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
     except:
         log.exception("Failed to run shutdown SLS")
 
-    # Kill heartbeat worker thread to enforce RPi power off if something goes south/hangs
-    try:
-        res = __salt__["spm.manage"]("worker", "kill", "_heartbeat")
-        if not "_heartbeat" in res.get("killed", []):
-            log.warn("No heartbeat worker thread found to kill")
-    except:
-        log.exception("Failed to kill heartbeat worker")
-
     # TODO: Power off audio amp (if not done when shutting down RPi?)
 
     # Power off 3V3 for modem/mPCIe if requested
@@ -186,23 +178,20 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
         except:
             log.exception("Failed to put accelerometer into standby mode")
 
-    # Plan a system shutdown in case STN never sleeps
-    # (it could get interrupted by another STN wake trigger)
     try:
 
         if __opts__.get("spm.version", 2.0) < 3.0:
-            __salt__["system.shutdown"](int(delay / 60) + 2)
-        else:
-            __salt__["system.shutdown"](max(int(delay / 60), 1))
 
-        # Broadcast reason to all terminals
-        __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
-    except:
-        log.exception("Failed to plan system shutdown")
+            # Plan a system shutdown in case STN never sleeps
+            # (it could get interrupted by another STN wake trigger)
+            try:
+                __salt__["system.shutdown"](int(delay / 60) + 2)
 
-    try:
+                # Broadcast reason to all terminals
+                __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
+            except:
+                log.exception("Failed to plan system shutdown")
 
-        if __opts__.get("spm.version", 2.0) < 3.0:
             # Put STN to sleep (and thereby shutdown RPi when STN power pin goes low)
             # NOTE: This is not required for SPM 2.0 but we still do it for backward compatibility.
             #       The only consequence is that the SPM down trigger is registered as 'STN' instead of 'RPI'.
@@ -216,17 +205,34 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
             log.warn("Intentionally going to hibernate until next engine start because of reason '{:}'".format(reason))
 
         # Trigger a sleep or hibernate event
-        __salt__["minionutil.trigger_event"](
-            "system/power/{:}".format("sleep" if interval > 0 else "hibernate"),
-            data={
-                "delay": delay,
-                "interval": interval,
-                "reason": reason,
-                "uptime": __salt__["status.uptime"]()["seconds"]
-            }
-        )
+        try:
+            __salt__["minionutil.trigger_event"](
+                "system/power/{:}".format("sleep" if interval > 0 else "hibernate"),
+                data={
+                    "delay": delay,
+                    "interval": interval,
+                    "reason": reason,
+                    "uptime": __salt__["status.uptime"]()["seconds"]
+                }
+            )
+        except:
+            log.exception("Failed to trigger {:} event".format("sleep" if interval > 0 else "hibernate"))
 
     ret["comment"] = "Planned shutdown in {:d} second(s)".format(delay)
+
+    if __opts__.get("spm.version", 2.0) >= 3.0:
+        if delay >= 60:
+            __salt__["system.shutdown"](int(delay / 60))
+        else:
+            delay = max(delay, 1)
+
+            log.warning("Sleeping for {:} second(s) before performing immediate shutdown".format(delay))
+            time.sleep(delay)
+
+            __salt__["system.shutdown"]()
+
+        # Broadcast reason to all terminals
+        __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
     
     return ret
 
