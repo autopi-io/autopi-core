@@ -94,14 +94,12 @@ class CANConn(object):
 
             count = 0
             while True:
-                count += 1
-
                 msg = self._listener.next(timeout=timeout)
                 if msg == None:  # Timeout
                     if strict:
                         if replies > 0:
                             raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
-                        elif count == 1:
+                        elif count == 0:
                             raise Exception("No CAN message reply received within timeout of {:} second(s)".format(timeout))
 
                     break
@@ -140,6 +138,7 @@ class CANConn(object):
                         log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
 
                 ret.append(msg)
+                count += 1
 
                 # Stop if replies is met
                 if replies > 0 and count >= replies:
