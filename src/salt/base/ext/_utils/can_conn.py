@@ -81,7 +81,7 @@ class CANConn(object):
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await_replies(self, timeout=0.2, flow_control=False, replies=None, strict=True, **kwargs):
+        def await_replies(self, timeout=0.2, flow_control=False, replies=None, skip_error_frames=True, skip_remote_frames=True, strict=True, **kwargs):
             ret = []
 
             if isinstance(flow_control, list):
@@ -106,15 +106,34 @@ class CANConn(object):
 
                     break
 
-                # TODO HN: Sanity check that wo do not get messages outside filters?
-                #if self.outer.filters:
-
                 frame_type = None
                 if msg.is_error_frame:
-                    log.warning("Received CAN reply message marked as an error frame: {:}".format(msg))
+                    if skip_error_frames:
+                        log.info("Skipping received CAN reply message marked as an error frame: {:}".format(msg))
+
+                        continue
+                    else:
+                        log.info("Received CAN reply message marked as an error frame: {:}".format(msg))
+
                 elif msg.is_remote_frame:
-                    log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
+                    if skip_remote_frames:
+                        log.info("Skipping received CAN reply message marked as a remote frame: {:}".format(msg))
+
+                        continue
+                    else:
+                        log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
+
                 else:  # Data frame
+
+                    # Ensure that we do not get messages not matching filters
+                    if not self.outer._bus.filters:
+                        log.warning("Received CAN message reply without any filters applied: {:}".format(msg))
+                    elif not self.outer._bus._matches_filters(msg):
+                        log.warning("Skipping received CAN message reply which should have already been filtered out: {:}".format(msg))
+
+                        continue
+
+                    # Determine frame type
                     frame_type = msg.data[0] & 0xF0
 
                     if DEBUG:
@@ -350,7 +369,7 @@ class CANConn(object):
             # Query for supported OBD PIDs
             for id_bits in [11, 29]:
                 try:
-                    msgs = self.obd_query(0x01, 0x00, is_ext_id=id_bits > 11, timeout=receive_timeout, strict=False, skip_error_frames=True)
+                    msgs = self.obd_query(0x01, 0x00, is_ext_id=id_bits > 11, timeout=receive_timeout, strict=False, skip_error_frames=True, skip_remote_frames=True)
                     if msgs:
                         self._bus.metadata["is_autodetected"] = True
                         self._bus.metadata["is_extended_id"] = id_bits > 11
@@ -493,9 +512,6 @@ class CANConn(object):
     def query(self, *messages, **kwargs):
         ret = []
 
-        skip_error_frames = kwargs.pop("skip_error_frames", False)
-        skip_remote_frames = kwargs.pop("skip_remote_frames", False)
-
         try:
             with self.ReplyReader(self) as reader:
 
@@ -504,12 +520,7 @@ class CANConn(object):
 
                 # Await replies
                 for msg in reader.await_replies(**kwargs):
-                    if msg.is_error_frame and skip_error_frames:
-                        log.warning("Query is skipping error frame {:}".format(msg))
-                    elif msg.is_remote_frame and skip_remote_frames:
-                        log.info("Query is skipping remote frame {:}".format(msg))
-                    else:
-                        ret.append(msg)
+                    ret.append(msg)
         finally:
             if not ret:
                 if DEBUG:
