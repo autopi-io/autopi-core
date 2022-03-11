@@ -81,7 +81,7 @@ class CANConn(object):
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await_replies(self, timeout=0.2, flow_control=False, replies=None, skip_error_frames=True, skip_remote_frames=True, strict=True, **kwargs):
+        def await_replies(self, timeout=0.2, flow_control=False, replies=None, skip_error_frames=True, skip_remote_frames=True, strict=True, ensure_filtering=True, **kwargs):
             ret = []
 
             if isinstance(flow_control, list):
@@ -123,19 +123,20 @@ class CANConn(object):
 
                 else:  # Data frame
 
-                    # Ensure that we do not get messages not matching filters
+                    # Determine frame type
+                    frame_type = msg.data[0] & 0xF0
+
+                    if DEBUG:
+                        log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
+
+                # Ensure that we do not get messages not matching filters
+                if ensure_filtering:
                     if not self.outer._bus.filters:
                         log.warning("Received CAN message reply without any filters applied: {:}".format(msg))
                     elif not self.outer._bus._matches_filters(msg):
                         log.warning("Skipping received CAN message reply which should have already been filtered out: {:}".format(msg))
 
                         continue
-
-                    # Determine frame type
-                    frame_type = msg.data[0] & 0xF0
-
-                    if DEBUG:
-                        log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
 
                 ret.append(msg)
                 count += 1
