@@ -116,7 +116,12 @@ spm-volt-readout-test:
     - name: spm.query
     - args:
       - volt_readout
+    # Only required when testing HW
+    {%- if not salt['pillar.get']('state', '') %}
     - validate: abs(ret["value"] - 12.80) <= 0.1
+    {%- else %}
+    - validate: ret["value"] >= 12.8
+    {%- endif %}
 
 spm-volt-config-flags-test:
   test.module:
@@ -140,6 +145,9 @@ rtc-i2c-present-test:
 crypto-i2c-present-test:
   cmd.run:
     - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
+
+# Only possible ATM when testing HW
+{%- if not salt['pillar.get']('state', '') %}
 
 can-term-setup-test:
   test.module:
@@ -185,6 +193,7 @@ can1-iface-recv-test:
     - require:
       - can1-iface-dump-test
       - can0-iface-send-test
+{%- endif %}
 
 {%- endif %}
 
