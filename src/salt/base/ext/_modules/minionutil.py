@@ -104,6 +104,8 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
       - reason (str): Reason code that tells why we decided to restart. Default is 'unknown'.
     """
 
+    ret = {}
+
     if pending or __context__.get("minionutil.request_restart", False):
         if immediately:
             log.warn("Performing minion restart in {:} second(s) because of reason '{:}'".format(delay, reason))
@@ -115,7 +117,7 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
             time.sleep(delay)
 
             # Perform restart of service
-            return __salt__["service.restart"]("salt-minion")
+            ret["immediately"] = __salt__["service.restart"]("salt-minion")
         else:
             if expiration > 0:
                 __salt__["schedule.add"]("_restart_timer/{:}".format(reason),
@@ -139,9 +141,9 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
     # Set pending in context
     __context__["minionutil.request_restart"] = pending
 
-    return {
-        "pending": pending,
-    }
+    ret["pending"] = pending
+    
+    return ret
 
 
 def update_release(force=False, dry_run=False, only_retry=False):
