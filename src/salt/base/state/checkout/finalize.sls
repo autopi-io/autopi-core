@@ -42,4 +42,5 @@ redis-flushed:
 power.sleep:
   module.run:
     - interval: 0
+    - delay: 3
     - confirm: true
