@@ -9,6 +9,7 @@ from cryptoauth_conn import CryptoAuthConn
 from threading_more import intercept_exit_signal
 import cryptoauthlib
 from retrying import retry
+from se05x_conn import Se05xCryptoConnection
 
 log = logging.getLogger(__name__)
 
@@ -30,12 +31,19 @@ def retry_if_ecc_error(exception):
     return isinstance(exception, cryptoauthlib.EccFaultError)
 
 @retry(retry_on_exception=retry_if_ecc_error, stop_max_attempt_number=3, wait_fixed=50)
-def generate_key(slot=0):
-    public_key = bytearray(64)
-    res = cryptoauthlib.atcab_genkey(slot, public_key)
-    conn.handle_res(res)
+def generate_key_handler(key):
+    key_obj = conn.generate_key(key)
+    key_string = conn.get_pub_key(key_obj)
 
-    return cryptoauthlib.convert_ec_pub_to_pem(public_key)
+    log.info(key_string)
+
+    # key_id and key_slot not compatible
+
+    # public_key = bytearray(64)
+    # res = cryptoauthlib.atcab_genkey(slot, public_key)
+    # conn.handle_res(res)
+
+    # return cryptoauthlib.convert_ec_pub_to_pem(public_key)
 
 @edmp.register_hook()
 def provision_handler(lock_config=False, lock_data=False):
@@ -223,8 +231,12 @@ def start(**settings):
         # Initialize connection
         global conn
         # conn = CryptoAuthConn(settings.get("atecc180a_conn"))
-        conn = CryptoAuthConn(settings.get("atecc"))
-        conn.open()
+        
+        # conn = CryptoAuthConn(settings.get("atecc"))
+
+        conn = Se05xCryptoConnection()
+
+        # conn.open()
         # TODO: Handle if connection closes or something.
 
         # Initialize and run message processor
