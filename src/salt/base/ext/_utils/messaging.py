@@ -401,7 +401,27 @@ class MessageProcessor(object):
                 }
 
             elif args[1] == "create":
-                return self.dedicated_worker(None, **kwargs)
+                messages = args[2:] # all other arguments are considered messages
+
+                # create worker
+                res = self.dedicated_worker(None, **kwargs)
+
+                # resolve name
+                worker_name = None
+                if res.get("started", None):
+                    worker_name = res["started"]
+                elif res.get("created", None):
+                    worker_name = res["created"]
+                else:
+                    raise Exception("Couldn't figure out worker name, skipping enqueueing of messages")
+
+                # Enqueue all messages to worker
+                for message in messages:
+                    self.dedicated_worker(message, enqueue=worker_name)
+
+                return {
+                    "value": worker_name,
+                }
 
             elif args[1] == "start":
                 threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.start(**kwargs))
