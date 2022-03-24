@@ -19,7 +19,7 @@ def echo_handler(*args, **kwargs):
     log.info("Echo: {:}".format(args))
 
 
-def module_handler(name, *args, **kwargs):
+def module_handler(*args, **kwargs):
     """
     Calls a Salt execution module from within the minion process.
     """
@@ -32,7 +32,7 @@ def module_handler(name, *args, **kwargs):
 
     kind = kwargs.pop("_type", None)
 
-    ret = __salt__["minionutil.run_job"](name, *args, **kwargs)
+    ret = __salt__["minionutil.run_job"](args[0], *args[1:], **kwargs)
 
     if kind != None and isinstance(ret, dict):
         ret["_type"] = kind
@@ -40,7 +40,7 @@ def module_handler(name, *args, **kwargs):
     return ret
 
 
-def module_direct_handler(name, *args, **kwargs):
+def module_direct_handler(*args, **kwargs):
     """
     Calls a Salt execution module directy from current process.
     """
@@ -53,7 +53,7 @@ def module_direct_handler(name, *args, **kwargs):
 
     kind = kwargs.pop("_type", None)
 
-    ret = __salt__[name](*args, **kwargs)
+    ret = __salt__[args[0]](*args[1:], **kwargs)
 
     if kind != None and isinstance(ret, dict):
         ret["_type"] = kind
