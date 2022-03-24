@@ -441,6 +441,12 @@ class MessageProcessor(object):
                     "values": [t.name for t in threads]
                 }
 
+            elif args[1] == "start_or_resume":
+                threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.start_or_resume(**kwargs))
+                return {
+                    "values": [t.name for t in threads]
+                }
+
             elif args[1] == "kill":
                 threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.kill(**kwargs))
                 return {

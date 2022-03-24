@@ -193,6 +193,23 @@ class WorkerThread(threading.Thread):
         # Ensure to wake up if sleeping
         self.wake_event.set()
 
+    def start_or_resume(self):
+        """
+        Starts or resumes the WorkerThread instance
+        """
+
+        # Noop when we've raised the white flag
+        if self.terminate:
+            return
+
+        # Thread hasn't started yet
+        if not self.is_alive():
+            self.start()
+
+        # Assume thread is paused
+        else:
+            self.resume() # This method will do the checking for us
+
     def resume(self):
         if self.proceed_event.is_set():
             return
