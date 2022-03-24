@@ -262,8 +262,16 @@ def geofence_event_trigger(result):
         else:
             fresh_state = "outside"
 
+        # Handle GF states/events after first acquiring GPS signal  
+        if fence["state"] == None:
+            fence["state"] = fresh_state
+            
+            edmp.trigger_event(
+                {"fence_id": fence["id"]},
+                "vehicle/geofence/{:s}/{:s}".format(fence["slug"], fence["state"]))
+
         # Update or reset repeat counter
-        if fence["last_reading"] == fresh_state:
+        elif fence["last_reading"] == fresh_state:
             fence["repeat_count"] += 1
 
             # Trigger event and update fence state if repeat count has been reached
@@ -275,10 +283,15 @@ def geofence_event_trigger(result):
 
                 fence["state"] = fresh_state
                 
-                edmp.trigger_event(
-                    {"fence_id": fence["id"]},
-                    "vehicle/geofence/{:s}/{:s}".format(fence["slug"], fence["state"]))
-        
+                if fence["state"] == "inside":
+                    edmp.trigger_event(
+                        {"fence_id": fence["id"]},
+                        "vehicle/geofence/{:s}/{:s}".format(fence["slug"], "enter"))
+                else:
+                    edmp.trigger_event(
+                        {"fence_id": fence["id"]},
+                        "vehicle/geofence/{:s}/{:s}".format(fence["slug"], "exit"))
+
         else: 
             fence["last_reading"] = fresh_state
             fence["repeat_count"] = 0
