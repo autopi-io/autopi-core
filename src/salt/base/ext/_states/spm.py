@@ -56,10 +56,27 @@ def firmware_flashed(name, part_id, version):
     return ret
 
 
-def voltage_calibrated(name, url, checks=10):
+def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_precision=3):
     """
     Ensure SPM voltage is calibrated to the expected value provided by the given HTTP endpoint.
     """
+
+    def compare_voltage(expected_V, actual_V):
+        """
+        Checks the actual voltage against an expected voltage.
+        Returns True if voltage is in acceptable range or False otherwise.
+        """
+
+        diff = expected_V - actual_V
+
+        if diff < 0:
+            # Don't accept the device readings to be higher than actual voltage
+            return False
+
+        if diff > acceptable_difference:
+            return False
+
+        return True
 
     def change_volt_factor_and_wait(new_volt_factor):
         """
@@ -127,7 +144,7 @@ def voltage_calibrated(name, url, checks=10):
     actual_V = res["value"]
 
     # Check if actual voltage matches expected voltage
-    if round(actual_V, 1) == round(expected_V, 1):
+    if compare_voltage(expected_V, actual_V):
         ret["result"] = True
         ret["comment"] = "Voltage is already calibrated"
         return ret
@@ -164,7 +181,7 @@ def voltage_calibrated(name, url, checks=10):
     actual_V = res["value"]
 
     # Perform calibration
-    calculated_volt_factor = round(expected_V / actual_V, 3)
+    calculated_volt_factor = round(expected_V / actual_V, factor_precision)
     res = change_volt_factor_and_wait(calculated_volt_factor)
     if "error" in res:
         ret["result"] = False
@@ -172,17 +189,27 @@ def voltage_calibrated(name, url, checks=10):
         return ret
 
     # Double check calibration
-    for i in range(checks):
-        # NOTE NV: Maybe there should be time.sleep or waiting for a new value between every check?
-        # It looks like the voltage reported is the same if the attempts are too quick, it kind of
-        # makes the loop redundant
-
+    checks_attempted = 0
+    previous_ts = None
+    while checks_attempted < checks:
         # Get expected voltage
         res = salt_more.call_error_safe(__salt__["http.query"], url, decode=True, decode_type="json")
         if "error" in res:
             ret["result"] = False
             ret["comment"] = "Failed to get expected voltage level by URL '{}': {}".format(url, res["error"])
             return ret
+
+        if previous_ts == None:
+            # First iteration
+            previous_ts = res["dict"]["ts"]
+
+        elif previous_ts >= res["dict"]["ts"]:
+            time.sleep(.25) # Approx. the amount of time sigrok takes to get a new value
+            continue
+
+        else:
+            # Otherwise save the ts for next iteration
+            previous_ts = res["dict"]["ts"]
 
         expected_V = res["dict"]["value"]
 
@@ -195,15 +222,16 @@ def voltage_calibrated(name, url, checks=10):
 
         actual_V = res["value"]
 
+        checks_attempted += 1
         ret["changes"]["after"] = {
             "volt_factor": calculated_volt_factor,
             "expected": expected_V,
             "actual": actual_V,
-            "checks_attempted": i+1,
+            "checks_attempted": checks_attempted,
         }
 
-        # Check if voltages match
-        if round(actual_V, 1) != round(expected_V, 1):
+        # Ensure voltage matches
+        if not compare_voltage(expected_V, actual_V):
             ret["result"] = False
             ret["comment"] = "Inaccurate voltage level after calibration"
             return ret
