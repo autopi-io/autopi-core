@@ -31,3 +31,13 @@ timesyncd-service-reloaded:
     - name: service.systemctl_reload
     - onchanges:
       - file: /lib/systemd/system/systemd-timesyncd.service
+
+{%- if salt['pillar.get']('rpi:boot:rtc', default='') == 'pcf85063a' %}
+rtc-retry-script-installed:
+  file.managed:
+    - name: /usr/bin/rtc-retry
+    - source: salt://raspi/hwclock/rtc-retry.sh.jinja
+    - mode: 755
+    - user: root
+    - group: root
+{%- endif %}

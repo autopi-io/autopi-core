@@ -37,3 +37,9 @@ udev-service-restarted-after-usb-rules-changed:
     - name: udev
     - watch:
       - file: /etc/udev/rules.d/99-usb.rules
+
+udev-rtc-rules-configured:
+  file.managed:
+    - name: /etc/udev/rules.d/99-rtc.rules
+    - source: salt://raspi/udev/rtc.rules.jinja
+    - template: jinja

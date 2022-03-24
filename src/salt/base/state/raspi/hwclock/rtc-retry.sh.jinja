@@ -1,0 +1,134 @@
+#!/bin/bash
+# ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
+
+
+# Constants
+###############################################################################
+
+readonly DEVICE="/dev/rtc"
+readonly DEVICE_MODULE="rtc_pcf85063"
+
+# Exit codes
+readonly OK=0
+readonly ERROR=1
+
+
+# Configuration variables
+###############################################################################
+
+VERBOSE=true
+SLEEP_BETWEEN_RETRIES=1     # Sleep X seconds after reloading to check status and try again if device still not found
+MAX_RETRY_COUNT=3           # Retry X times before giving up
+
+# Helper functions
+###############################################################################
+
+print_usage ()
+{
+    echo "Usage: $0 [COMMAND]"
+}
+
+print_help ()
+{
+    echo "Usage: $0 [COMMAND]"
+    echo
+    echo "Checks for RTC device status and tries to reconnect if not already connected"
+    echo
+    echo "Commands:"
+    echo "  help              Show help"
+    echo "  version           Show version"
+    echo "  is_found          Check if the RTC device is connected and found"
+    echo "  reload            Reload the RTC module"
+    echo "  run               Check if the RTC device exists in /dev and if not, reload the module"
+    echo
+}
+
+print_version ()
+{
+    echo "$0 1.0"
+    echo
+}
+
+echoerr ()
+{
+    echo "$@" 1>&2
+}
+
+
+# Program functions
+###############################################################################
+
+# Checks for $DEVICE and returns 0 status if it exists
+is_found ()
+{
+    [ $VERBOSE == true ] && echo "[INFO] Checking if device '$DEVICE' exists"
+
+    test -L $DEVICE
+    [ $? -gt 0 ] && echo "[INFO] Device '$DEVICE' not found" && return $ERROR
+    return $OK
+}
+
+# Reloads the RTC module
+reload ()
+{
+    [ $VERBOSE == true ] && echo "[INFO] Attempting RTC module reload"
+
+    rmmod $DEVICE_MODULE 3>&1 1>&2 2>/dev/null
+    [ $? -gt 0 ] && [ $VERBOSE == true ] && echo "[INFO] RTC module $DEVICE_MODULE could not be removed"
+    
+    modprobe $DEVICE_MODULE
+    [ $? -gt 0 ] && echoerr "[ERROR] Could not load module $DEVICE_MODULE" && return $ERROR
+    return $OK
+}
+
+run ()
+{
+    for i in $(seq $MAX_RETRY_COUNT); do
+        is_found
+        [ $? -eq $OK ] && echo "[INFO] RTC device found. Returning." && return $OK   
+
+        reload
+        sleep $SLEEP_BETWEEN_RETRIES
+    done
+    
+    is_found
+    [ $? -eq $OK ] && echo "[INFO] RTC device found. Returning." && return $OK
+    return $ERROR
+}
+
+# Main flow
+###############################################################################
+
+# Validate arguments
+if [ $# -lt 1 ]; then
+    echoerr "[ERROR] Invalid argument(s)"
+    print_usage
+    exit 255
+fi
+
+# Process commands
+case $1 in
+    "help")
+        print_help
+        ;;
+    "version")
+        print_version
+        ;;
+    "run")
+        run
+        ;;
+    "is_found")
+        is_found
+        [ $? -eq $OK ] && echo "RTC OK"
+        ;;
+    "reload")
+        reload
+        [ $? -eq $OK ] && echo "RTC module '$DEVICE_MODULE' reloaded"
+        ;;
+    *)
+        echoerr "[ERROR] Unsupported command '$1'"
+        print_help
+        exit 255
+        ;;
+esac
+exit $?
