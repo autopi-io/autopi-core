@@ -284,7 +284,8 @@ def motion_event_trigger(result, jolt_g_threshold=0.3, jolt_duration=1, shake_g_
         ctx["data_window"] = {
             "size": data_window_size,
             "axes": {k: [0.0] * data_window_size for k in ["x", "y", "z"]},
-            "cursor": 0
+            "cursor": 0,
+            "full": False
         }
 
         diff_window_size = max(int(data_rate * shake_duration), 2)  # NOTE: Minimum size is 2
@@ -305,6 +306,7 @@ def motion_event_trigger(result, jolt_g_threshold=0.3, jolt_duration=1, shake_g_
     # Reset window cursors
     if ctx["data_window"]["cursor"] >= ctx["data_window"]["size"]:
         ctx["data_window"]["cursor"] = 0
+        ctx["data_window"]["full"] = True
     if ctx["diff_window"]["cursor"] >= ctx["diff_window"]["size"]:
         ctx["diff_window"]["cursor"] = 0
 
@@ -319,7 +321,7 @@ def motion_event_trigger(result, jolt_g_threshold=0.3, jolt_duration=1, shake_g_
         data_axis[data_cursor] = data[axis]
 
         # Calculate the difference between min and max of the data axis
-        if jolt_g_threshold > 0 and not is_jolting:
+        if jolt_g_threshold > 0 and ctx["data_window"]["full"] and not is_jolting:
             min_val, max_val = min_max(data_axis)
             is_jolting = abs(max_val - min_val) >= jolt_g_threshold
 
