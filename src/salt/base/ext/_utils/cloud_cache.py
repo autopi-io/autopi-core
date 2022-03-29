@@ -170,9 +170,11 @@ class CloudCache(object):
 
     def _prepare_payload_for(self, batch):
         payload = "[{:s}]".format(",".join(batch))
+        compression = None
 
         if "compression" in self.options:
-            if self.options["compression"]["algorithm"] == "gzip":
+            compression = self.options["compression"]["algorithm"]
+            if compression == "gzip":
                 start = timer()
 
                 buffer = StringIO.StringIO()
@@ -187,9 +189,9 @@ class CloudCache(object):
             else:
                 log.warning("Unsupported compression algorithm configured - skipping compression")
 
-        return payload
+        return payload, compression
 
-    def _upload(self, payload, endpoint=None, splay_factor=1):
+    def _upload(self, payload, compression=None, endpoint=None, splay_factor=1):
         endpoint = endpoint or self.options.get("endpoint", {})
         if not endpoint:
             log.warning("Cannot upload data to cloud because no endpoint is configured")
@@ -208,8 +210,12 @@ class CloudCache(object):
 
         headers = {
             "authorization": "token {:}".format(endpoint.get("auth_token")),
-            "content-type": "application/json",
+            "content-type": "application/json"
         }
+
+        if compression:
+            headers.update({ "content-encoding": compression })
+
         if "unit_id" in self.options:
             headers["unit-id"] = self.options["unit_id"]
 
@@ -246,8 +252,8 @@ class CloudCache(object):
             return ret
 
         # Upload batch
-        payload = self._prepare_payload_for(batch)
-        ok, msg = self._upload(payload)  # Remember this call will raise exception upon server error
+        payload, compression = self._prepare_payload_for(batch)
+        ok, msg = self._upload(payload, compression)  # Remember this call will raise exception upon server error
         if ok:
             log.info("Uploaded batch with {:} entries from queue '{:}'".format(len(batch), queue))
 
@@ -368,11 +374,11 @@ class CloudCache(object):
 
             attempt = int(match.group("attempt")) + 1
             entries = self.client.lrange(queue, 0, -1)
-            payload = self._prepare_payload_for(entries)
+            payload, compression = self._prepare_payload_for(entries)
 
             # Retry upload
             try:
-                ok, msg = self._upload(payload, splay_factor=remaining_count)  # Remember this call will raise exception upon server error
+                ok, msg = self._upload(payload, compression=compression, splay_factor=remaining_count)  # Remember this call will raise exception upon server error
                 if ok:
                     log.info("Sucessfully uploaded retry queue '{:}' with {:} entries".format(queue, len(entries)))
 
@@ -459,11 +465,11 @@ class NextCloudCache(CloudCache):
 
                 return ret
 
-            payload = self._prepare_payload_for(reversed(batch_reversed))
+            payload, compression = self._prepare_payload_for(reversed(batch_reversed))
 
         # Try upload batch payload
         try:
-            ok, msg = self._upload(payload)  # Remember this call will raise exception upon server error
+            ok, msg = self._upload(payload, compression=compression)  # Remember this call will raise exception upon server error
             if ok:
                 log.info("Uploaded batch with {:} entries from queue '{:}'".format(len(batch_reversed), queue))
 
