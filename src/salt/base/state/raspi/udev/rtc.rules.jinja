@@ -1,5 +1,5 @@
 # ATTENTION: This file is managed by AutoPi and any manual changes may be overwritten during update!
 {%- if salt['pillar.get']('rpi:boot:rtc', default='') == 'pcf85063a' %}
 # Runs RTC retry script when the device module is loaded
-ACTION=="add", SUBSYSTEM=="module", KERNEL=="rtc_pcf85063", RUN+="/usr/bin/rtc-retry run"
+ACTION=="add", SUBSYSTEM=="module", KERNEL=="rtc_pcf85063", RUN+="/bin/sh -c '/usr/bin/rtc-retry run | logger --tag rtc-retry'"
 {%- endif %}
