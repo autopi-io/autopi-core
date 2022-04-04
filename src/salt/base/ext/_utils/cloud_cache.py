@@ -174,6 +174,7 @@ class CloudCache(object):
 
         if "compression" in self.options:
             compression = self.options["compression"]["algorithm"]
+            log.info("Compressing data using {} with level {}".format(compression, self.options["compression"].get("level", 1)))
             if compression == "gzip":
                 start = timer()
 
