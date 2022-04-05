@@ -5,11 +5,13 @@ import salt.utils.event
 import salt.utils.jid
 import time
 import os
+import uuid
 
 from retrying import retry
 from salt.utils.network import host_to_ips as _host_to_ips
 from salt.utils.network import remote_port_tcp as _remote_port_tcp
-
+from ca_utils import CSR, StepClient, CAToken
+from cryptography.hazmat.primitives import serialization
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +32,31 @@ def trigger_event(tag, data={}):
     log.info("Triggering event '{:s}': {:}".format(tag, data))
 
     return __salt__["event.fire"](dict(data), tag)
+
+
+# smallstep needs to be setup and token generated
+def generate_csr(ca_url, ca_fingerprint, token):
+    minion_id = uuid.UUID(__salt__["config.get"]("id"))
+    # Generate CSR, cn = unitid with dashes
+    # return minion_id
+    csr = CSR(str(minion_id), "/etc/salt/pki/minion/minion.pem")
+
+    step_ca = StepClient(ca_url, ca_fingerprint)
+    # ca_token = CAToken(ca_url, ca_fingerprint, csr, "device-access", token)
+    # certificate = step_ca.sign(csr, ca_token)
+
+    # certificate_pem_bytes = certificate.public_bytes(serialization.Encoding.PEM)
+    # cert_data = certificate_pem_bytes.decode('UTF-8')
+
+    # return {
+    #     "certificate": cert_data,
+    #     "minion_id": minion_id
+    # }
+
+    return "OK"
+
+    # Sign certificate
+    # Save certificate
 
 
 def run_job(name, *args, **kwargs):
