@@ -56,10 +56,52 @@ def firmware_flashed(name, part_id, version):
     return ret
 
 
-def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_precision=3):
+def voltage_calibrated(name, url, checks=10, acceptable_difference=0.02, factor_precision=3, volt_readout_samples=10):
     """
     Ensure SPM voltage is calibrated to the expected value provided by the given HTTP endpoint.
     """
+
+    def get_new_volt_readout():
+        """
+        Resets the SPM in order to get a fresh voltage readout.
+        """
+
+        res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout", reset=True)
+        if "error" in res:
+            return res
+
+        for i in range(checks):
+            time.sleep(.2)
+            res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+            if "error" in res:
+                return res
+
+            if res["max"] != None and res["min"] != None:
+                return res
+
+        res["error"] = "Maximum number of retries ({}) exceeded, SPM couldn't get a new voltage reading.".format(checks)
+        return res
+
+    def get_average_volt_readout():
+        """
+        Resets the SPM readings and awaits for a new readout in order to get a fresh value.
+        """
+
+        values = []
+
+        for i in range(volt_readout_samples):
+            res = get_new_volt_readout()
+            if "error" in res:
+                return res
+
+            values.append(res["value"])
+
+        # Calculate average after all samples have been gotten
+        avg = sum(values) / len(values)
+
+        return {
+            "value": round(avg, 2), # Need to round?
+        }
 
     def compare_voltage(expected_V, actual_V):
         """
@@ -89,24 +131,7 @@ def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_
             res["error"] = "Error updating volt_factor: {}".format(res["error"])
             return res
 
-        # Reset volt_readout, expect None on minimum and maximum values
-        res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout", reset=True)
-        if "error" in res:
-            res["error"] = "Error resetting volt_readout: {}".format(res["error"])
-            return res
-
-        # Wait for new, correct value to appear
-        for i in range(checks):
-            time.sleep(.05)
-            res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
-            if "error" in res:
-                res["error"] = "Error calling volt_readout: {}".format(res["error"])
-                return res
-
-            if res["max"] != None and res["min"] != None:
-                return res
-
-        res["error"] = "Maximum number of retries ({}) exceeded, SPM couldn't get a new voltage reading.".format(checks)
+        res = get_new_volt_readout()
         return res
 
     ret = {
@@ -135,7 +160,8 @@ def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_
     expected_V = res["dict"]["value"]
 
     # Get actual voltage level from device
-    res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+    #res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+    res = get_average_volt_readout()
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
@@ -172,7 +198,8 @@ def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_
     }
 
     # Read new actual voltage
-    res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+    #res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+    res = get_average_volt_readout()
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
@@ -214,7 +241,8 @@ def voltage_calibrated(name, url, checks=10, acceptable_difference=0.01, factor_
         expected_V = res["dict"]["value"]
 
         # Get actual voltage
-        res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+        #res = salt_more.call_error_safe(__salt__["spm.query"], "volt_readout")
+        res = get_average_volt_readout()
         if "error" in res:
             ret["result"] = False
             ret["comment"] = "Failed to get actual voltage level: {}".format(res["error"])
