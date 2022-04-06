@@ -560,7 +560,10 @@ class CANConn(object):
         # Setup default flow control
         kwargs.setdefault("flow_control", [self.FLOW_CONTROL_CUSTOM, self.FLOW_CONTROL_OBD])
 
-        msg = can.Message(arbitration_id=id, data=bytearray(data), is_extended_id=is_ext_id)
+        msg = can.Message(
+            arbitration_id=id,
+            data=bytearray(data).ljust(8, "\0") if auto_format else bytearray(data),
+            is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
 
         return res

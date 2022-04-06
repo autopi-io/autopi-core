@@ -620,9 +620,11 @@ class SocketCANInterface(STN11XX):
             if prio != None:
                 header = str(prio) + str(header)
 
-        # CAN automatic formatting
         data = bytearray.fromhex(cmd)
-        if self._runtime_settings.get("can_auto_format", True):
+
+        # CAN automatic formatting
+        can_auto_format = self._runtime_settings.get("can_auto_format", True)
+        if can_auto_format:
             data = bytearray([len(data)]) + data
 
         # CAN extended address
@@ -631,7 +633,7 @@ class SocketCANInterface(STN11XX):
             data = bytearray([int(str(extended_address), 16)]) + data
 
         return can.Message(arbitration_id=int(header, 16),
-            data=data,
+            data=data.ljust(8, "\0") if can_auto_format else data,
             is_extended_id=self._protocol.HEADER_BITS > 11)
 
     def _ensure_auto_filtering(self):
