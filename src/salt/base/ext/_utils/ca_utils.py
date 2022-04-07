@@ -27,7 +27,7 @@ import requests.packages.urllib3 as urllib3
 
 log = logging.getLogger(__name__)
 
-class StepClient:
+class StepClient(object):
     def __init__(self, ca_url, ca_fingerprint):
         self.url = ca_url
         self.fingerprint = ca_fingerprint
@@ -51,15 +51,16 @@ class StepClient:
     # sign() accepts a CSR PEM, and a JWT string.
     # It returns a cryptography.x509.Certificate object.
     # https://cryptography.io/en/latest/x509/reference/#x-509-certificate-object
-    def sign(self, csr, token):
+    def sign(self, csr, raw_token):
+        payload = json.dumps({'csr': csr.csr_pem, 'ott': raw_token})
         r = requests.post(urljoin(self.url, '1.0/sign'),
 						   verify=self.cert_bundle_fn,
-						   data=json.dumps({'csr': csr.csr_pem, 'ott': token.token}))
-        return x509.load_pem_x509_certificate(r.json()['crt'], backend=default_backend())
+						   data=payload)
+        r.raise_for_status()
+        return x509.load_pem_x509_certificate(str(r.json()['crt']), backend=default_backend())
 
     def health(self):
-        with requests.get(urljoin(self.url, 'health'),
-                    verify=self.cert_bundle_fn) as r:
+        with requests.get(urljoin(self.url, 'health'), verify=self.cert_bundle_fn) as r:
             print(r.json())
 
     def _save_tempfile(self, contents):
@@ -76,19 +77,13 @@ class StepClient:
 
     def _compare_fingerprints(self, pem, fingerprint):
         pem_bytes = bytes(str(pem).encode("utf-8"))
-
         cert = x509.load_pem_x509_certificate(pem_bytes, backend=default_backend())
-        # if cert.fingerprint(hashes.SHA256()) != bytes.fromhex(fingerprint):
-        # if cert.fingerprint(hashes.SHA256()) != bytearray.fromhex(fingerprint):
-        log.info('fingerprint: {}'.format(fingerprint))
-        log.info('Cert fingerprint: {}'.format(cert.fingerprint(hashes.SHA256())))
-
-        if cert.fingerprint(hashes.SHA256()) != bytes(str(fingerprint).encode("utf-8")):
+        if cert.fingerprint(hashes.SHA256()) != binascii.a2b_hex(fingerprint):
             raise Exception("WARNING: fingerprints do not match")
         else:
             log.info('Cert verified OK. Yay!')
 
-class CSR:
+class CSR(object):
     def __init__(self, cn, private_key_path, dns_sans = []):
         self.key = self._load_private_key(private_key_path)
         self.cn = unicode(cn)
@@ -125,32 +120,3 @@ class CSR:
             format=serialization.PrivateFormat.TraditionalOpenSSL,
             encryption_algorithm=serialization.BestAvailableEncryption(bytes(passphrase, 'UTF-8')),
         )
-
-class CAToken:
-    def __init__(self, ca_url, ca_fingerprint, csr, provisioner_name, jwk):
-        self.ca_url = ca_url
-        self.ca_fingerprint = ca_fingerprint
-        self.provisioner_name = provisioner_name
-        self.csr = csr
-
-        jwk_privkey = json.loads(jwk)
-        key = ECAlgorithm(ECAlgorithm.SHA256).from_jwk(jwk_privkey)
-        self.token = jwt.encode(
-            self.jwt_body(),
-            key=key,
-			headers={ "kid": jwk_privkey['kid'] },
-            algorithm="ES256"
-        )
-
-    def jwt_body(self):
-        return {
-            "aud": urljoin(self.ca_url, '/1.0/sign'),
-            "sha": self.ca_fingerprint,
-            "exp": datetime.now(tz=pytz.utc) + timedelta(minutes=5),
-            "iat": datetime.now(tz=pytz.utc),
-            "nbf": datetime.now(tz=pytz.utc),
-            "jti": str(uuid.uuid4()),
-            "iss": self.provisioner_name,
-            "sans": self.csr.dns_sans,
-            "sub": self.csr.cn,
-        }
