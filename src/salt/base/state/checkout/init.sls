@@ -59,12 +59,12 @@ states-locally-cached:
 "dpkg-reconfigure openssh-server":
   cmd.run
 
-{%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
-# Re-calibrate STN voltage just to be sure
-stn-voltage-recalibrated:
-  stn.voltage_calibrated:
+{%- if salt['config.get']('spm.version', 2.2) >= 3.0 %}
+# Calibrate SPM voltage
+spm-voltage-recalibrated:
+  spm.voltage_calibrated:
     - url: {{ salt['pillar.get']('reference_voltage_url') }}
-    - samples: 20
+    - checks: 10
     - retry:
         attempts: 10
         interval: 1
