@@ -388,6 +388,7 @@ class SocketCANInterface(STN11XX):
                 replies=replies,
                 timeout=timeout,
                 flow_control=[self._port.FLOW_CONTROL_CUSTOM, self._port.FLOW_CONTROL_OBD],
+                zero_padding=(8 if self._runtime_settings.get("can_auto_format", True) else 0),
                 strict=False,
                 **kwargs)
             if res:

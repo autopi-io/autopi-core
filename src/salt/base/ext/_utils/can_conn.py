@@ -483,7 +483,7 @@ class CANConn(object):
 
             self._bus.send(msg, **kwargs)
 
-    def send_flow_control_reply_for(self, message, accept_frames=0x00, separation_time=0x00, extended_address=None, id_resolvers=[]):
+    def send_flow_control_reply_for(self, message, accept_frames=0x00, separation_time=0x00, extended_address=None, zero_padding=None, id_resolvers=[]):
         if message.data[0] & 0xF0 != FRAME_TYPE_FF:
             raise ValueError("CAN message must be of frame type '{:}'".format(FRAME_TYPES[FRAME_TYPE_FF]))
 
@@ -498,7 +498,7 @@ class CANConn(object):
                 msg = can.Message(
                     is_extended_id=message.is_extended_id,
                     arbitration_id=arb_id,
-                    data=bytearray(data))
+                    data=bytearray(data).ljust(zero_padding, "\0") if zero_padding else bytearray(data))
 
                 self.send(msg)
 
@@ -546,6 +546,7 @@ class CANConn(object):
         data = [mode, pid]
         if auto_format:
             data = [len(data)] + data
+            kwargs.setdefault("zero_padding", 8)
 
         if "extended_address" in kwargs:
             data = [kwargs["extended_address"]] + data
@@ -562,7 +563,7 @@ class CANConn(object):
 
         msg = can.Message(
             arbitration_id=id,
-            data=bytearray(data).ljust(8, "\0") if auto_format else bytearray(data),
+            data=bytearray(data).ljust(kwargs["zero_padding"], "\0") if "zero_padding" in kwargs else bytearray(data),
             is_extended_id=is_ext_id)
         res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
 
