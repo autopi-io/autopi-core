@@ -35,7 +35,7 @@ def trigger_event(tag, data={}):
     return __salt__["event.fire"](dict(data), tag)
 
 
-def sign_certificate(ca_url, ca_fingerprint, certificate_path, token, confirm=True):
+def sign_certificate(ca_url, ca_fingerprint, certificate_path, token, confirm=False):
     minion_id = uuid.UUID(__salt__["config.get"]("id"))
 
     # We could unpack the token and check if it is expired.
