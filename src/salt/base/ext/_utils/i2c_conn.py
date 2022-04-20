@@ -121,8 +121,8 @@ class I2CConn(object):
     def write(self, register, byte):
         self._bus.write_byte_data(self._address, register, byte)
 
-        if log.isEnabledFor(logging.TRACE):
-            log.trace("Wrote register {:d}: {:08b}".format(register, byte))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Wrote register {:d}: {:08b}".format(register, byte))
 
         if self.on_written:
             self.on_written(register, byte)
@@ -131,9 +131,9 @@ class I2CConn(object):
     def write_block(self, register, block):
         self._bus.write_i2c_block_data(self._address, register, block)
 
-        if log.isEnabledFor(logging.TRACE):
+        if log.isEnabledFor(logging.DEBUG):
             for idx, byt in enumerate(block):
-                log.trace("Wrote byte {:d}/{:d} of block to register {:d}: {:08b}".format(idx, len(block), register, byt))
+                log.debug("Wrote byte {:d}/{:d} of block to register {:d}: {:08b}".format(idx, len(block), register, byt))
 
         if self.on_written:
             self.on_written(register, block)
@@ -142,8 +142,8 @@ class I2CConn(object):
     def read_write(self, register, mask, value):
         byte = self.read_byte.undecorated(self, register)
 
-        if log.isEnabledFor(logging.TRACE):
-            log.trace("Updating byte {:08b} using mask {:d} and value {:d}".format(byte, mask, value))
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Updating byte {:08b} using mask {:d} and value {:d}".format(byte, mask, value))
 
         byte = self._update_bits(byte, mask, value)
 
