@@ -449,6 +449,8 @@ class NextCloudCache(CloudCache):
             "count": 0
         }
 
+        compression = None
+
         # First check for cached batch
         batch_reversed, payload = self.upload_cache.pop(queue, (None, None))
         if batch_reversed:
