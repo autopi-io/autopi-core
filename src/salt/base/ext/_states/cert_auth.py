@@ -19,7 +19,7 @@ def client_certificate_signed(name, ca_url, ca_fingerprint, token, force):
 
     cert_exists = os.path.exists(name)
     res = __salt__["x509.expired"](name)
-    expired = res['expired']
+    expired = res.get('expired', False)
 
     # Check if cert exists, if already exists, only create again if force=true
     # We could do extra checks here to verify certificate matches private key and is not expired etc.
