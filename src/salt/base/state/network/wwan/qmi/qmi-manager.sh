@@ -178,31 +178,24 @@ up ()
         [ $VERBOSE == true ] && echo "[INFO] QMI device is already in online operating mode"
     fi
 
-    # Check for network (temprorarily commented out by NV, replaced by new workflow below)
-    #retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
-    #[ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
-    #[ $VERBOSE == true ] && echo "[INFO] Mobile network present"
-
+    # Check for network
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
-    if [ $? -gt 0 ]; then
-        echoerr "[ERROR] No mobile network found"
-        register_sim
-        return $ERROR
-    fi
+    [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
+    [ $VERBOSE == true ] && echo "[INFO] Mobile network present"
 
-    # Start QMI network connection (temporarily commented out by NV, replaced by new workflow below)
-    #STDERR=$(qmi-network $DEVICE start 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
-    #[ $? -gt 0 ] && echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason") && return $ERROR
-    #[ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"
+    # Get operator name
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-operator-name | grep -q \"Successfully got operator name data\""
+    [ $? -gt 0 ] && echoerr "[ERROR] Couldn't get operator" && return $ERROR
+    [ $VERBOSE == true ] && echo "[INFO] Successfully got operator name data"
+
+    # Check if SIM is registered
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-serving-system | grep -q \"Registration state: 'registered'\""
+    [ $? -gt 0 ] && echoerr "[ERROR] SIM not registered" && return $ERROR
+    [ $VERBOSE == true ] && echo "[INFO] SIM is registered"
 
     # Start QMI network connection
     STDERR=$(qmi-network $DEVICE start 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
-    if [ $? -gt 0 ]; then
-        echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason")
-        register_sim
-        return $ERROR # finally return
-    fi
-
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason") && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"
 
     # Ensure uDHCP client not already running
@@ -219,44 +212,6 @@ up ()
     [ $VERBOSE == true ] && echo "[INFO] Started uDHCP client for interface '$INTERFACE'"
 
     return $OK
-}
-
-register_sim ()
-{
-    echo "Starting registration procedure..."
-
-    NET_REG_STATUS=$(autopi ec2x.network_registration_status)
-    echo "ec2x.network_registration_status returned $NET_REG_STATUS"
-
-    echo "$NET_REG_STATUS" | egrep -q "not-registered-not-searching|not-registered-searching|registration-denied"
-    if [ $? -eq 0 ]; then # we don't want to be seeint those values, if we do, try to connect manually
-        echo "Modem not registered, getting current operator..."
-
-        OPERATOR=$(autopi ec2x.operator_selection)
-        echo "ec2x.operator_selection returned $OPERATOR"
-
-        echo "$OPERATOR" | grep -q "operator: null"
-        if [ $? -eq 0 ]; then
-            echo "No operator found, searching for available operators..."
-
-            AVAILABLE_OPERATORS=$(autopi ec2x.operator_selection search=True)
-
-            FIRST_OPERATOR_INFO=$(echo "$AVAILABLE_OPERATORS" | sed -n -e '/long_op/p' -e '/access_tech/p' | sed -n -e '1,2p' | awk -F": " '{print $2}')
-
-            ACCESS_TECH=$(echo "$FIRST_OPERATOR_INFO" | sed -n '1p')
-            OPERATOR_NAME=$(echo "$FIRST_OPERATOR_INFO" | sed -n '2p')
-
-            echo "Found operators. Forcing modem to connect to $OPERATOR_NAME using $ACCESS_TECH..."
-
-            MY_OUT=$(autopi ec2x.operator_selection mode="manual-automatic" op_format="long" operator="$OPERATOR_NAME" access_tech="$ACCESS_TECH")
-            echo "Received my_out $MY_OUT (this is probably going to be null...)"
-        else
-            echo "Operator found, but still unable to connect. Resetting the modem..."
-
-            RESET_OUT=$(autopi ec2x.modem_functionality value=full reset=True)
-            echo "Reset request sent, received response $RESET_OUT"
-        fi
-    fi
 }
 
 down ()
