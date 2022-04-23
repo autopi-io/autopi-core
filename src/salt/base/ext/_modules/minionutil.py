@@ -35,19 +35,19 @@ def trigger_event(tag, data={}):
     return __salt__["event.fire"](dict(data), tag)
 
 
-def sign_certificate(ca_url, ca_fingerprint, certificate_path, token, confirm=False):
+def sign_certificate(ca_url, ca_fingerprint, certificate_path, token, key_path="/etc/salt/pki/minion/minion.pem", confirm=False):
     minion_id = uuid.UUID(__salt__["config.get"]("id"))
 
     if not token:
         raise salt.exceptions.CommandExecutionError(
-            "token must be provided")
+            "Token must be provided")
 
     if not confirm:
         raise salt.exceptions.CommandExecutionError(
             "This command will create and sign a new client certificate - add parameter 'confirm=true' to continue anyway")
 
     # Generate CSR, cn = unitid with dashes
-    csr = CSR(str(minion_id), "/etc/salt/pki/minion/minion.pem")
+    csr = CSR(str(minion_id), key_path)
 
     # Sign certificate
     step_ca = StepClient(ca_url, ca_fingerprint)

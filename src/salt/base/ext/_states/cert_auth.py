@@ -3,9 +3,11 @@ import salt_more
 import time
 import os
 
+
 log = logging.getLogger(__name__)
 
-def client_certificate_signed(name, ca_url, ca_fingerprint, token, force):
+
+def client_certificate_signed(name, ca_url, ca_fingerprint, token, force, key_path="/etc/salt/pki/minion/minion.pem"):
     """
     Ensure that client certificate is created from private minion key and signed from root CA server.
     """
@@ -25,10 +27,15 @@ def client_certificate_signed(name, ca_url, ca_fingerprint, token, force):
     # We could do extra checks here to verify certificate matches private key and is not expired etc.
     if (cert_exists and not expired) and not force:
         ret["result"] = True
-        ret["comment"] = "Cert already exists, use force=true to overwrite"
+        ret["comment"] = "Certificate already exists, use force=true to overwrite"
         return ret
 
-    res = salt_more.call_error_safe(__salt__["minionutil.sign_certificate"], ca_url, ca_fingerprint, name, token, True)
+    if __opts__["test"]:
+        ret["result"] = None
+        ret["comment"] = "Certificate will be generated and signed"
+        return ret
+
+    res = salt_more.call_error_safe(__salt__["minionutil.sign_certificate"], ca_url, ca_fingerprint, name, token, key_path=key_path, confirm=True)
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to generate and sign certificate: {:}".format(res["error"])
