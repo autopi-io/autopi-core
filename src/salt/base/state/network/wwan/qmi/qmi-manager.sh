@@ -183,11 +183,6 @@ up ()
     [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Mobile network present"
 
-    # Get operator name
-    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-operator-name | grep -q \"Successfully got operator name data\""
-    [ $? -gt 0 ] && echoerr "[ERROR] Couldn't get operator" && return $ERROR
-    [ $VERBOSE == true ] && echo "[INFO] Successfully got operator name data"
-
     # Check if SIM is registered
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-serving-system | grep -q \"Registration state: 'registered'\""
     [ $? -gt 0 ] && echoerr "[ERROR] SIM not registered" && return $ERROR
