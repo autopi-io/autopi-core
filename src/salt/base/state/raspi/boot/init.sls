@@ -80,8 +80,12 @@ bluetooth-configured:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=pi3-(?:disable|miniuart)-bt$"
+    {%- if salt['pillar.get']('rpi:boot:bt', default='disable') == 'enable' %}
+    - repl: ""
+    {%- else %}
     - repl: "dtoverlay=pi3-{{ salt['pillar.get']('rpi:boot:bt', default='disable') }}-bt"
     - append_if_not_found: true
+    {%- endif %}
 
 core-frequency-configured:
   file.replace:
@@ -95,7 +99,7 @@ core-frequency-configured:
     {%- endif %}
 
 hciuart:
-  {%- if salt['pillar.get']('rpi:boot:bt', default='disable') == 'miniuart' %}
+  {%- if salt['pillar.get']('rpi:boot:bt', default='disable') in ['enable', 'miniuart'] %}
   service.enabled:
     - unmask: true
   {%- else %}
