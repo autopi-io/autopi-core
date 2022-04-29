@@ -50,7 +50,7 @@ def _get_options(ret=None):
         "tls": {},
         "proxy": {},
         "ws": {},
-        "topic": ""
+        "topic": "",
         "qos": 0,
         "retain": False
     }
