@@ -49,7 +49,10 @@ def _get_options(ret=None):
         "password": None,
         "tls": {},
         "proxy": {},
-        "ws": {}
+        "ws": {},
+        "topic": ""
+        "qos": 0,
+        "retain": False
     }
 
     attrs = {
@@ -65,7 +68,10 @@ def _get_options(ret=None):
         "password": "password",
         "tls": "tls",
         "proxy": "proxy",
-        "ws": "ws"
+        "ws": "ws",
+        "topic": "topic",
+        "qos": "qos",
+        "retain": "retain"
     }
 
     options = get_returner_options(
@@ -98,6 +104,10 @@ def _get_client_for(ret):
             clean_session=options["clean_session"],
             protocol=getattr(mqtt, options["protocol"], mqtt.MQTTv311),  # Resolve MQTT constant
             transport=options["transport"])
+        client.setattr(client, "metadata", {})
+
+        # Store options in metadata
+        client.metadata["options"] = options
 
         if options["username"]:
             client.username_pw_set(options["username"], password=options["password"])
@@ -221,12 +231,19 @@ def returner_data(data, *args, **kwargs):
 
         return
 
-    namespace = list(args)
+    client = _get_client_for(kwargs)
+    options = client.metadata["options"]
+
+    if options["topic"]:
+        namespace = [options["topic"]] + list(args)[1:]
+    else:
+        namespace = list(args)
+
     if isinstance(data, dict):
         payload = data
 
         # Append type to namespace if present and not already added
-        if "_type" in data and not data["_type"] in namespace:
+        if "_type" in data and not options["topic"] and not data["_type"] in namespace:
             namespace.append(data["_type"])
     elif isinstance(data, (list, set, tuple)):
         payload = {
@@ -239,10 +256,8 @@ def returner_data(data, *args, **kwargs):
             "value": data
         }
 
-    client = _get_client_for(kwargs)
-
     # Publish message
     topic = "/".join(namespace)
-    res = client.publish(topic, json.dumps(payload, separators=(",", ":")))
+    res = client.publish(topic, json.dumps(payload, separators=(",", ":")), qos=options["qos"], retain=options["retain"])
     if res.rc != mqtt.MQTT_ERR_SUCCESS:
         log.warn("Publish of message with topic '{:}' failed: {:}".format(topic, mqtt.error_string(res.rc)))
