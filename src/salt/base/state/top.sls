@@ -32,5 +32,5 @@ base:
     - power.spm.install
     - power.config
     {%- if salt['pillar.get']('ca:client_certificate_token', None) %}
-    - minion.client_certificate
+    - minion.certs
     {%- endif %}
