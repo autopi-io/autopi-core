@@ -1,4 +1,19 @@
 
+{%- if salt['pillar.get']('minion_ext:root_cert_bundle', []) %}
+minion-root-cert-bundle-created:
+  file.managed:
+    - name: /opt/autopi/root_cert_bundle.crt
+    - contents: |
+        {%- for cert in salt['pillar.get']('minion_ext:root_cert_bundle', []) %}
+        -----BEGIN CERTIFICATE-----
+        {{ cert|replace(" ", "\n        ") }}
+        -----END CERTIFICATE-----
+        {%- endfor %}
+    - user: root
+    - group: root
+    - mode: 644
+{%- endif %}
+
 minion-client-certificate-created:
   cert_auth.client_certificate_signed:
     - name: /opt/autopi/client.crt
