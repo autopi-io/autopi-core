@@ -104,7 +104,7 @@ def _get_client_for(ret):
             clean_session=options["clean_session"],
             protocol=getattr(mqtt, options["protocol"], mqtt.MQTTv311),  # Resolve MQTT constant
             transport=options["transport"])
-        client.setattr(client, "metadata", {})
+        setattr(client, "metadata", {})
 
         # Store options in metadata
         client.metadata["options"] = options
