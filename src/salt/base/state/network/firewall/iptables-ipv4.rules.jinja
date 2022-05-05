@@ -29,6 +29,7 @@ COMMIT
 #-A INPUT -m limit --limit 10/min -j LOG --log-prefix "iptables INPUT denied: " --log-level 7
 -A INPUT -s 192.168.4.0/24 -i uap0 -j REJECT --reject-with icmp-host-prohibited
 -A INPUT -j DROP
+-A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
 -A FORWARD -d 192.168.4.0/24 -i uap0 -j DROP
 -A FORWARD -s 192.168.4.0/24 -i uap0 -j ACCEPT
 -A FORWARD -d 192.168.4.0/24 -i wlan0 -j ACCEPT
