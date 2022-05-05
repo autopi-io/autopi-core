@@ -14,6 +14,7 @@ minion-root-cert-bundle-created:
     - mode: 644
 {%- endif %}
 
+{%- if salt['pillar.get']('ca:client_certificate_token', None) %}
 minion-client-certificate-created:
   cert_auth.client_certificate_signed:
     - name: /opt/autopi/client.crt
@@ -21,6 +22,7 @@ minion-client-certificate-created:
     - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
     - token: {{ salt['pillar.get']('ca:client_certificate_token', None) }}
     - force: false
+{%- endif %}
 
 minion-private-key-copied:
   file.managed:

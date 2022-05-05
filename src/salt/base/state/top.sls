@@ -31,6 +31,4 @@ base:
     - power.sleep_timer.config
     - power.spm.install
     - power.config
-    {%- if salt['pillar.get']('ca:client_certificate_token', None) %}
     - minion.certs
-    {%- endif %}
