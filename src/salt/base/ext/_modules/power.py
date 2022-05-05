@@ -42,6 +42,7 @@ def status():
     ret["spm"]["version"] = res["value"]
 
     if __opts__.get("spm.version", 2.0) < 3.0:
+        ret["stn"] = {}
 
         # STN config
         res = __salt__["stn.power_config"]()
