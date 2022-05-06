@@ -119,7 +119,7 @@ status ()
 
     # Perform ping test
     ping -q -I $INTERFACE -c3 $PING_HOST &>/dev/null
-    [ $? -gt 0 ] && echoerr "[ERROR] Unable to ping '$PING_HOST' using interface '$INTERFACE'" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] Unable to ping '$PING_HOST' using interface '$INTERFACE'" && gather_info && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Able to ping '$PING_HOST' with interface '$INTERFACE'"
 
     # Check if uDHCP client is running
@@ -128,6 +128,26 @@ status ()
     [ $VERBOSE == true ] && echo "[INFO] uDHCP client running for interface '$INTERFACE'"
 
     return $OK
+}
+
+gather_info()
+{
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-signal-strength
+    sleep .2
+
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-system-info
+    sleep .2
+
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network
+    sleep .2
+
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-serving-system
+    sleep .2
+
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-operator-name
+
+    autopi ec2x.query "AT+COPS?"
+    autopi ec2x.query "AT+CREG?"
 }
 
 up ()
@@ -151,6 +171,7 @@ up ()
 
     # Look for SIM config file
     if [ -e $SIM_CONF ]; then
+        echo "Going into SIM configuration flow"
 
         # Load SIM config file
         source $SIM_CONF
@@ -167,6 +188,8 @@ up ()
     # Ensure QMI device is in online operating mode
     qmicli --device-open-$MODE --device $DEVICE --dms-get-operating-mode | grep -q "Mode: 'online'"
     if [ $? -gt 0 ]; then
+        echo "Going to put device in operating mode online..."
+
         qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
         [ $? -gt 0 ] && echoerr "[ERROR] Failed to put QMI device into online operating mode" && return $ERROR
         [ $VERBOSE == true ] && echo "[INFO] QMI device is put into online operating mode"
@@ -180,17 +203,17 @@ up ()
 
     # Check for network
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network | grep -q \"Home network:\""
-    [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] No mobile network found" && gather_info && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Mobile network present"
 
     # Check if SIM is registered
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-serving-system | grep -q \"Registration state: 'registered'\""
-    [ $? -gt 0 ] && echoerr "[ERROR] SIM not registered" && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] SIM not registered" && gather_info && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] SIM is registered"
 
     # Start QMI network connection
     STDERR=$(qmi-network $DEVICE start 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
-    [ $? -gt 0 ] && echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason") && return $ERROR
+    [ $? -gt 0 ] && echoerr "[ERROR] Failed to start QMI network connection -" $(printf "$STDERR" | grep "^error:\|^call end reason") && gather_info && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Started QMI network connection"
 
     # Ensure uDHCP client not already running
@@ -226,6 +249,7 @@ down ()
 
     # Put QMI device into low power operating mode if enabled
     if [ $POWER_SAVE == true ]; then
+        echo "Entering power save mode"
 
         # Will do IMSI detach and RF off, and if the module resets the setting is re-applied (i.e. it doesn't go to online automatically)
         qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=persistent-low-power
@@ -278,6 +302,9 @@ unlock_sim ()
 
 run ()
 {
+    # Full reset of the modem here?
+
+    local has_been_up=false
     local interval=0
     local retry=0
 
@@ -299,6 +326,7 @@ run ()
         if [ $retcode -eq $OK ]; then
             [ $VERBOSE == true ] && echo "[INFO] Connection is already online"
 
+            has_been_up=true
             online_callback
 
             retry=0
@@ -317,12 +345,18 @@ run ()
             retry=$((retry + 1))
             interval=$RUN_INTERVAL_OFFLINE
 
-            # Ensure connection is down
-            down
+            if [ $has_been_up == true ]; then
+                echo "Bringing connection down"
+                # Ensure connection is down
+                has_been_up=false
+                down
+            fi
 
             # Try to bring up connection
             STDERR=$(up "run" 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
             if [ $? -eq $OK ]; then
+                echo "Connection up, will save it to variable"
+                has_been_up=true
 
                 # Check status to confirm connection is actually up
                 STDERR=$(status 3>&1 1>&2 2>&3 | tee >(cat 1>&2); exit ${PIPESTATUS[0]})
