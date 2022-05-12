@@ -838,6 +838,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
         Supported commands:
             - context [key]... [value=<value>]
+            - context [key]... [default=<value_if_not_exists>]
             - reactor list|show <name>
         """
 
@@ -856,7 +857,10 @@ class EventDrivenMessageProcessor(MessageProcessor):
                         else:
                             res = res.setdefault(key, {})
                     else:
-                        res = res[key]
+                        if "default" not in kwargs:
+                            res = res[key]
+                        else:
+                            res = res.get(key, kwargs["default"])
 
             res = ensure_primitive(res)
             if isinstance(res, dict):
