@@ -72,9 +72,4 @@ def scan(hci=0, sensitivity=-128, timeout=4, verbose=True, sort_by='rssi'):
     else:
         sorted_devices = devices
 
-    ret = {
-        "count": len(sorted_devices),
-        "devices": sorted_devices
-    }
-
-    return ret
+    return sorted_devices
