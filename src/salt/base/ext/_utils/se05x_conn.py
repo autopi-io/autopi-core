@@ -1,6 +1,3 @@
-unsupported_exc_type = NotImplementedError
-unsupported_exc_text = "This method is not supported by this device connection"
-
 import func_timeout
 import logging
 import binascii
@@ -20,42 +17,11 @@ from sss.sign import Sign
 TIME_OUT = 60  # Time out in seconds
 
 log = logging.getLogger(__name__)
-
-
 class CryptoKey(object):
     def __init__(self):
         None
 
-# Probably will be removed :(
-class CryptoConnection(object):
-    def __init__(self, *args, **kwargs):
-        None
-
-    def get_name(self):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def get_serial(self):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def provision(self):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def is_provisioned(self):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def sign_string(self, data, key):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def create_key(self, key_type, curve=None): 
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def get_pub_key_pem(self, key):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-    def __enter__(self):
-        raise unsupported_exc_type(unsupported_exc_text)
-
-class Se05xCryptoConnection(CryptoConnection):
+class Se05xCryptoConnection():
 
     def __init__(self, *args, **kwargs):
         super(Se05xCryptoConnection, self).__init__(args, kwargs)
@@ -98,13 +64,13 @@ class Se05xCryptoConnection(CryptoConnection):
         func_timeout.func_timeout(TIME_OUT, self.sss_context.session.session_open, None)
 
     def close(self):
-        return self.session.session_close()
+        return self.sss_context.session.session_close()
 
     def __enter__(self):
         self.open()
         return self
 
-    def __exit__(self):
+    def __exit__(self, *args):
         return self.close()
 
     def get_serial(self):
@@ -116,21 +82,32 @@ class Se05xCryptoConnection(CryptoConnection):
         outformat = ""
         hashalgo = "SHA256"
 
+        log.info("Signing {} with key {}".format(data, key))
+
         keyid = int(key.keyid, 16)
         sign_obj = Sign(self.sss_context.session)
         signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid, data, outformat, hashalgo))
 
-        return signature.decode("UTF-8")
+        if not isinstance(signature, str):
+            raise Exception("do_signature_and_return returned a non-string value: {}".format(signature))
+
+        log.info(signature)
+
+        return signature
+
+    def get_key_object(self, keyid):
+        keyObj = CryptoKey()
+        keyObj.keyid = keyid
+        return keyObj
 
     def generate_key(self, keyid, key_type="ecc", ecc_curve="Secp256k1"):
-    
         supported_types = ["ecc"]
         if not key_type in supported_types:
-            raise unsupported_exc_type("This key type is not supported. Supported: {}".format(supported_types))
+            raise Exception("This key type is not supported. Supported: {}".format(supported_types))
 
         supported_curves = ["Secp256k1"]
         if key_type == "ecc" and not ecc_curve in supported_curves:
-            raise unsupported_exc_type("This curve is not supported. Supported: {}".format(supported_curves))
+            raise Exception("This curve is not supported. Supported: {}".format(supported_curves))
 
         keyid_int = int(keyid, 16)
         policy = None
@@ -146,8 +123,7 @@ class Se05xCryptoConnection(CryptoConnection):
         """
         Retrieve a previously generated ECC key
         """
-        keyid = key.keyid # "12312312"
-        keyid = int(keyid, 16)
+        keyid = int(key.keyid, 16)
 
         get_object = Get(self.sss_context.session)
         func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid, None, "PEM"))        
@@ -163,27 +139,7 @@ class Se05xCryptoConnection(CryptoConnection):
                 keylist[i] = "0" + keylist[i]
             key_hex_str += keylist[i]
         key_der_str = binascii.unhexlify(key_hex_str)
+        log.info(key_der_str)
         key_crypto = load_der_public_key(key_der_str, default_backend())
         key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
         return key_pem.decode("UTF-8")
-
-
-# data = "Alice"
-# key = CryptoKey()
-# key.keyid = "12312312"
-
-
-# con = Se05xCryptoConnection()
-# con.open()
-# serial = con.get_serial()
-# key = con.generate_key("12312312")
-# signature = con.sign_string(data, key)
-# public_key = con.get_public_key(key)
-
-# print("On device {}:".format(serial))
-# print("{} \n + \n{} = \n{}".format(data, public_key, signature))
-
-
-
-# print(atcCon.get_serial())
-# print(atcCon.get_name())
