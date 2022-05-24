@@ -308,7 +308,7 @@ run ()
 {
     # Is SIM present
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
-    [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $OK
+    [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] SIM card is present"
 
     # Is network selection preference set to automatic?
