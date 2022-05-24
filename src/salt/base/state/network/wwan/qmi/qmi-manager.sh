@@ -133,21 +133,25 @@ status ()
 gather_info()
 {
     qmicli --device-open-$MODE --device $DEVICE --nas-get-signal-strength
-    sleep .2
+    sleep .5
 
-    qmicli --device-open-$MODE --device $DEVICE --nas-get-system-info
-    sleep .2
+    # qmicli --device-open-$MODE --device $DEVICE --nas-get-system-info
+    # sleep .5
 
-    qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network
-    sleep .2
+    # qmicli --device-open-$MODE --device $DEVICE --nas-get-home-network
+    # sleep .5
 
     qmicli --device-open-$MODE --device $DEVICE --nas-get-serving-system
-    sleep .2
+    sleep .5
 
-    qmicli --device-open-$MODE --device $DEVICE --nas-get-operator-name
+    # qmicli --device-open-$MODE --device $DEVICE --nas-get-operator-name
+    # sleep .5
+
+    qmicli --device-open-$MODE --device $DEVICE --nas-get-system-selection-preference
+    sleep .5
 
     autopi ec2x.query "AT+COPS?"
-    autopi ec2x.query "AT+CREG?"
+    autopi ec2x.query "AT+CREG?;+CEREG?;+CGREG?"
 }
 
 up ()
@@ -302,7 +306,27 @@ unlock_sim ()
 
 run ()
 {
-    # Full reset of the modem here?
+    # Is SIM present
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
+    [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $OK
+    [ $VERBOSE == true ] && echo "[INFO] SIM card is present"
+
+    # Is network selection preference set to automatic?
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-system-selection-preference | grep -q \"Network selection preference: 'automatic'\""
+    if [ $? -gt 0 ]; then
+        echoerr "[ERROR] Network selection preference is not 'automatic', going to manually set that"
+        echo "[INFO] Network selection preference is not 'automatic', going to manually set that"
+
+        # Set it to the correct value before beginning connection procedure
+        autopi ec2x.query "AT+COPS=0"
+        [ $? -gt 0 ] && echoerr "[ERROR] Failed to set operator selection to automatic" && gather_info && return $ERROR
+        [ $VERBOSE == true ] && echo "[INFO] Successfully set operator selection to automatic"
+
+        # Remove me later
+        echo "[INFO] Successfully set operator selection to automatic"
+    else
+        echo "[INFO] Network selection preference is already set to 'automatic'"
+    fi
 
     local has_been_up=false
     local interval=0
