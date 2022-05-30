@@ -6,7 +6,7 @@ from messaging import EventDrivenMessageClient, msg_pack as _msg_pack
 from retrying import retry
 
 
-__virtualname__ = "cryptoauth"
+__virtualname__ = "crypto"
 
 log = logging.getLogger(__name__)
 

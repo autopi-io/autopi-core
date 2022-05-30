@@ -24,8 +24,6 @@ class CryptoKey(object):
 class Se05xCryptoConnection():
 
     def __init__(self, *args, **kwargs):
-        super(Se05xCryptoConnection, self).__init__(args, kwargs)
-
         # Create and configure the context used by the SSS python wrapper
         self.sss_context = Context()
         self.sss_context.verbose = False
