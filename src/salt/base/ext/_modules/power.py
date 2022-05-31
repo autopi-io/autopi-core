@@ -224,16 +224,19 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
     if __opts__.get("spm.version", 2.0) >= 3.0:
         if delay >= 60:
             __salt__["system.shutdown"](int(delay / 60))
+
+            # Broadcast reason to all terminals
+            __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
         else:
             delay = max(delay, 1)
+
+            # Broadcast shutdown to all terminals
+            __salt__["cmd.run"]("wall -n 'Shutdown in {:} second(s)\nReason: {:}'".format(delay, reason))
 
             log.warning("Sleeping for {:} second(s) before performing immediate shutdown".format(delay))
             time.sleep(delay)
 
             __salt__["system.shutdown"]()
-
-        # Broadcast reason to all terminals
-        __salt__["cmd.run"]("wall -n 'Reason: {:}'".format(reason))
     
     return ret
 
