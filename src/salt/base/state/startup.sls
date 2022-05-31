@@ -24,7 +24,7 @@ startup-module-{{loop.index}}-executed:
 auto-update-release-during-startup:
   module.run:
     - name: minionutil.update_release
-    {%- if salt["pillar.get"]("update_release:automatic", default=False) != "startup" %}
+    {%- if salt["pillar.get"]("update_release:automatic", default=False) != "startup" and salt["pillar.get"]("update_release:demand", default=False) != "startup" %}
     # Always retry update of release if failed or pending
     - only_retry: true
     {%- endif %}
