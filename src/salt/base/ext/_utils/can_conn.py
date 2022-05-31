@@ -389,6 +389,9 @@ class CANConn(object):
 
         return False
 
+    def _j1939_autodetect(self, channel=None, try_bitrates=[250000, 500000], receive_timeout=0.2):
+        raise NotImplementedError("Not yet supported")
+
     def interface_state(self, channel=None):
         channel = channel or self.channel
         state = __salt__["socketcan.show"](interface=channel).get("operstate", "").lower()
