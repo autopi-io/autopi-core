@@ -769,7 +769,16 @@ def dict_to_msg(src):
     return can.Message(**kwargs)
 
 def msg_to_str(src, separator="#"):
-    return "{:02x}{:}{:}".format(
+    """
+    Formats a raw python-can Message object to a string with a separator between the header and data sections.
+    """
+
+    format_string = "{:02x}{:}{:}"
+
+    if msg.is_extended_id:
+        format_string = "{:08x}{:}{:}"
+
+    return format_string.format(
         src.arbitration_id,
         separator * (2 if src.is_fd else 1),
         binascii.hexlify(src.data))

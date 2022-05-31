@@ -645,12 +645,29 @@ class SocketCANInterface(STN11XX):
 
 
 def can_message_formatter(msg):
-    return "{:02x}{:}".format(msg.arbitration_id, binascii.hexlify(msg.data))
+    """
+    Formats a raw python-can Message object to a string.
+    """
+
+    format_string = "{:02x}{:}"
+    if msg.is_extended_id:
+        format_string = "{:08x}{:}"
+
+    return format_string.format(msg.arbitration_id, binascii.hexlify(msg.data))
 
 
 def can_message_with_spaces_formatter(msg):
+    """
+    Formats a raw python-can Message object to a string with spaces between the header and every byte of data.
+    """
+
     data = binascii.hexlify(msg.data)
-    return "{:02x} {:}".format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
+    format_string = "{:02x} {:}"
+
+    if msg.is_extended_id:
+        format_string = "{:08x} {:}"
+
+    return format_string.format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
 
 
 class SocketCAN_OBD(OBD):
