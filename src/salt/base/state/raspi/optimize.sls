@@ -47,15 +47,17 @@ ipv6-rules-deleted:
     - name: /etc/iptables/rules.v6  # Must be deleted to prevent boot error when ipv6 is diabled
 
 apt-daily-disabled:
-  service.disabled:
+  service.dead:
     - name: apt-daily.timer
+    - enable: false
 apt-daily-masked:
   service.masked:
     - name: apt-daily.timer
 
 apt-daily-upgrade-disabled:
-  service.disabled:
+  service.dead:
     - name: apt-daily-upgrade.timer
+    - enable: false
 apt-daily-upgrade-masked:
   service.masked:
     - name: apt-daily-upgrade.timer
