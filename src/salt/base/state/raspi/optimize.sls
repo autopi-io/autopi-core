@@ -45,3 +45,17 @@ ipv6-driver-blacklisted:
 ipv6-rules-deleted:
   file.absent:
     - name: /etc/iptables/rules.v6  # Must be deleted to prevent boot error when ipv6 is diabled
+
+apt-daily-disabled:
+  service.disabled:
+    - name: apt-daily.timer
+apt-daily-masked:
+  service.masked:
+    - name: apt-daily.timer
+
+apt-daily-upgrade-disabled:
+  service.disabled:
+    - name: apt-daily-upgrade.timer
+apt-daily-upgrade-masked:
+  service.masked:
+    - name: apt-daily-upgrade.timer
