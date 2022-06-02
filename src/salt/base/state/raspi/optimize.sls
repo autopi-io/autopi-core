@@ -61,3 +61,27 @@ apt-daily-upgrade-disabled:
 apt-daily-upgrade-masked:
   service.masked:
     - name: apt-daily-upgrade.timer
+
+sshswitch-disabled:
+  service.dead:
+    - name: sshswitch.service
+    - enable: false
+sshswitch-masked:
+  service.masked:
+    - name: sshswitch.service
+
+rpi-display-backlight-disabled:
+  service.dead:
+    - name: rpi-display-backlight.service
+    - enable: false
+rpi-display-backlight-masked:
+  service.masked:
+    - name: rpi-display-backlight.service
+
+triggerhappy-disabled:
+  service.dead:
+    - name: rpi-display-backlight.service
+    - enable: false
+triggerhappy-masked:
+  service.masked:
+    - name: rpi-display-backlight.service
