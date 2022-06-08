@@ -11,8 +11,6 @@ import base64
 from retrying import retry
 from salt.utils.network import host_to_ips as _host_to_ips
 from salt.utils.network import remote_port_tcp as _remote_port_tcp
-from ca_utils import CSR, StepClient
-from cryptography.hazmat.primitives import serialization
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +34,9 @@ def trigger_event(tag, data={}):
 
 
 def sign_certificate(ca_url, ca_fingerprint, certificate_path, token, key_path="/etc/salt/pki/minion/minion.pem", confirm=False):
+    from ca_utils import CSR, StepClient
+    from cryptography.hazmat.primitives import serialization
+    
     minion_id = uuid.UUID(__salt__["config.get"]("id"))
 
     if not token:
