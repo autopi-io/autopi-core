@@ -132,7 +132,7 @@ gpio-{{ key }}-configured:
       - module: reboot-requested-after-boot-config-changed
 {%- endfor %}
 
-{%- if salt["pillar.get"]("power:firmware:version")|float >= 2.0 %}
+{%- if salt["pillar.get"]("minion:hw.version", default=0.0) >= 6.0 %}
 spi-module-enabled:
   file.replace:
     - name: /boot/config.txt
@@ -143,15 +143,23 @@ spi-module-enabled:
 can1-configured:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=mcp251xfd,spi0-1.*$"
+    - pattern: "^#?dtoverlay=mcp251(xfd|5-can1),spi0-1.*$"
+    {%- if salt["pillar.get"]("minion:hw.version") in [6.0, 6.2] %}
     - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=15,oscillator=40000000,speed=20000000"
+    {%- else %}
+    - repl: "dtoverlay=mcp2515-can1,spi0-1,interrupt=15,oscillator=8000000,speed=20000000"
+    {%- endif %}
     - append_if_not_found: true
 
 can0-configured:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=mcp251xfd,spi0-0.*$"
+    - pattern: "^#?dtoverlay=mcp251(xfd|5-can0),spi0-0.*$"
+    {%- if salt["pillar.get"]("minion:hw.version") == 6.0 %}
     - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"
+    {%- else %}
+    - repl: "dtoverlay=mcp2515-can0,spi0-0,interrupt=14,oscillator=8000000,speed=20000000"
+    {%- endif %}
     - append_if_not_found: true
 {%- endif %}
 
