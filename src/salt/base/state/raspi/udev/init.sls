@@ -43,3 +43,11 @@ udev-rtc-rules-configured:
     - name: /etc/udev/rules.d/99-rtc.rules
     - source: salt://raspi/udev/rtc.rules.jinja
     - template: jinja
+
+{%- if salt["pillar.get"]("minion:hw.version") >= 6.0 %}
+udev-can-rules-configured:
+  file.managed:
+    - name: /etc/udev/rules.d/70-can.rules
+    - source: salt://raspi/udev/can.rules.jinja
+    - template: jinja
+{%- endif %}
