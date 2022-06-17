@@ -143,7 +143,7 @@ spi-module-enabled:
 can1-configured:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=mcp251(xfd|5),spi0-1.*$"
+    - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can1),spi0-1.*$"
     {%- if salt["pillar.get"]("minion:hw.version") in [6.0, 6.2] %}
     - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=15,oscillator=40000000,speed=20000000"
     {%- else %}
@@ -154,7 +154,7 @@ can1-configured:
 can0-configured:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=mcp251(xfd|5),spi0-0.*$"
+    - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can0),spi0-0.*$"
     {%- if salt["pillar.get"]("minion:hw.version") == 6.0 %}
     - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"
     {%- else %}
