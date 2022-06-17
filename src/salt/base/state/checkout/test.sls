@@ -37,7 +37,7 @@ spm-version-test:
     {%- if salt['config.get']('spm.version', 2.2) < 3.0 %}
     - validate: ret["value"] in ["1.1.1.0", "2.0", "2.1", "2.2"]
     {%- else %}
-    - validate: ret["value"] in ["3.1"]
+    - validate: ret["value"] in ["3.1", "3.2"]
     {%- endif %}
 
 acc-xyz-test:
@@ -144,7 +144,11 @@ rtc-i2c-present-test:
 
 crypto-i2c-present-test:
   cmd.run:
+    {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
+    - name: "i2cdetect -y 1 | grep '40:.*48'"
+    {%- else %}
     - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
+    {%- endif %}
 
 # Only possible ATM when testing HW
 {%- if not salt['pillar.get']('state', '') %}
