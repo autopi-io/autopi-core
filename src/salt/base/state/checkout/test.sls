@@ -144,7 +144,16 @@ rtc-i2c-present-test:
 
 crypto-i2c-present-test:
   cmd.run:
-    - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
+    - name: "i2cdetect -y 1 0x48 0x48 | grep 48"
+
+crypto-module-communicates:
+  test.module:
+    - name: crypto.get_serial
+    - validate:
+      - isinstance(ret["serial"], str)
+    - require:
+      - crypto-i2c-present-test
+
 
 # Only possible ATM when testing HW
 {%- if not salt['pillar.get']('state', '') %}
