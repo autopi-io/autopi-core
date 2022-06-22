@@ -150,6 +150,7 @@ crypto-i2c-present-test:
     - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
     {%- endif %}
 
+{%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
 crypto-module-communicates:
   test.module:
     - name: crypto.get_serial
@@ -157,6 +158,7 @@ crypto-module-communicates:
       - isinstance(ret["serial"], str)
     - require:
       - crypto-i2c-present-test
+{%- endif %}
 
 # Only possible ATM when testing HW
 {%- if not salt['pillar.get']('state', '') %}
