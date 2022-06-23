@@ -304,9 +304,14 @@ unlock_sim ()
     return $OK
 }
 
-run ()
+ensure_auto_network ()
 {
-    # Is SIM present
+    # Check/wait for the device to be present
+    retry 5 1 "test -c $DEVICE"
+    [ $? -gt 0 ] && echoerr "[ERROR] QMI device not found '$DEVICE'" && return $ERROR_FATAL
+    [ $VERBOSE == true ] && echo "[INFO] QMI device present '$DEVICE'"
+
+    # SIM must be present
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
     [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] SIM card is present"
@@ -314,25 +319,30 @@ run ()
     # Is network selection preference set to automatic?
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --nas-get-system-selection-preference | grep -q \"Network selection preference: 'automatic'\""
     if [ $? -gt 0 ]; then
-        echoerr "[ERROR] Network selection preference is not 'automatic', going to manually set that"
-        echo "[INFO] Network selection preference is not 'automatic', going to manually set that"
+        echoerr "[WARN] Network selection preference is not 'automatic', going to manually set that"
 
         # Set it to the correct value before beginning connection procedure
         autopi ec2x.query "AT+COPS=0"
-        [ $? -gt 0 ] && echoerr "[ERROR] Failed to set operator selection to automatic" && gather_info && return $ERROR
-        [ $VERBOSE == true ] && echo "[INFO] Successfully set operator selection to automatic"
+        [ $? -gt 0 ] && echoerr "[ERROR] Failed to set operator selection to 'automatic'" && gather_info && return $ERROR
 
-        # Remove me later
-        echo "[INFO] Successfully set operator selection to automatic"
+        echoerr "[WARN] Successfully set operator selection to 'automatic'"
     else
-        echo "[INFO] Network selection preference is already set to 'automatic'"
+        [ $VERBOSE == true ] && echo "[INFO] Network selection preference is already set to 'automatic'"
     fi
+
+    return $OK
+}
+
+run ()
+{
+    [ $VERBOSE == true ] && echo "[INFO] Running QMI manager..."
+
+    # Ensure automatic network selection once during startup
+    ensure_auto_network
 
     local has_been_up=false
     local interval=0
     local retry=0
-
-    [ $VERBOSE == true ] && echo "[INFO] Running QMI manager..."
 
     while true; do
 
