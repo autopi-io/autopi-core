@@ -169,8 +169,14 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
     # TODO: Power off audio amp (if not done when shutting down RPi?)
 
     # Power off 3V3 for modem/mPCIe if requested
-    #if modem_off:
-    #    __salt__["spm.query"]("stop_3v3")
+    if modem_off:
+        if __opts__.get("spm.version", 2.0) >= 3.0:
+            try:
+                __salt__["spm.query"]("usr_pins", low="sw_3v3")
+            except:
+                log.exception("Failed to power off modem 3V3 supply")
+        else:
+            log.warning("Power off modem 3V3 supply not supported for SPM version {:}".format(__opts__.get("spm.version", 2.0)))
 
     # Set accelerometer in standby mode
     if acc_off:
