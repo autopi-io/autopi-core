@@ -44,6 +44,7 @@ print_help ()
     echo "Commands:"
     echo "  help              Show help"
     echo "  version           Show version"
+    echo "  debug             Collect debug information about the QMI network connection"
     echo "  status            Check status of QMI network connection"
     echo "  up                Bring up QMI network connection manually"
     echo "  down              Take down QMI network connection manually"
@@ -439,6 +440,9 @@ case $1 in
         ;;
     "version")
         print_version
+        ;;
+    "debug")
+        gather_info
         ;;
     "run")
         run
