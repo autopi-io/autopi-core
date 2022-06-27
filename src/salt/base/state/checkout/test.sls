@@ -4,6 +4,10 @@ audio-test:
     - name: audio.play
     - audio_file: /opt/autopi/audio/sound/coin.wav
 
+no-kernel-usb-errors-test:
+  cmd.run:
+    - name: "dmesg | grep -c \"usb .*error\" | grep 0"  # We expect to NOT have that line in dmesg
+
 # Test modem as default unless none is specified in pillar
 {%- if salt['pillar.get']('setup:mpcie:module', 'ec2x') %}
 
@@ -147,7 +151,7 @@ crypto-i2c-present-test:
     {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
     - name: "i2cdetect -y 1 | grep '40:.*48'"
     {%- else %}
-    - name: "i2cget -y 1 0x60 0x00 | grep 0x04"
+    - name: "i2cdetect -y 1 | grep '60:.*60'"
     {%- endif %}
 
 {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}

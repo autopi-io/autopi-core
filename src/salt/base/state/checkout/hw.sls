@@ -1,5 +1,8 @@
 
 include:
+  {%- if salt['pillar.get']('minion:hw.version', 0.0) > 0.0 %}
+  - raspi.boot
+  {%- endif %}
   - .test
 
 spm-bod-fuse-configured:

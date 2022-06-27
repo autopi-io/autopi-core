@@ -22,7 +22,7 @@ gpio-shutdown-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-shutdown.*$"
-    {%- if salt["pillar.get"]("power:firmware:version")|float >= 2.0 %}
+    {%- if salt["pillar.get"]("power:firmware:version", default=3.0)|float >= 2.0 %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=25,gpio_pull=down,active_low=n"
     {%- else %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=12,gpio_pull=up"
@@ -107,7 +107,7 @@ hciuart:
     - enable: false
   {%- endif %}
 
-{% set _rtc = salt['pillar.get']('rpi:boot:rtc', default='') %}
+{% set _rtc = salt['pillar.get']('rpi:boot:rtc', default='pcf85063a') %}
 rtc-configured:
   file.replace:
     - name: /boot/config.txt
@@ -169,3 +169,13 @@ reboot-upon-changes-required:
     - watch:
       - file: /boot/cmdline.txt
       - file: /boot/config.txt
+
+{%- if salt["pillar.get"]("allow_reboot", default=False) %}
+reboot-immediately-if-allowed-and-pending:
+  module.run:
+    - name: power.request_reboot
+    - pending: false
+    - immediately: true
+    - delay: 2
+    - reason: raspi_boot_config_changes
+{%- endif %}
