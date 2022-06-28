@@ -159,3 +159,6 @@ class Se05xCryptoConnection():
             key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
 
             return key_pem.decode("UTF-8")
+
+    def _device(self):
+        return 'NXPS05X'
