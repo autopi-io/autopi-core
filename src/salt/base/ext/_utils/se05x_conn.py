@@ -1,7 +1,6 @@
 import func_timeout
 import logging
 import binascii
-from pkg_resources import load_entry_point
 from cryptography.hazmat.primitives.serialization import load_der_public_key, PublicFormat, Encoding
 from cryptography.hazmat.backends import default_backend
 
@@ -14,7 +13,7 @@ from sss.getkey import Get
 from sss.session import Session
 from sss.sign import Sign
 
-TIME_OUT = 60  # Time out in seconds
+TIME_OUT = 15  # Time out in seconds
 
 log = logging.getLogger(__name__)
 class CryptoKey(object):
@@ -23,11 +22,12 @@ class CryptoKey(object):
 
 class Se05xCryptoConnection():
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, settings):
         # Create and configure the context used by the SSS python wrapper
         self.sss_context = Context()
         self.sss_context.verbose = False
         self.sss_context.logger = log
+        self.settings = settings
 
     def open(self):
         """
@@ -71,20 +71,34 @@ class Se05xCryptoConnection():
     def __exit__(self, *args):
         return self.close()
 
-    def get_serial(self):
-        se05x_obj = Se05x(self.sss_context.session)
-        unique_id = func_timeout.func_timeout(TIME_OUT, se05x_obj.get_unique_id, None)
-        return unique_id
+    def _serial_number(self):
+        with self:
+            se05x_obj = Se05x(self.sss_context.session)
+            unique_id = func_timeout.func_timeout(TIME_OUT, se05x_obj.get_unique_id, None)
+            return unique_id
 
-    def sign_string(self, data, key):
+    def get_key_object(self, keyid):
+        keyObj = CryptoKey()
+        keyObj.keyid = keyid
+        return keyObj
+
+    def get_key_id_or_default(self, keyid):
+        key = self.settings['keyid']
+        if keyid:
+            key = keyid
+
+        return int(key, 16)
+
+    def sign_string(self, data, keyid=None):
         outformat = ""
         hashalgo = "SHA256"
 
-        log.info("Signing {} with key {}".format(data, key))
+        keyid_int = self.get_key_id_or_default(keyid)
 
-        keyid = int(key.keyid, 16)
+        log.info("Signing {} with key {}".format(data, keyid_int))
+
         sign_obj = Sign(self.sss_context.session)
-        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid, data, outformat, hashalgo))
+        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, outformat, hashalgo))
 
         if not isinstance(signature, str):
             raise Exception("do_signature_and_return returned a non-string value: {}".format(signature))
@@ -93,12 +107,10 @@ class Se05xCryptoConnection():
 
         return signature
 
-    def get_key_object(self, keyid):
-        keyObj = CryptoKey()
-        keyObj.keyid = keyid
-        return keyObj
-
-    def generate_key(self, keyid, key_type="ecc", ecc_curve="Secp256k1"):
+    def generate_key(self, keyid=None, confirm=False, key_type="ecc", ecc_curve="Secp256k1"):
+        if not confirm == True:
+            raise Exception("This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to force the operation")
+        
         supported_types = ["ecc"]
         if not key_type in supported_types:
             raise Exception("This key type is not supported. Supported: {}".format(supported_types))
@@ -107,37 +119,43 @@ class Se05xCryptoConnection():
         if key_type == "ecc" and not ecc_curve in supported_curves:
             raise Exception("This curve is not supported. Supported: {}".format(supported_curves))
 
-        keyid_int = int(keyid, 16)
+        keyid_int = self.get_key_id_or_default(keyid)
         policy = None
 
         gen_obj = Generate(self.sss_context.session)
         func_timeout.func_timeout(TIME_OUT, gen_obj.gen_ecc_pair, (keyid_int, ECC_CURVE_TYPE[ecc_curve], policy))
 
         keyObj = CryptoKey()
-        keyObj.keyid = keyid
+        keyObj.keyid = keyid_int
         return keyObj
 
-    def get_public_key(self, key):
+    def _public_key(self, keyid=None):
         """
-        Retrieve a previously generated ECC key
+        Retrieve a previously generated ECC key, will use default keyid if not specified.
         """
-        keyid = int(key.keyid, 16)
+        with self:
+            keyid_int = self.get_key_id_or_default(keyid)
 
-        get_object = Get(self.sss_context.session)
-        func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid, None, "PEM"))        
-        keylist = get_object.key
+            get_object = Get(self.sss_context.session)
+            func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))        
+            keylist = get_object.key
 
-        # Encode a key retrieved from a Get object to a PEM format
-        key_pem = None
-        key_hex_str = ""
+            if not keylist:
+                return keylist
 
-        for i in range(len(keylist)):  # pylint: disable=consider-using-enumerate
-            keylist[i] = format(keylist[i], 'x')
-            if len(keylist[i]) == 1:
-                keylist[i] = "0" + keylist[i]
-            key_hex_str += keylist[i]
-        key_der_str = binascii.unhexlify(key_hex_str)
-        log.info(key_der_str)
-        key_crypto = load_der_public_key(key_der_str, default_backend())
-        key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
-        return key_pem.decode("UTF-8")
+            # Encode a key retrieved from a Get object to a PEM format
+            key_pem = None
+            key_hex_str = ""
+
+            for i in range(len(keylist)):  # pylint: disable=consider-using-enumerate
+                keylist[i] = format(keylist[i], 'x')
+                if len(keylist[i]) == 1:
+                    keylist[i] = "0" + keylist[i]
+                key_hex_str += keylist[i]
+
+            key_der_str = binascii.unhexlify(key_hex_str)
+            # log.info(key_der_str)
+            key_crypto = load_der_public_key(key_der_str, default_backend())
+            key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+
+            return key_pem.decode("UTF-8")
