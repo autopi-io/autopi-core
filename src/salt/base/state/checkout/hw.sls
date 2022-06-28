@@ -15,13 +15,12 @@ spm-bod-fuse-configured:
         value: "0xde"
         confirm: true
 
-cryptoauth-info-serialized:
+secure-element-info-serialized:
   module_extra.serialized:
-    - name: cryptoauth.query
+    - name: crypto.query
     - args:
-      - serial
-      - device
-    - target: /tmp/cryptoauth.yml
+      - serial_number
+    - target: /tmp/secure-element.yml
     - format: yaml
 
 test-result:
@@ -32,5 +31,5 @@ test-result:
         duration: 240001
         threshold: 12.3
     - require:
-      - module_extra: cryptoauth-info-serialized
+      - module_extra: secure-element-info-serialized
       - sls: checkout.test

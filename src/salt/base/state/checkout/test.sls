@@ -157,9 +157,9 @@ crypto-i2c-present-test:
 {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
 crypto-module-communicates:
   test.module:
-    - name: crypto.get_serial
+    - name: crypto.query serial_number
     - validate:
-      - isinstance(ret["serial"], str)
+      - isinstance(ret["value"], str)
     - require:
       - crypto-i2c-present-test
 {%- endif %}
