@@ -72,10 +72,9 @@ class Se05xCryptoConnection():
         return self.close()
 
     def _serial_number(self):
-        with self:
-            se05x_obj = Se05x(self.sss_context.session)
-            unique_id = func_timeout.func_timeout(TIME_OUT, se05x_obj.get_unique_id, None)
-            return unique_id
+        se05x_obj = Se05x(self.sss_context.session)
+        unique_id = func_timeout.func_timeout(TIME_OUT, se05x_obj.get_unique_id, None)
+        return unique_id
 
     def get_key_object(self, keyid):
         keyObj = CryptoKey()
@@ -87,6 +86,7 @@ class Se05xCryptoConnection():
         if keyid:
             key = keyid
 
+        log.info('Using key: {}'.format(key))
         return int(key, 16)
 
     def sign_string(self, data, keyid=None):
@@ -109,7 +109,7 @@ class Se05xCryptoConnection():
 
     def generate_key(self, keyid=None, confirm=False, key_type="ecc", ecc_curve="Secp256k1"):
         if not confirm == True:
-            raise Exception("This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to force the operation")
+            raise Exception("This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to continue the operation")
         
         supported_types = ["ecc"]
         if not key_type in supported_types:
@@ -133,32 +133,32 @@ class Se05xCryptoConnection():
         """
         Retrieve a previously generated ECC key, will use default keyid if not specified.
         """
-        with self:
-            keyid_int = self.get_key_id_or_default(keyid)
+        # with self:
+        keyid_int = self.get_key_id_or_default(keyid)
 
-            get_object = Get(self.sss_context.session)
-            func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))        
-            keylist = get_object.key
+        get_object = Get(self.sss_context.session)
+        func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))        
+        keylist = get_object.key
 
-            if not keylist:
-                return keylist
+        if not keylist:
+            return keylist
 
-            # Encode a key retrieved from a Get object to a PEM format
-            key_pem = None
-            key_hex_str = ""
+        # Encode a key retrieved from a Get object to a PEM format
+        key_pem = None
+        key_hex_str = ""
 
-            for i in range(len(keylist)):  # pylint: disable=consider-using-enumerate
-                keylist[i] = format(keylist[i], 'x')
-                if len(keylist[i]) == 1:
-                    keylist[i] = "0" + keylist[i]
-                key_hex_str += keylist[i]
+        for i in range(len(keylist)):  # pylint: disable=consider-using-enumerate
+            keylist[i] = format(keylist[i], 'x')
+            if len(keylist[i]) == 1:
+                keylist[i] = "0" + keylist[i]
+            key_hex_str += keylist[i]
 
-            key_der_str = binascii.unhexlify(key_hex_str)
-            # log.info(key_der_str)
-            key_crypto = load_der_public_key(key_der_str, default_backend())
-            key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+        key_der_str = binascii.unhexlify(key_hex_str)
+        # log.info(key_der_str)
+        key_crypto = load_der_public_key(key_der_str, default_backend())
+        key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
 
-            return key_pem.decode("UTF-8")
+        return key_pem.decode("UTF-8")
 
     def _device(self):
         return 'NXPS05X'

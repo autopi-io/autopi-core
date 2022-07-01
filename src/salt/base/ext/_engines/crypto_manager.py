@@ -23,20 +23,30 @@ edmp = EventDrivenMessageProcessor("crypto", context=context, default_hooks={"ha
 conn = None
 
 @edmp.register_hook()
-def generate_key_handler(confirm=False, keyid=None):
+def generate_key_handler(keyid=None, confirm=False, force=False):
     with conn:
         log.info("Generating key")
 
-        conn.generate_key(confirm=confirm)
-        key_string = conn._public_key()
+        existing_key = conn._public_key(keyid)
+        if existing_key:
+            log.info('Existing public key: {}'.format(existing_key))
+            if not force:
+                raise Exception('Key already exists. - must force=true')
+
+        conn.generate_key(keyid, confirm=confirm)
+        key_string = conn._public_key(keyid)
+        log.info('New public key: {}'.format(key_string))
+
+        if existing_key == key_string:
+            raise Exception('Key was regenerated but DID NOT CHANGE? Maybe the keyid is a reserved range?')
 
         return { "value": key_string }
 
 @edmp.register_hook()
 def sign_string_handler(data, keyid=None):
-    log.info("Executing sign string on data: {}".format(data))
-
     with conn:
+        log.info("Executing sign string on data: {}".format(data))
+
         signature = conn.sign_string(data, keyid)
 
         return { "value": signature }
@@ -63,12 +73,13 @@ def query_handler(cmd, *args, **kwargs):
         ret["error"] = "Unsupported command: {:s}".format(cmd)
         return ret
 
-    res = func(*args, **kwargs)
-    if res != None:
-        if isinstance(res, dict):
-            ret.update(res)
-        else:
-            ret["value"] = res
+    with conn:
+        res = func(*args, **kwargs)
+        if res != None:
+            if isinstance(res, dict):
+                ret.update(res)
+            else:
+                ret["value"] = res
 
     return ret
 
