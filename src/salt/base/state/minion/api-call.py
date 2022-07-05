@@ -60,7 +60,7 @@ def state_output(res):
         if res[key]["result"]:
             print("{:}[ PASS ] {:}: {:} {:}".format(Colors.OKGREEN, res[key].get("__id__", "") or res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
         else:
-            print("{:}[ FAIL ] {:}: {:} {:}".format(Colors.FAIL, res[key].get("__id__", "") or res[key].get("name", ""), res[key]["comment"], Colors.ENDC))
+            print("{:}[ FAIL ] {:}: {:} {:}".format(Colors.FAIL, res[key].get("__id__", "").encode('utf-8') or res[key].get("name", "").encode('utf-8'), res[key]["comment"].encode('utf-8'), Colors.ENDC))
             changes = res[key].get("changes", {})
             if changes:
                 print(yaml.safe_dump(changes, default_flow_style=False), end="")
