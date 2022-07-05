@@ -12,6 +12,7 @@ from sss.genkey import Generate
 from sss.getkey import Get
 from sss.session import Session
 from sss.sign import Sign
+from sss.policy import Policy
 
 TIME_OUT = 15  # Time out in seconds
 
@@ -107,7 +108,7 @@ class Se05xCryptoConnection():
 
         return signature
 
-    def generate_key(self, keyid=None, confirm=False, key_type="ecc", ecc_curve="Secp256k1"):
+    def generate_key(self, keyid=None, confirm=False, key_type="ecc", ecc_curve="Secp256k1", policy_name=None):
         if not confirm == True:
             raise Exception("This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to continue the operation")
         
@@ -119,8 +120,15 @@ class Se05xCryptoConnection():
         if key_type == "ecc" and not ecc_curve in supported_curves:
             raise Exception("This curve is not supported. Supported: {}".format(supported_curves))
 
+        # Apply find security policy if one is specified
+        if policy_name != None:
+            policy_obj = Policy()
+            policy_params = policy_obj.get_object_policy(policy_name)
+            policy = policy_obj.convert_obj_policy_to_ctype(policy_params)
+        else:
+            policy = None
+
         keyid_int = self.get_key_id_or_default(keyid)
-        policy = None
 
         gen_obj = Generate(self.sss_context.session)
         func_timeout.func_timeout(TIME_OUT, gen_obj.gen_ecc_pair, (keyid_int, ECC_CURVE_TYPE[ecc_curve], policy))

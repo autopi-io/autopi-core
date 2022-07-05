@@ -30,7 +30,7 @@ def ensure_key_is_string(keyid):
     return keyid
 
 @edmp.register_hook()
-def generate_key_handler(keyid=None, confirm=False, force=False):
+def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=None):
     with conn:
         log.info("Generating key")
 
@@ -42,12 +42,12 @@ def generate_key_handler(keyid=None, confirm=False, force=False):
             if not force:
                 raise Exception('Key already exists. - must force=true')
 
-        conn.generate_key(keyid, confirm=confirm)
+        conn.generate_key(keyid, confirm=confirm, policy_name=policy_name)
         key_string = conn._public_key(keyid)
         log.info('New public key: {}'.format(key_string))
 
         if existing_key == key_string:
-            raise Exception('Key was regenerated but DID NOT CHANGE? Maybe the keyid is a reserved range?')
+            raise Exception('Command returned but key but DID NOT CHANGE. Maybe the keyid is a reserved range or the security policy does not allow regenerating the key?')
 
         return { "value": key_string }
 
