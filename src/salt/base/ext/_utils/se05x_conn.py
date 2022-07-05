@@ -82,11 +82,18 @@ class Se05xCryptoConnection():
         keyObj.keyid = keyid
         return keyObj
 
+    # Necessary when the key is numbers only
+    def ensure_key_is_string(self, keyid):
+        if not isinstance(keyid, str) and keyid != None:
+            keyid = format(keyid, '#x')
+        return keyid
+
     def get_key_id_or_default(self, keyid):
         key = self.settings['keyid']
         if keyid:
             key = keyid
 
+        key = self.ensure_key_is_string(keyid)
         log.info('Using key: {}'.format(key))
         return int(key, 16)
 

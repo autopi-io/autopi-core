@@ -22,19 +22,10 @@ edmp = EventDrivenMessageProcessor("crypto", context=context, default_hooks={"ha
 # CRYPTO connection is instantiated during start
 conn = None
 
-# Necessary when the key is numbers only
-def ensure_key_is_string(keyid):
-    if not isinstance(keyid, str) and keyid != None:
-        keyid = format(keyid, '#x')
-
-    return keyid
-
 @edmp.register_hook()
 def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=None):
     with conn:
         log.info("Generating key")
-
-        keyid = ensure_key_is_string(keyid)
 
         existing_key = conn._public_key(keyid)
         if existing_key:
@@ -55,8 +46,6 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
 def sign_string_handler(data, keyid=None):
     with conn:
         log.info("Executing sign string on data: {}".format(data))
-
-        keyid = ensure_key_is_string(keyid)
 
         signature = conn.sign_string(data, keyid)
 
