@@ -99,12 +99,28 @@ def start(**settings):
         # Initialize connection
         global conn
 
-        log.warning(settings)
-
-        if 'nxpse050_conn' in settings:
+        if 'atecc108A_conn' in settings:
+            from atecc108a_conn import ATECC108AConn
+            conn = ATECC108AConn(settings['atecc108A_conn'])
+        elif 'nxpse050_conn' in settings:
+            from se05x_conn import Se05xCryptoConnection
             conn = Se05xCryptoConnection(settings['nxpse050_conn'])
         else:
             raise Exception('Unknown secure element')
+
+        # Test image code -  will fall back to the secure element that is supported.
+        # try:
+        #     from atecc108a_conn import ATECC108AConn
+        #     conn = ATECC108AConn({ "port": 1 })
+        #     conn.ensure_open()
+        #     assert conn.is_open
+        #     log.info('USING ATECC108A SECURE ELEMENT')
+        # except Exception as ex:
+        #     log.exception("Exception occurred while connecting to ATECC108A secure element. Will try using new secure element instead.")
+
+        #     from se05x_conn import Se05xCryptoConnection
+        #     conn = Se05xCryptoConnection({ "keyid": "3dc586a1" })
+        #     log.info('USING *NEW* NXPS050 SECURE ELEMENT')
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,

@@ -9,7 +9,7 @@ log = logging.getLogger(__name__)
 
 ATCA_SUCCESS = 0x00
 
-class CryptoAuthConn(object):
+class ATECC108AConn(object):
 
     class Decorators(object):
 
@@ -54,13 +54,13 @@ class CryptoAuthConn(object):
 
         return config_zone_lock and slot0_data_locked
 
-    def publickey(self, slot=0):
+    def _public_key(self, slot=0):
         publickey = bytearray(64)
         res = cryptoauthlib.atcab_get_pubkey(slot, publickey)
         self.handle_res(res)
         return binascii.hexlify(publickey)
 
-    def serialnumber(self):
+    def _serial_number(self):
         serialnumber = bytearray(9)
         res = cryptoauthlib.atcab_read_serial_number(serialnumber)
         self.handle_res(res)
@@ -81,9 +81,8 @@ class CryptoAuthConn(object):
             raise ValueError("I2C 'port' must be specified in settings")
         self._port = settings["port"]
 
-        if not "address" in settings:
-            raise ValueError("I2C 'address' must be specified in settings")
-        self._address = int(settings.get("address", None), 16)
+        if settings.get("address", None):
+            self._address = int(settings.get("address"), 16)
 
         return self
 
@@ -94,7 +93,7 @@ class CryptoAuthConn(object):
         try:
             cfg = cryptoauthlib.cfg_ateccx08a_i2c_default()
             cfg.cfg.atcai2c.bus = self._port
-            if self._address:
+            if getattr(self, '_address', None):
                 cfg.cfg.atcai2c.slave_address = self._address
 
             if not cryptoauthlib.atcab_init(cfg) == ATCA_SUCCESS:
@@ -132,3 +131,6 @@ class CryptoAuthConn(object):
 
     def __exit__(self, type, value, traceback):
         self.close()
+
+    def _device(self):
+        return 'ATECC108A'
