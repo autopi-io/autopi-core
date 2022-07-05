@@ -515,8 +515,23 @@ class SocketCANInterface(STN11XX):
             raise NotImplementedError("Not supported by SocketCAN interface - add pass filters instead")
 
     def j1939_pgn_filters(self, clear=False, add=None):
-        if add:
-            raise NotImplementedError("Not supported by SocketCAN interface - add pass filters instead")
+        """
+        NOTE NV: So far, it looks like J1939 only cares about the PGN itself being
+        the same in order to match the header. For example, we've seen that RPM comes
+        from header 0x0CF00400, but also from 0x1CF004FC - i.e. the identifier is 0xF004.
+
+        This is also the reasoning for the mask added below -> 0x00FFFF00, we care only for the PGN.
+        This might need to be changed depending on what other behaviour we see from J1939 enabled vehicles.
+        """
+
+        if isinstance(add, string_types):
+            # Only format the 'add' parameter if it is passed as a stirng
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Adding J1939 filter mask to filter {}".format(add))
+
+            add = "{:x},00FFFF00".format(int(add, 16) << 8)
+
+        self.can_pass_filters(clear=clear, add=add)
 
     def can_flow_control_id_pairs(self, clear=False, add=None):
 
