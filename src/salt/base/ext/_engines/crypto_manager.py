@@ -47,7 +47,7 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
         log.info('New public key: {}'.format(key_string))
 
         if existing_key == key_string:
-            raise Exception('Command returned but key but DID NOT CHANGE. Maybe the keyid is a reserved range or the security policy does not allow regenerating the key?')
+            raise Exception('Command returned but key DID NOT CHANGE. Maybe the keyid is a reserved range or the security policy does not allow regenerating the key?')
 
         return { "value": key_string }
 
