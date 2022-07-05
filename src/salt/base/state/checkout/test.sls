@@ -154,7 +154,7 @@ crypto-i2c-present-test:
     - name: "i2cdetect -y 1 | grep '60:.*60'"
     {%- endif %}
 
-{%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
+{%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.1, 6.2, 6.3] %}
 crypto-module-communicates:
   test.module:
     - name: crypto.query
