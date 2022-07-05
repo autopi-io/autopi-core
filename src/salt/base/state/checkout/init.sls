@@ -70,6 +70,11 @@ spm-voltage-recalibrated:
         interval: 1
 {%- endif %}
 
+{%- if salt["pillar.get"]("minion:hw.version") > 6.1 %}
+secure-element-provisioned:
+  secure_element.provisioned
+{%- endif %}
+
 audio-checkout-done:
   module.run:
     - name: audio.play
