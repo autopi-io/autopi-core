@@ -93,7 +93,7 @@ class Se05xCryptoConnection():
         if keyid:
             key = keyid
 
-        key = self.ensure_key_is_string(keyid)
+        key = self.ensure_key_is_string(key)
         log.info('Using key: {}'.format(key))
         return int(key, 16)
 
