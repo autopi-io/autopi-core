@@ -8,9 +8,13 @@ from common_util import call_retrying
 from messaging import EventDrivenMessageProcessor
 from threading_more import intercept_exit_signal
 from retrying import retry
-from se05x_conn import Se05xCryptoConnection
 
 log = logging.getLogger(__name__)
+
+try:
+    from se05x_conn import Se05xCryptoConnection
+except Exception as err:
+    log.warning("Failed to import SE05x connection class. Library (.so) files possibly not found.")
 
 context = {
     "state": None
