@@ -27,13 +27,10 @@ def provisioned(name):
         public_key = __salt__["crypto.query"]("public_key")
         public_key_value = public_key.get('value', None)
         if public_key_value:
-            if not public_key_value.startswith("-----BEGIN PUBLIC KEY-----")
-                
-
-            ret["result"] = True
-            ret["comment"] = "Key already exists"
-            # ret["changes"] = public_key_value
-            return ret
+            if not public_key_value.startswith("-----BEGIN PUBLIC KEY-----"):
+                ret["result"] = True
+                ret["comment"] = "Key already exists"
+                return ret
             
         # Todo catch specific exception that key does not exist, not all exceptions!
         # no connection or something should not make it try to regenerate key!
@@ -43,19 +40,17 @@ def provisioned(name):
     try:
        generated_public_key = __salt__["crypto.generate_key"](confirm=True, force=False, policy_name="NoMod")
     except Exception as ex:
-        if not "Key already exists" in str(ex):
+        if "Key already exists" in str(ex):
             public_key = __salt__["crypto.query"]('public_key')
             ret["result"] = True
             ret["comment"] = "Key already exists"
-            # ret["changes"] = public_key
             return ret
 
-    # generated_public_key = __salt__["crypto.generate_key"](confirm=True, force=False)
     generated_public_key_value = generated_public_key.get('value', "")
     if generated_public_key_value.startswith("-----BEGIN PUBLIC KEY-----"):
         ret["result"] = True
         ret["comment"] = "New key generated"
-        ret["changes"] = generated_public_key_value
+        ret["changes"]["new"] = generated_public_key_value
         return ret
     
     ret["result"] = False
