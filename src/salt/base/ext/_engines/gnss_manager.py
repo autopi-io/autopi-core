@@ -105,7 +105,7 @@ def gnss_location_to_position_converter(result):
         "alt": result["alt"],
         "sog": result["sog_km"],
         "cog": result["cog"],
-        "nsat_gps": result["nsat_gps"],
+        "nsat": result["nsat_gps"], # need the key to be nsat because of backend structure
         "nsat_glonass": result["nsat_glonass"],
         "fix": result["fix"],
     }
