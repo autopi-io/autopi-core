@@ -102,9 +102,9 @@ def start(**settings):
         if 'atecc108A_conn' in settings:
             from atecc108a_conn import ATECC108AConn
             conn = ATECC108AConn(settings['atecc108A_conn'])
-        elif 'nxpse050_conn' in settings:
+        elif 'nxpse05x_conn' in settings:
             from se05x_conn import Se05xCryptoConnection
-            conn = Se05xCryptoConnection(settings['nxpse050_conn'])
+            conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
         else:
             raise Exception('Unknown secure element')
 
