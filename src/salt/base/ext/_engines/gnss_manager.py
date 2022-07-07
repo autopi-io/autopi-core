@@ -96,7 +96,7 @@ def gnss_location_to_position_converter(result):
     ret = {
         "_type": "pos",
         "_stamp": datetime.datetime.utcnow().isoformat(),
-        "time_utc": result["time_utc"],
+        "utc": result["time_utc"],
         "date_utc": result["date_utc"],
         "loc": {
             "lat": result["lat"],
