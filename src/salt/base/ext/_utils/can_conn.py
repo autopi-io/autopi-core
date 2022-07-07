@@ -77,7 +77,8 @@ class CANConn(object):
 
         def __exit__(self, ex_type, ex_val, tb):
             try:
-                self.outer._notifier.remove_listener(self._listener)
+                if self.outer._notifier:
+                    self.outer._notifier.remove_listener(self._listener)
             except:
                 log.exception("Failed to remove listener from bus notifier")
 

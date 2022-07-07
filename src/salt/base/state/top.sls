@@ -4,7 +4,7 @@ base:
     - requirements  # Most important
     - raspi.install
     - minion.install
-    {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "ec2x" %}
+    {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "le910cx"] %}
     - network.wwan.qmi.install
     {%- else %}
     - network.wwan.qmi.uninstall

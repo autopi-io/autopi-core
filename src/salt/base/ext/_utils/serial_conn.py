@@ -133,10 +133,10 @@ class SerialConn(object):
 
         return line
 
-    def read_lines(self):
+    def read_lines(self, timeout=None):
 
-        # Read first line using initial timeout
-        line = self.read_line()
+        # Read first line using initial or parameter timeout
+        line = self.read_line(timeout)
         if not line:
             return
 
