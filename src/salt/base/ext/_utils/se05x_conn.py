@@ -98,15 +98,14 @@ class Se05xCryptoConnection():
         log.info('Using key: {}'.format(key))
         return int(key, 16)
 
-    def sign_string(self, data, keyid=None, hashalgo="KECCAK256"):
-        outformat = ""
+    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="PEM"):
 
         keyid_int = self.get_key_id_or_default(keyid)
 
         log.info("Signing {} with key {}".format(data, keyid_int))
 
         sign_obj = Sign(self.sss_context.session)
-        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, outformat, hashalgo))
+        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, encoding, hashalgo))
 
         if not isinstance(signature, str):
             raise Exception("do_signature_and_return returned a non-string value: {}".format(signature))

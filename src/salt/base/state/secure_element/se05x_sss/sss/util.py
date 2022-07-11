@@ -969,7 +969,7 @@ def save_to_file(key, filename, key_part, encode_format="", cypher_type = 0):
     return apis.kStatus_SSS_Success
 
 # AutoPi 2022
-def encode_to_pem(key, key_part, encode_format="", cypher_type=0):
+def encode_signature(key, key_part, encode_format="", cypher_type=0):
     """
     Store key in file
     :param key: Input key
@@ -1019,13 +1019,15 @@ def encode_to_pem(key, key_part, encode_format="", cypher_type=0):
         else:
             key_crypto = load_der_public_key(key_der_str, default_backend())
             key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
-
     elif key_part == apis.kSSS_KeyPart_NONE:
         key_pem = base64.b64encode(key_der_str)
 
-    return key_pem
-
-
+    if encode_format == "PEM":
+        return key_pem
+    elif encode_format == "DER":
+        return key_der_str
+    else:
+        raise Exception("Unknown encoding: {}".format(encode_format))
 
 def hash_convert(filename, encode_format="", hash_algo=apis.kAlgorithm_SSS_SHA256):
     """

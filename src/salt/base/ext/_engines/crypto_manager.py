@@ -42,11 +42,11 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
         return { "value": key_string }
 
 @edmp.register_hook()
-def sign_string_handler(data, keyid=None):
+def sign_string_handler(data, keyid=None, encoding="PEM"):
     with conn:
         log.info("Executing sign string on data: {}".format(data))
 
-        signature = conn.sign_string(data, keyid)
+        signature = conn.sign_string(data, keyid, encoding=encoding)
 
         return { "value": signature }
 
@@ -94,12 +94,16 @@ def start(**settings):
         # Initialize connection
         global conn
 
+        log.info("Importing CRYPTO connection")
         if 'atecc108A_conn' in settings:
             from atecc108a_conn import ATECC108AConn
             conn = ATECC108AConn(settings['atecc108A_conn'])
         elif 'nxpse05x_conn' in settings:
-            from se05x_conn import Se05xCryptoConnection
-            conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
+            try:
+                from se05x_conn import Se05xCryptoConnection
+                conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
+            except Exception as err:
+                log.error(err)
         else:
             raise Exception('Unknown secure element')
 
@@ -118,10 +122,13 @@ def start(**settings):
         #     log.info('USING *NEW* NXPS050 SECURE ELEMENT')
 
         # Initialize and run message processor
+        log.info("INITIALIZING Crypto Manager")
         edmp.init(__salt__, __opts__,
             hooks=settings.get("hooks", []),
             workers=settings.get("workers", []),
             reactors=settings.get("reactors", []))
+
+        log.info("STARTING Crypto Manager")
         edmp.run()
 
     except Exception:

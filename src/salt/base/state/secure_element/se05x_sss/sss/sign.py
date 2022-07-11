@@ -16,8 +16,9 @@ from .keyobject import KeyObject
 from .asymmetric import Asymmetric
 from .symmetric import Symmetric
 from .util import hash_convert, hash_convert_raw, save_to_file, \
-    load_certificate, transform_key_to_list, encode_to_pem
+    load_certificate, transform_key_to_list, encode_signature
 from .const import HASH
+
 log = logging.getLogger(__name__)
 
 
@@ -146,7 +147,7 @@ class Sign:  # pylint: disable=too-few-public-methods
         return status
 
 
-    def do_signature_and_return(self, key_id, input_data, out_encode_format="", hash_algo=""):
+    def do_signature_and_return(self, key_id, input_data, out_encode_format="PEM", hash_algo=""):
         """
         DO sign operation on a string and return the signature
         :param key_id: Key index
@@ -214,8 +215,10 @@ class Sign:  # pylint: disable=too-few-public-methods
         if signature_ctype is None:
             log.error("Received signature data is empty")
             return status
+        
         signature_full_list = list(signature_ctype)
         signature_list = signature_full_list[:int(signature_len.value)]
 
-        pem_data = encode_to_pem(signature_list, apis.kSSS_KeyPart_NONE, out_encode_format)
-        return pem_data
+        encoded_data = encode_signature(signature_list, apis.kSSS_KeyPart_NONE, out_encode_format)
+
+        return encoded_data
