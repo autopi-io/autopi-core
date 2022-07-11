@@ -3,6 +3,7 @@ import logging
 import binascii
 from cryptography.hazmat.primitives.serialization import load_der_public_key, PublicFormat, Encoding
 from cryptography.hazmat.backends import default_backend
+from Cryptodome.Hash import keccak
 
 from cli.cli import Context, do_open_session
 from sss import const
@@ -97,9 +98,8 @@ class Se05xCryptoConnection():
         log.info('Using key: {}'.format(key))
         return int(key, 16)
 
-    def sign_string(self, data, keyid=None):
+    def sign_string(self, data, keyid=None, hashalgo="KECCAK256"):
         outformat = ""
-        hashalgo = "SHA256"
 
         keyid_int = self.get_key_id_or_default(keyid)
 

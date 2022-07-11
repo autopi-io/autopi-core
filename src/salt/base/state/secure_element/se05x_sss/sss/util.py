@@ -14,6 +14,7 @@ import logging
 import ctypes
 from . import sss_api as apis
 from . import const
+from Cryptodome.Hash import keccak
 
 if True:  # pylint: disable=using-constant-test
     from sss import patch_cryptography
@@ -90,6 +91,7 @@ HASH_MAP = {
     apis.kAlgorithm_SSS_RSASSA_PKCS1_PSS_MGF1_SHA256: [hashes.SHA256(), hashlib.sha256],
     apis.kAlgorithm_SSS_RSASSA_PKCS1_PSS_MGF1_SHA384: [hashes.SHA384(), hashlib.sha384],
     apis.kAlgorithm_SSS_RSASSA_PKCS1_PSS_MGF1_SHA512: [hashes.SHA512(), hashlib.sha512],
+    "KECCAK256": [None, lambda : keccak.new(digest_bits=256)],
 }
 
 

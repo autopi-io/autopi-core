@@ -197,7 +197,9 @@ class Sign:  # pylint: disable=too-few-public-methods
             ctx = Symmetric(self._session)
             ctx.algorithm = self.hash_algo
         else:
-            ctx = Asymmetric(self._session, self._ctx_key, self.hash_algo, mode)
+            # The library apparently uses the hash_algo to know how long the digest is.
+            # When using KECCAK256 (not supported by default), pass SHA256, which is the same length
+            ctx = Asymmetric(self._session, self._ctx_key, apis.kAlgorithm_SSS_SHA256 if self.hash_algo == "KECCAK256" else self.hash_algo, mode)
         if cipher_type in [apis.kSSS_CipherType_HMAC, apis.kSSS_CipherType_AES, apis.kSSS_CipherType_DES]:
             if self.symmetric_sign_mac_one_go:
                 status = ctx.mac_one_go(self._ctx_key, digest, digest_len)
