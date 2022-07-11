@@ -175,5 +175,36 @@ class Se05xCryptoConnection():
 
         return key_pem.decode("UTF-8")
 
+    def _ethereum_address(self, keyid=None):
+        """
+        Retrieve a previously generated ECC key, will use default keyid if not specified.
+        """
+        with self:
+            keyid_int = self.get_key_id_or_default(keyid)
+            get_object = Get(self.sss_context.session)
+            func_timeout.func_timeout(
+                TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))
+            keylist = get_object.key
+
+            if not keylist:
+                return keylist
+
+            # Encode a key retrieved from a Get object to a PEM format
+            key_pem = None
+            key_hex_str = ""
+
+            for i in range(len(keylist)):  # pylint: disable=consider-using-enumerate
+                keylist[i] = format(keylist[i], 'x')
+                if len(keylist[i]) == 1:
+                    keylist[i] = "0" + keylist[i]
+                key_hex_str += keylist[i]
+            key_bytes = key_hex_str.decode("hex")
+            pub_key_hash_bytes = binascii.unhexlify(
+                keccak.new(digest_bits=256).update(key_bytes).hexdigest())[-20:]
+
+            address = "0x" + binascii.hexlify(pub_key_hash_bytes)
+            return address
+
+
     def _device(self):
         return 'NXPS05X'
