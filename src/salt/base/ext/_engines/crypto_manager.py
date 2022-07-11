@@ -11,11 +11,6 @@ from retrying import retry
 
 log = logging.getLogger(__name__)
 
-try:
-    from se05x_conn import Se05xCryptoConnection
-except Exception as err:
-    log.warning("Failed to import SE05x connection class. Library (.so) files possibly not found.")
-
 context = {
     "state": None
 }
