@@ -32,3 +32,4 @@ base:
     - power.spm.install
     - power.config
     - minion.certs
+    - secure_element.install

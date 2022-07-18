@@ -1,9 +1,12 @@
 import func_timeout
 import logging
 import binascii
+import base64
 from cryptography.hazmat.primitives.serialization import load_der_public_key, PublicFormat, Encoding
 from cryptography.hazmat.backends import default_backend
 from Cryptodome.Hash import keccak
+
+import asn1
 
 from cli.cli import Context, do_open_session
 from sss import const
@@ -18,6 +21,8 @@ from sss.policy import Policy
 TIME_OUT = 15  # Time out in seconds
 
 log = logging.getLogger(__name__)
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 class CryptoKey(object):
     def __init__(self):
         None
@@ -105,12 +110,42 @@ class Se05xCryptoConnection():
         log.info("Signing {} with key {}".format(data, keyid_int))
 
         sign_obj = Sign(self.sss_context.session)
-        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, encoding, hashalgo))
+
+        # When getting the RS values, get the DER format and decode that
+        if encoding == "RS_HEX":
+            sig_encoding = "DER"
+        else:
+            sig_encoding = encoding
+
+        # Execute signing
+        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, sig_encoding, hashalgo))
 
         if not isinstance(signature, str):
             raise Exception("do_signature_and_return returned a non-string value: {}".format(signature))
+        
+        if encoding == "RS_HEX":
+            try:
+                decoder = asn1.Decoder()
 
-        log.info(signature)
+                # .read() gets the next element in the sequence in a tuple (tag, value)
+                # Structure of the encoded signature is [[{r}{s}]]
+                decoder.start(signature)
+                value = decoder.read()[1]
+
+                # Decode nested r and s values
+                decoder.start(value)
+                r = hex(decoder.read()[1]).lstrip("0x").rstrip("L")
+                s = hex(decoder.read()[1]).lstrip("0x").rstrip("L")
+
+                # Convert to HEX
+                signature = "0x{}{}".format(r, s)
+
+            except Exception as ex:
+                log.error(ex)
+                raise Exception("Could not convert signature to RS_HEX format. Does the cypher support it?")
+
+        if DEBUG:
+            log.debug("Final signature: {}".format(signature))
 
         return signature
 

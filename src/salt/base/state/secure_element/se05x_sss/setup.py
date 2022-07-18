@@ -55,6 +55,9 @@ setup(
                 'click',
                 'cryptography',
                 'func_timeout',
+                'pycryptodomex',
+                'asn1',
+                'future',
             ],
         }
     },
@@ -62,7 +65,10 @@ setup(
         'cffi',
         'click',
         'cryptography',
-        'func_timeout'
+        'func_timeout',
+        'pycryptodomex',
+        'asn1',
+        'future',
     ],
     entry_points='''
         [console_scripts]

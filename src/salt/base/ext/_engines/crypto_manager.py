@@ -104,6 +104,7 @@ def start(**settings):
                 conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
             except Exception as err:
                 log.error(err)
+                raise Exception('Error importing or creating SE05x connection class')
         else:
             raise Exception('Unknown secure element')
 
