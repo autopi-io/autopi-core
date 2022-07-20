@@ -151,8 +151,21 @@ gather_info()
     qmicli --device-open-$MODE --device $DEVICE --nas-get-system-selection-preference
     sleep .5
 
-    autopi ec2x.query "AT+COPS?"
-    autopi ec2x.query "AT+CREG?;+CEREG?;+CGREG?"
+    if [ $MODEM == "le910cx" ]
+    then
+        echo "Using Telit modem"
+        autopi modem.query "AT+COPS?"
+        autopi modem.query "AT+CREG?;+CEREG?;+CGREG?"
+
+    elif [ $MODEM == "ec2x" ]
+    then
+        echo "Using Quectel modem"
+        autopi ec2x.query "AT+COPS?"
+        autopi ec2x.query "AT+CREG?;+CEREG?;+CGREG?"
+
+    else
+        echo "Not using a known modem, skipping AT+COPS and AT+CREG commands"
+    fi
 }
 
 up ()

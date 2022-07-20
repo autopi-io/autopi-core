@@ -7,3 +7,4 @@ POWER_SAVE={{ salt['pillar.get']('qmi_manager:power_save', 'true')|lower }}
 VERBOSE=false
 ONLINE_CALLBACK='autopi event.fire "{}" "system/network/$INTERFACE/online"'
 OFFLINE_CALLBACK='autopi event.fire "{\"reason\": \"$REASON\"}" "system/network/$INTERFACE/offline"'
+MODEM={{ salt['pillar.get']('setup:mpcie:module', None) }}
