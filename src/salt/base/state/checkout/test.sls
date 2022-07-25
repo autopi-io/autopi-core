@@ -154,6 +154,10 @@ crypto-i2c-present-test:
     - name: "i2cdetect -y 1 | grep '60:.*60'"
     {%- endif %}
 
+# Only possible ATM when testing HW
+{%- if not salt['pillar.get']('state', '') %}
+
+# Only run this during hwtest for test image (and versions with secure element)
 {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.1, 6.2, 6.3] %}
 crypto-module-communicates:
   test.module:
@@ -165,9 +169,6 @@ crypto-module-communicates:
     - require:
       - crypto-i2c-present-test
 {%- endif %}
-
-# Only possible ATM when testing HW
-{%- if not salt['pillar.get']('state', '') %}
 
 can-term-setup-test:
   test.module:
