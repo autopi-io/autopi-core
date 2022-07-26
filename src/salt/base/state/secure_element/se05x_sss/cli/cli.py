@@ -27,7 +27,8 @@ try:
     from sss import sss_api as apis
     from sss import plugandtrust_ver
     from sss.const import AUTH_TYPE_MAP, CRYPT_ALGO
-except ImportError:
+except ImportError as ex:
+    print(ex)
     print("Error: Library sssapisw not found !! Build sssapisw first !!")
     sys.exit(1)
 

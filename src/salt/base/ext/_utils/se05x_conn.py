@@ -7,6 +7,7 @@ from cryptography.hazmat.backends import default_backend
 from Cryptodome.Hash import keccak
 
 import asn1
+import ecdsa
 
 from cli.cli import Context, do_open_session
 from sss import const
@@ -232,13 +233,25 @@ class Se05xCryptoConnection():
                 if len(keylist[i]) == 1:
                     keylist[i] = "0" + keylist[i]
                 key_hex_str += keylist[i]
-            key_bytes = key_hex_str.decode("hex")
-            pub_key_hash_bytes = binascii.unhexlify(
-                keccak.new(digest_bits=256).update(key_bytes).hexdigest())[-20:]
 
-            address = "0x" + binascii.hexlify(pub_key_hash_bytes)
+            key_der_str = binascii.unhexlify(key_hex_str)
+            # log.info(key_der_str)
+            key_crypto = load_der_public_key(key_der_str, default_backend())
+            key_pem = key_crypto.public_bytes(
+                Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
+            PEM_KEY = key_pem.decode("UTF-8")
+            if DEBUG:
+                log.debug("PEM public key: {}".format(PEM_KEY))
+            
+            vk = ecdsa.VerifyingKey.from_pem(PEM_KEY)
+            pub_address1 = binascii.unhexlify(
+                keccak.new(digest_bits=256).update(vk.to_string()).hexdigest())[-20:]
+
+            address = "0x"+binascii.hexlify(pub_address1).decode("utf-8")
+            if DEBUG:
+                log.debug("Address: {}".format(address))
+
             return address
-
 
     def _device(self):
         return 'NXPS05X'
