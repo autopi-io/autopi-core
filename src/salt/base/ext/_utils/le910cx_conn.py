@@ -71,6 +71,16 @@ ME_ERROR_MODE_MAP = {
     ME_ERROR_MODE_VERBOSE:  "verbose",
 }
 
+PERIODIC_RESET_MODE_DISABLED = 0
+PERIODIC_RESET_MODE_ONE_SHOT = 1
+PERIODIC_RESET_MODE_PERIODIC = 2
+
+PERIODIC_RESET_MODE_MAP = {
+    PERIODIC_RESET_MODE_DISABLED: "disabled",
+    PERIODIC_RESET_MODE_ONE_SHOT: "one_shot",
+    PERIODIC_RESET_MODE_PERIODIC: "periodic",
+}
+
 class LE910CXConn(SerialConn):
     """
     Connection class that implements the communication with a LE910CX modem.
@@ -217,13 +227,64 @@ class LE910CXConn(SerialConn):
 
         return ret
 
-    def reset(self, mode=None, delay=0, help=False):
-        # TODO HN: Parse result
+    def reset(self, mode=None, delay=0):
+        """
+        Enable or disable the one shot or periodic unit reset.
+
+        Optional parameters:
+        - mode (string): The mode in which to operate the command. For available values, look below. Default: None.
+        - delay (number): Time interval in minutes after that the unit reboots. Default: 0.
+
+        Available modes:
+        - disabled: Disables unit reset.
+        - one_shot: Enables the unit reset only one time (one shot reset).
+        - periodic: Enables periodic resets of the unit.
+        """
 
         if mode == None:
-            return self.execute("AT#ENHRST?")
+            # We only query here
+            ret = {}
 
-        return self.execute("AT#ENHRST={:d},{:d}".format(mode, delay))
+            res_regex = re.compile("^#ENHRST: (?P<mode>[0-2])(,(?P<delay>[0-9]+),(?P<remain_time>[0-9]+))?$")
+            res = self.execute("AT#ENHRST?")
+
+            match = res_regex.match(res.get("data", ""))
+            if not match:
+                log.error("Didn't receive expected response: {}".format(res))
+                raise InvalidResponseException("Didn't receive expected response")
+
+            ret["mode"] = match.group("mode")
+
+            if match.group("delay"):
+                ret["delay"] = match.group("delay")
+
+            if match.group("remain_time"):
+                ret["remain_time"] = match.group("remain_time")
+
+            return ret
+
+        # Otherwise, lets set it
+        # Validate first
+        if type(mode) != str or mode not in PERIODIC_RESET_MODE_MAP.values():
+            raise ValueError("'mode' parameter must be one of {}".format(PERIODIC_RESET_MODE_MAP.values()))
+
+        if type(delay) != int:
+            raise TypeError("'delay' parameter must be an integer")
+
+        # Construct AT command
+        mode_val = dict_key_by_value(PERIODIC_RESET_MODE_MAP, mode)
+        cmd = "AT#ENHRST={:d}".format(mode_val)
+
+        # Do we need to add the delay?
+        if mode_val in [PERIODIC_RESET_MODE_ONE_SHOT, PERIODIC_RESET_MODE_PERIODIC]:
+            cmd += ",{:d}".format(delay)
+
+        # Don't keep connection if we're immediately resetting, wait for modem to come back up
+        if mode_val in [PERIODIC_RESET_MODE_ONE_SHOT, PERIODIC_RESET_MODE_PERIODIC] and delay == 0:
+            return self.execute(cmd, keep_conn=False, cooldown_delay=10)
+
+        # Keep connection otherwise, we might want to execute more commands
+        return self.execute(cmd)
 
     def time(self):
         # TODO HN: Parse result
