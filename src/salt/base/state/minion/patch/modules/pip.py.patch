@@ -1,0 +1,12 @@
+1083c1083,1091
+<             version_, name = line.split('#egg=')
+---
+>             if '#egg=' in line:
+>                 version_, name = line.split('#egg=')
+>             else:
+>                 if len(line.split('===')) >= 2:
+>                     name = line.split('===')[0]
+>                     version_ = line.split('===')[1]
+>                 elif len(line.split('==')) >= 2:
+>                     name = line.split('==')[0]
+>                     version_ = line.split('==')[1]

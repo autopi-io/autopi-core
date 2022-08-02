@@ -257,3 +257,25 @@ modules-dockermod-script-rolled-back:
     - force: true
     - onfail:
       - file: modules-dockermod-script-patched
+
+modules-pip-script-backed-up:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/pip.py.{{ _timestamp }}
+    - source: /usr/lib/python2.7/dist-packages/salt/modules/pip.py
+    - force: true
+    - prereq:
+      - file: modules-pip-script-patched
+modules-pip-script-patched:
+  file.patch:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/pip.py
+    - source: salt://minion/patch/modules/pip.py.patch
+    - hash: a469353832b60f4c1a0d08bc67a84679159e9a00
+    - watch_in:
+      - module: minion-restart-requested-after-patching
+modules-pip-script-rolled-back:
+  file.copy:
+    - name: /usr/lib/python2.7/dist-packages/salt/modules/pip.py
+    - source: /usr/lib/python2.7/dist-packages/salt/modules/pip.py.{{ _timestamp }}
+    - force: true
+    - onfail:
+      - file: modules-pip-script-patched
