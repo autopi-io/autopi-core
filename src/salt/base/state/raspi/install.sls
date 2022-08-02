@@ -21,7 +21,7 @@ pi-user-aliases-configured:
     - contents: |
         function hwtest() {
             [[ ! ("$#" == 1 && $1 =~ ^6\.[0-3]$) ]] && { echo 'Invalid or unsupported HW version specified' >&2; return 1; }
-            autopi state.sls checkout.hw pillar="{'minion': {'hw.version': $1}, 'allow_reboot': true}" 2>&1 | tee ~/hwtest.out | less -r +G && sudo bash -c "cat /home/pi/hwtest.out >> "/media/usb/hwtest-$(sed -rn "s/^serial:\s([0-9a-f]+)$/\1/p" /tmp/cryptoauth.yml).out"" && echo "Wrote result to USB drive mounted at /media/usb/"
+            autopi state.sls checkout.hw pillar="{'minion': {'hw.version': $1}, 'allow_reboot': true}" 2>&1 | tee ~/hwtest.out | less -r +G && sudo bash -c "cat /home/pi/hwtest.out >> "/media/usb/hwtest-$(sed -rn "s/^value:\s([0-9a-f]+)$/\1/p" /tmp/secure-element.yml).out"" && echo "Wrote result to USB drive mounted at /media/usb/"
         }
     - user: pi
     - group: pi
