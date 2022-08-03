@@ -45,6 +45,34 @@ def query_handler(cmd, *args, **kwargs):
     return ret
 
 
+@edmp.register_hook()
+def reset_handler(*args, **kwargs):
+    """
+    Enable or disable the one shot or periodic unit reset.
+
+    Optional parameters:
+    - mode (string): The mode in which to operate the command. For available values, look below. Default: None.
+    - delay (number): Time interval in minutes after that the unit reboots. Default: 0.
+    - reason (str): The reason the reset was performed. Default: "unspecified".
+
+    Available modes:
+    - disabled: Disables unit reset.
+    - one_shot: Enables the unit reset only one time (one shot reset).
+    - periodic: Enables periodic resets of the unit.
+    """
+
+    reason = kwargs.pop("reason", "unspecified")
+
+    res = conn.reset(*args, **kwargs)
+
+    tag = "system/device/le910cx/reset"
+    data = { "reason": reason }
+
+    __salt__["minionutil.trigger_event"](tag, data=data)
+
+    return res
+
+
 @intercept_exit_signal
 def start(**settings):
     try:

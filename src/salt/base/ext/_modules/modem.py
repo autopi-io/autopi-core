@@ -38,6 +38,24 @@ def query(cmd, *args, **kwargs):
     return client.send_sync(_msg_pack(cmd, *args, **kwargs))
 
 
+def reset(*args, **kwargs):
+    """
+    Enable or disable the one shot or periodic unit reset.
+
+    Optional parameters:
+    - mode (string): The mode in which to operate the command. For available values, look below. Default: None.
+    - delay (number): Time interval in minutes after that the unit reboots. Default: 0.
+    - reason (str): The reason the reset was performed. Default: "unspecified".
+
+    Available modes:
+    - disabled: Disables unit reset.
+    - one_shot: Enables the unit reset only one time (one shot reset).
+    - periodic: Enables periodic resets of the unit.
+    """
+
+    return client.send_sync(_msg_pack(*args, _handler="reset", **kwargs), timeout=60)
+
+
 def manage(*args, **kwargs):
     """
     Runtime management of the underlying service instance.
