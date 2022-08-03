@@ -8,7 +8,11 @@ geofence-settings-configured:
 
 geofence-settings-loaded:
   module.run:
+    {%- if salt['pillar.get']('setup:mpcie:module') in ["ec2x", "bg96"] %}
     - name: tracking.load_geofences
+    {%- else %}
+    - name: gnss.load_geofences 
+    {%- endif %}
     - require:
       - file: geofence-settings-configured
     - onchanges:
