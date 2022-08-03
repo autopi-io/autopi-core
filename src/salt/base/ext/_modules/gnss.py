@@ -33,6 +33,13 @@ def query(*args, **kwargs):
 
     return client.send_sync(_msg_pack(*args, _handler="query", **kwargs))
 
+def load_geofences(*args, **kwargs):
+    """
+    Loads geofences.
+    Optional arguments:
+      - 'path' path to the geofences file
+    """
+    return client.send_sync(_msg_pack(_handler="load_geofences", **kwargs))
 
 def manage(*args, **kwargs):
     """

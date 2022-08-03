@@ -3,7 +3,6 @@ import logging
 import pynmea2
 import salt.loader
 
-from geofence_util import read_geofence_file, is_in_circle, is_in_polygon
 from messaging import EventDrivenMessageProcessor, extract_error_from
 from salt_more import SuperiorCommandExecutionError
 from serial_conn import SerialConn
@@ -17,12 +16,6 @@ context = {
         "error": None,
         "last_recorded": None,
         "last_reported": None,
-    },
-    "geofence": {
-        "error": None,
-        "repeat_count_to_trigger_change": 3,
-        "fences": [],
-        "loaded": False
     }
 }
 
@@ -226,88 +219,6 @@ def significant_position_filter(result):
     ctx["last_reported"] = new_pos
 
     return new_pos
-
-
-@edmp.register_hook(synchronize=False)
-def geofence_event_trigger(result):
-    """
-    Listens for position results and triggers geofence inside/outside events
-    Triggers when the same reading (inside/outside) is repeated [repeat_count_to_trigger_change] times
-    """
-
-    if DEBUG:
-        log.debug("Checking geofences")
-
-    if isinstance(result, Exception):
-        if DEBUG:
-            log.debug("No data from GPS, can not determine geofence status. Exception: {}".format(result))
-        return
-
-    ctx = context["geofence"]
-    current_location = result["loc"]
-
-    if not ctx["loaded"]:
-        load_geofences_handler()
-        ctx["loaded"] = True
-
-    # Check if the vehicle has entered/exited of any of the geofences
-    for fence in ctx["fences"]:
-        if DEBUG:
-            log.debug("Checking geofence {} ({})".format(fence["id"], fence["name"]))
-
-        # Check if vehicle is inside or outside given geofence
-        if (fence["shape"] == "SHAPE_CIRCLE"  and is_in_circle(current_location, fence["coordinates"][0], fence["circle_radius"] / 1000) or
-            fence["shape"] == "SHAPE_POLYGON" and is_in_polygon(current_location, fence["coordinates"])):
-            fresh_state = "inside"
-        else:
-            fresh_state = "outside"
-
-        # Handle GF states/events after first acquiring GPS signal  
-        if fence["state"] == None:
-            fence["state"] = fresh_state
-            
-            edmp.trigger_event(
-                {"fence_id": fence["id"]},
-                "vehicle/geofence/{:s}/{:s}".format(fence["slug"], fence["state"]))
-
-        # Update or reset repeat counter
-        elif fence["last_reading"] == fresh_state:
-            fence["repeat_count"] += 1
-
-            # Trigger event and update fence state if repeat count has been reached
-            if (fence["repeat_count"] >= ctx["repeat_count_to_trigger_change"] and
-                fence["state"] != fresh_state):
-    
-                if DEBUG:
-                    log.debug("Changing state for geofence {} ({}) to {}".format(fence["id"], fence["name"], fresh_state))
-
-                fence["state"] = fresh_state
-                
-                if fence["state"] == "inside":
-                    edmp.trigger_event(
-                        {"fence_id": fence["id"]},
-                        "vehicle/geofence/{:s}/{:s}".format(fence["slug"], "enter"))
-                else:
-                    edmp.trigger_event(
-                        {"fence_id": fence["id"]},
-                        "vehicle/geofence/{:s}/{:s}".format(fence["slug"], "exit"))
-
-        else: 
-            fence["last_reading"] = fresh_state
-            fence["repeat_count"] = 0
-
-
-@edmp.register_hook(synchronize=False)
-def load_geofences_handler(path="/opt/autopi/geofence/settings.yaml"):
-    """
-    Loads geofence file
-    """
-    log.info("Loading geofence settings from {}".format(path))
-
-    context["geofence"]["fences"] = read_geofence_file(path)
-    context["geofence"]["error"] = None 
-
-    return {}
 
 
 @intercept_exit_signal
