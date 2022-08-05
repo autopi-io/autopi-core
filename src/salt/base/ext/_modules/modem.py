@@ -56,6 +56,19 @@ def reset(*args, **kwargs):
     return client.send_sync(_msg_pack(*args, _handler="reset", **kwargs), timeout=60)
 
 
+def read_sms(*args, **kwargs):
+    """
+    Reads SMS messages stored in the modem and processes them into 'system/sms/received' events.
+    Those events hold information such as the timestamp of the message (when it was received by the
+    modem), the sender and the text.
+
+    Optional parameters:
+    - clear (bool): Should the messages be deleted from the modem after being processed? Default: False.
+    """
+
+    return client.send_sync(_msg_pack(*args, _handler="read_sms", **kwargs))
+
+
 def manage(*args, **kwargs):
     """
     Runtime management of the underlying service instance.
