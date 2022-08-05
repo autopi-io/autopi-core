@@ -103,8 +103,16 @@ class LE910CXConn(SerialConn):
         Configure the modem with passed settings.
         """
 
-        if settings.get("perform_initial_nmea_escape", False):
-            self.send_nmea_escape_sequence(wait=True)
+        # Ensure modem is ready for accepting commands?
+        ready = False
+        while not ready:
+            try:
+                self.execute("ATI")
+                ready = True
+            except CommandExecutionException as e:
+                log.error("Received error {} while waiting for modem to be ready".format(e))
+                time.sleep(.5) # sleep to give time for modem to be ready?
+                continue
 
         # Configure GNSS
         if "error_config" in settings:
