@@ -104,23 +104,35 @@ class LE910CXConn(SerialConn):
         Configure the modem with passed settings.
         """
 
-        # Ensure modem is ready for accepting commands?
-        ready = False
-        while not ready:
-            try:
-                self.execute("ATI")
-                ready = True
-            except CommandExecutionException as e:
-                log.error("Received error {} while waiting for modem to be ready".format(e))
-                time.sleep(.5) # sleep to give time for modem to be ready?
-                continue
+        # NOTE NV: We have seen instances where the modem is rebooted, but then
+        # isn't ready quick enough to get configured correctly. This causes the
+        # GNSS manager to fail, so we have this sort of check here.
+        try:
+            # Ensure modem is ready to receive commands
+            ready = False
+            max_retries = 5
+            for i in range(max_retries):
+                try:
+                    self.execute("ATI")
+                    ready = True
+                    break
+                except CommandExecutionException as e:
+                    log.exception("Received error {} while waiting for modem to be ready".format(e))
+                    time.sleep(.5) # Sleep to give time for modem to be ready?
 
-        # Configure GNSS
-        if "error_config" in settings:
-            self.error_config(mode=settings["error_config"])
+            if not ready:
+                raise Exception("Modem isn't ready to receive commands yet")
 
-        if "gnss_session" in settings:
-            self.gnss_session(status=settings["gnss_session"])
+            # Configure GNSS
+            if "error_config" in settings:
+                self.error_config(mode=settings["error_config"])
+
+            if "gnss_session" in settings:
+                self.gnss_session(status=settings["gnss_session"])
+
+        except Exception as e:
+            log.exception("Error occurred while configuring LE910CX modem, closing connection")
+            self.close()
 
     def execute(self, cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None, timeout=None, raise_on_error=True):
         """
