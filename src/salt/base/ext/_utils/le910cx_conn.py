@@ -3,6 +3,7 @@ import logging
 import re
 import time
 import pynmea2
+import salt.exceptions
 
 from serial_conn import SerialConn
 from retrying import retry
@@ -305,7 +306,6 @@ class LE910CXConn(SerialConn):
         return self.execute("AT#GTP")
 
     def sms_storage(self):
-
         ret = {}
 
         res = self.execute("AT+CPMS?")
@@ -313,7 +313,6 @@ class LE910CXConn(SerialConn):
 
 
         ret["mode"] = SMS_FORMAT_MODES.get(int(re.compile("\\+CMGF: (?P<mode>[0-1])").match(res.get("data", "")).group("mode")), None)
-
 
     def sms_format(self, mode=None, force=False):
         """
@@ -347,6 +346,18 @@ class LE910CXConn(SerialConn):
     def sms_list(self, status="ALL", clear=False, format_mode="TXT"):
         """
         Returns a list of all SMS messages currently stored on the modem.
+
+        Optional parameters:
+        - status (str): The status of the messages that are to be returned. Look below for avalable options. Default: "ALL".
+        - clear (bool): Should the returned messages be removed from the modem as well?
+        - format_mode (str): The format in which the messages should be processed. Currently, only TXT mode is supported. Default: "TXT".
+
+        Available options (status):
+        - "REC UNREAD" - new messages
+        - "REC READ" - read messages
+        - "STO UNSENT" - stored messages not sent yet
+        - "STO SENT" - stored messages already sent
+        - "ALL" - all messages
         """
 
         ret = {"values": []}
@@ -358,39 +369,77 @@ class LE910CXConn(SerialConn):
 
         try:
             res = self.execute("AT+CMGL=\"{:s}\"".format(status))
+            if not res.get("data", None):
+                return ret
+
+            # Structure (per SMS) as per AT commands reference:
+            # +CMGL:<index>,<stat>,<oa/da>,<alpha>,<scts>[,<tooa/toda>,<length>]<CR><LF>
+            # <data>
+            meta_regex = re.compile("^\+CMGL: (?P<index>[0-9]+)," + \
+                    "\"(?P<status>[A-Z\s]+)\"," + \
+                    "\"(?P<sender>\+?[0-9]+)\"," + \
+                    "\"(?P<alpha>[a-zA-Z0-9]*)\"," + \
+                    "\"(?P<scts>.+)\"" + \
+                    ".*") # have to cover for some extra stuff that could occur here, look at structure above
+
+            scts_regex = re.compile("^(?P<date>[0-9]{2}\/[0-9]{2}\/[0-9]{2})," + \
+                    "(?P<time>[0-9]{2}:[0-9]{2}:[0-9]{2})(?P<offset_sign>[+-])(?P<offset>[0-9]{2})")
+
+            # NOTE NV: This could potentially cause problems if the output is unexpected, we don't check it before
+            # actually starting the loop...
             for i in range(0, len(res["data"]), 2): # Process every second one - one message is two entries in here
                 meta = res["data"][i]
                 data = res["data"][i+1]
 
-                index, msg_status, sender, _, date, time = [m.strip("\"") for m in meta[7:].split(",")]
+                # Parse meta
+                meta_match = meta_regex.match(meta)
+                if not meta_match:
+                    log.error("Didn't receive expected response from modem: {}".format(meta))
+                    raise InvalidResponseException("Didn't receive expected response")
 
-                # NV NOTE: Since the modem stores a time offset value (timezone info) we need to use that
+                # Parse timestamp (https://stackoverflow.com/a/35444511)
+                scts_match = scts_regex.match(meta_match.group("scts"))
+                if not scts_match:
+                    log.error("Didn't receive expected Service Center Time Stamp from modem: {}. Full meta line: {}".format(scts, meta))
+                    raise InvalidResponseException("Didn't receive expected response")
+
+                # NOTE NV: Since the modem stores a time offset value (timezone info) we need to use that
                 # to calculate the timestamp to be in UTC. Keep in mind that this calculation has only been
                 # tested in a single timezone and more testing might need to be done.
 
                 # example timestamp from modem:    21/11/16,14:10:00+04 (each offset increment equals 15 minutes)
                 # utc timestamp after calculation: 2021-11-16T13:10:00
-                time_offset_sign = time[-3:-2]
-                time_offset = int(time[-2:])
-                offset_duration = datetime.timedelta(minutes=(15 * time_offset))
+                offset_sign = scts_match.group("offset_sign")
+                offset = int(scts_match.group("offset"))
+                offset_duration = datetime.timedelta(minutes=(15 * offset))
 
-                msg_timestamp = datetime.datetime.strptime("{}T{}".format(date, time[:-3]), "%y/%m/%dT%H:%M:%S")
-                if time_offset_sign == "+":
+                msg_timestamp = datetime.datetime.strptime("{}T{}".format(scts_match.group("date"), scts_match.group("time")), "%y/%m/%dT%H:%M:%S")
+
+                # NOTE: When offset is positive, we need to go back in time to get to UTC
+                # NOTE: When offset is negative, we need to go forward in time to get to UTC
+                if offset_sign == "+":
                     msg_timestamp = msg_timestamp - offset_duration
-                elif time_offset_sign == "-":
+                elif offset_sign == "-":
                     msg_timestamp = msg_timestamp + offset_duration
                 else:
-                    raise Exception("Received an unexpected time offset sign: {}".format(time_offset_sign))
+                    raise Exception("Received an unexpected time offset sign: {}".format(offset_sign))
 
                 msg = {
-                    "index": int(index), # Casting this, other functions relying on this parameter expect it to be an integer
-                    "status": msg_status,
-                    "sender": sender,
+                    "index": int(meta_match.group("index")), # Casting this, other functions relying on this parameter expect it to be an integer
+                    "status": meta_match.group("status"),
+                    "sender": meta_match.group("sender"),
+                    "sender_alpha": meta_match.group("alpha"),
                     "timestamp": msg_timestamp.isoformat(),
                     "data": data,
                 }
 
                 ret["values"].append(msg)
+
+            # Finally clear messages if required
+            if bool(clear):
+                res = self.sms_delete(*[m["index"] for m in ret["values"]], confirm=True)
+                ret["clear"] = res
+
         finally:
             try:
                 self.sms_format(mode=prev_format_mode)
@@ -399,30 +448,53 @@ class LE910CXConn(SerialConn):
 
         return ret
 
-#    def sms_delete(self, *indexes, all=False, confirm=False):
-#        """
-#        Deletes SMS message(s) stored on the modem.
-#
-#        Parameters:
-#        - index (number): The index number of the message that should be deleted. Default None.
-#        - delete_all (bool): If all messages stored on the modem should be deleted. If this and the `index` parameter
-#          aren't provided, then the function will only return the delete-able messages.
-#        - confirm (bool): A confirmation flag needed to be provided when deleting messages
-#        """
-#        if index == None and delete_all == False:
-#            # Just list deleteable messages
-#            return self.execute("AT+CMGD=?")
-#
-#        if not confirm:
-#            raise salt.exceptions.CommandExecutionError(
-#                "This command will delete SMS messages stored on the modem - add parameter 'confirm=true' to continue anyway.")
-#
-#        if delete_all:
-#            log.info("Deleting *ALL* SMS messages stored in the modem's memory.")
-#            return self.execute("AT+CMGD=1,4")
-#        else:
-#            log.info("Deleting message with index {}".format(index))
-#            return self.execute("AT+CMGD={},0".format(index))
+    def sms_delete(self, *indexes, **kwargs):
+        """
+        Deletes SMS message(s) stored on the modem.
+
+        Parameters:
+        - indexes (list[number]): The indexes of the messages that should be deleted.
+
+        Optional parameters:
+        - delete_all (bool): If all messages stored should be deleted. If this parameter is set
+          the `indexes` parameter is ignored. Default: False.
+        - confirm (bool): A confirmation flag needed to delete messages. Default: False.
+        """
+        #NOTE NV: This could definitely be improved to cover all possible operations of the AT+CMGD command
+
+        delete_all = kwargs.pop("delete_all", False)
+        confirm = kwargs.pop("confirm", False)
+
+        log.info("Federlizer: user wants to delete indexes {}".format(indexes))
+
+        ret = {}
+
+        # Always confirm first!
+        if not confirm:
+            raise salt.exceptions.CommandExecutionError(
+                "This command will delete SMS messages stored on the modem - add parameter 'confirm=true' to continue anyway.")
+
+        if delete_all:
+            log.info("Deleting *ALL* SMS messages in storage!")
+            self.execute("AT+CMGD=1,4")
+            ret["deleted"] = "All stored messages deleted"
+
+        else:
+            # Delete indexes only
+            ret["deleted"] = {}
+
+            for i in indexes:
+                # Skip non int indexes
+                if type(i) is not int:
+                    ret["deleted"][i] = False
+                    log.warning("Skipping provided index {} as it's not a number".format(i))
+                    continue
+
+                log.info("Deleting message with index {}".format(i))
+                self.execute("AT+CMGD={},0".format(i))
+                ret["deleted"][i] = True
+
+        return ret
 
     def gnss_location(self, decimal_degrees=False):
         """
