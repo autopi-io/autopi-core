@@ -154,8 +154,8 @@ gather_info()
     if [ $MODEM == "le910cx" ]
     then
         echo "Using Telit modem"
-        autopi modem.query execute "AT+COPS?"
-        autopi modem.query execute "AT+CREG?;+CEREG?;+CGREG?"
+        autopi modem.connection execute "AT+COPS?"
+        autopi modem.connection execute "AT+CREG?;+CEREG?;+CGREG?"
 
     elif [ $MODEM == "ec2x" ]
     then

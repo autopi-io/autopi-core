@@ -27,9 +27,9 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
-def query(cmd, *args, **kwargs):
+def connection(cmd, *args, **kwargs):
     """
-    Queries a given command.
+    Queries a given connection class command.
 
     Arguments:
       - cmd (str): The command to query.
@@ -81,7 +81,7 @@ def manage(*args, **kwargs):
 
     Examples:
       - 'modem.manage hook list'
-      - 'modem.manage hook call query_handler status'
+      - 'modem.manage hook call connection_handler status'
       - 'modem.manage worker list *'
       - 'modem.manage worker show *'
       - 'modem.manage worker start *'
@@ -90,7 +90,7 @@ def manage(*args, **kwargs):
       - 'modem.manage worker kill *'
       - 'modem.manage reactor list'
       - 'modem.manage reactor show *'
-      - 'modem.manage run handler="query" args="[\"status\"]"'
+      - 'modem.manage run handler="connection" args="[\"status\"]"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

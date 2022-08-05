@@ -26,12 +26,12 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
-def query(*args, **kwargs):
+def connection(*args, **kwargs):
     """
     Query the connection class.
     """
 
-    return client.send_sync(_msg_pack(*args, _handler="query", **kwargs))
+    return client.send_sync(_msg_pack(*args, _handler="connection", **kwargs))
 
 def load_geofences(*args, **kwargs):
     """
@@ -53,7 +53,7 @@ def manage(*args, **kwargs):
 
     Examples:
       - 'gnss.manage hook list'
-      - 'gnss.manage hook call gnss_query_handler location'
+      - 'gnss.manage hook call connection_handler gnss_location'
       - 'gnss.manage worker list *'
       - 'gnss.manage worker show *'
       - 'gnss.manage worker start *'
@@ -62,7 +62,7 @@ def manage(*args, **kwargs):
       - 'gnss.manage worker kill *'
       - 'gnss.manage reactor list'
       - 'gnss.manage reactor show *'
-      - 'gnss.manage run handler="query" args="[\"gnss_location\"]" converter="gnss_location_to_position" returner="cloud"'
+      - 'gnss.manage run handler="connection" args="[\"gnss_location\"]" converter="gnss_location_to_position" returner="cloud"'
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

@@ -10,13 +10,13 @@ from threading_more import intercept_exit_signal
 log = logging.getLogger(__name__)
 
 context = {}
-edmp = EventDrivenMessageProcessor("gnss", context=context, default_hooks={"workflow": "extended"})
+edmp = EventDrivenMessageProcessor("gnss", context=context, default_hooks={"workflow": "extended", "handler": "connection"})
 
 conn = LE910CXConn()
 
 
 @edmp.register_hook()
-def query_handler(cmd, *args, **kwargs):
+def connection_handler(cmd, *args, **kwargs):
     """
     Queries a given command down to the connection class.
 

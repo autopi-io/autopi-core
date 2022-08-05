@@ -11,15 +11,15 @@ log = logging.getLogger(__name__)
 context = {}
 
 # Message processor
-edmp = EventDrivenMessageProcessor("modem", context=context, default_hooks={"workflow": "extended", "handler": "query"})
+edmp = EventDrivenMessageProcessor("modem", context=context, default_hooks={"workflow": "extended", "handler": "connection"})
 
 conn = LE910CXConn()
 
 
 @edmp.register_hook()
-def query_handler(cmd, *args, **kwargs):
+def connection_handler(cmd, *args, **kwargs):
     """
-    Queries a given command.
+    Queries a given connection class command.
 
     Arguments:
       - cmd (str): The command to query.
