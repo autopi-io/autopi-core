@@ -6,10 +6,10 @@ import re
 from messaging import extract_error_from, filter_out_unchanged, keyword_resolve
 from salt_more import cached_loader
 from timeit import default_timer as timer
-
+from geofence_util import read_geofence_file, is_in_circle, is_in_polygon
 
 log = logging.getLogger(__name__)
-
+DEBUG = log.isEnabledFor(logging.DEBUG)
 
 def echo_handler(*args, **kwargs):
     """
@@ -236,3 +236,87 @@ def kernel_error_event_trigger(result):
 
         # Store last reported entry
         ctx["last_reported"] = entry
+
+
+def geofence_event_trigger(result):
+    """
+    Listens for position results and triggers geofence inside/outside and enter/exit events
+    inside/outside - triggered on startup
+    enter/exit - triggered during driving
+    Change happens when the same result is repeated [repeat_count_to_trigger_change] times
+    """
+
+    if isinstance(result, Exception):
+        if DEBUG:
+            log.debug("No data from GPS, can not determine geofence status. Exception: {}".format(result))
+        return
+    
+    # Set up the geofence part of the context
+    if not __context__.get("geofence"):
+        if DEBUG:
+            log.debug("Creating Geofence context")
+
+        __context__["geofence"] = {   
+            "error": None,
+            "repeat_count_to_trigger_change": 3,
+            "fences": [],
+            "loaded": False
+        }
+    ctx = __context__.get("geofence")
+
+    if not ctx["loaded"]:
+        load_geofences_handler()
+        ctx["loaded"] = True
+
+    # Check if the vehicle has entered/exited of any of the geofences
+    current_location = result["loc"]
+
+    for fence in ctx["fences"]:
+        if DEBUG:
+            log.debug("Checking geofence {} ({})".format(fence["id"], fence["name"]))
+
+        # Check if vehicle is inside or outside given geofence
+        if (fence["shape"] == "SHAPE_CIRCLE"  and is_in_circle(current_location, fence["coordinates"][0], fence["circle_radius"] / 1000) or
+            fence["shape"] == "SHAPE_POLYGON" and is_in_polygon(current_location, fence["coordinates"])):
+            fresh_state = "inside"
+        else:
+            fresh_state = "outside"
+
+        # Handle GF states/events after first acquiring GPS signal  
+        if fence["state"] == None:
+            fence["state"] = fresh_state
+            __salt__["minionutil.trigger_event"]("vehicle/geofence/{:s}/{:s}".format(fence["slug"], fence["state"]), {"fence_id": fence["id"]})
+
+        # Update or reset repeat counter
+        elif fence["last_reading"] == fresh_state:
+            fence["repeat_count"] += 1
+
+            # Trigger event and update fence state if repeat count has been reached
+            if (fence["repeat_count"] >= ctx["repeat_count_to_trigger_change"] and
+                fence["state"] != fresh_state):
+    
+                if DEBUG:
+                    log.debug("Changing state for geofence {} ({}) to {}".format(fence["id"], fence["name"], fresh_state))
+
+                fence["state"] = fresh_state
+                
+                if fence["state"] == "inside":
+                    __salt__["minionutil.trigger_event"]("vehicle/geofence/{:s}/{:s}".format(fence["slug"], "enter"), {"fence_id": fence["id"]})
+                else:
+                    __salt__["minionutil.trigger_event"]("vehicle/geofence/{:s}/{:s}".format(fence["slug"], "exit"), {"fence_id": fence["id"]})
+
+        else: 
+            fence["last_reading"] = fresh_state
+            fence["repeat_count"] = 0
+
+
+def load_geofences_handler(path="/opt/autopi/geofence/settings.yaml"):
+    """
+    Loads geofence file
+    """
+    log.info("Loading geofence settings from {}".format(path))
+
+    __context__["geofence"]["fences"] = read_geofence_file(path)
+    __context__["geofence"]["error"] = None 
+
+    return {}
