@@ -2,10 +2,12 @@ import logging
 import RPi.GPIO as gpio
 import time
 import datetime
+import persistence
 
 from messaging import EventDrivenMessageProcessor
 from threading_more import intercept_exit_signal
 
+PERSISTENCE_ACTION_HISTORY_OBJECT_NAME = "keyfob_action_history"
 
 USER_EXT1_PIN_WIRES = {
     "green":   7,
@@ -135,6 +137,11 @@ def add_action_to_history(action):
     history.insert(0, action)
     context["action_history"] = history[:10]
 
+    try:
+        persistence.save_object(PERSISTENCE_ACTION_HISTORY_OBJECT_NAME, context["action_history"])
+    except Exception as err:
+        log.error("Failed to save keyfob action history. Exception: {}".format(err))
+
 
 @edmp.register_hook()
 def power_handler(value=None):
@@ -241,7 +248,7 @@ def action_handler(*names):
 
         # Add action to the history
         history_entry = {
-            "name": names,
+            "name": name,
             "timestamp": datetime.datetime.utcnow(),
         }
         add_action_to_history(history_entry)
@@ -342,6 +349,9 @@ def start(**settings):
             _init_pins()
         else:
             log.info("Postpones initialization of GPIO pins")
+
+        # Load persistent context
+        context["action_history"] = persistence.load_object(PERSISTENCE_ACTION_HISTORY_OBJECT_NAME, default=[])
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
