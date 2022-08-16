@@ -1,6 +1,7 @@
 import logging
 import RPi.GPIO as gpio
 import time
+import datetime
 
 from messaging import EventDrivenMessageProcessor
 from threading_more import intercept_exit_signal
@@ -26,7 +27,8 @@ USER_EXT2_PIN_WIRES = {
 log = logging.getLogger(__name__)
 
 context = {
-    "pin_wires": {}
+    "pin_wires": {},
+    "action_history": [],   # Store last 10 attempted actions, lowest index = most recent
 }
 
 # Message processor
@@ -126,6 +128,12 @@ def _deinit_pins():
         return True
 
     return False
+
+
+def add_action_to_history(action):
+    history = context["action_history"]
+    history.insert(0, action)
+    context["action_history"] = history[:10]
 
 
 @edmp.register_hook()
@@ -230,6 +238,13 @@ def action_handler(*names):
                 if log.isEnabledFor(logging.DEBUG):
                     log.debug("Setting GPIO output pin {:} to {:d}".format(gpio_pin, initial))
                 gpio.output(gpio_pin, initial)
+
+        # Add action to the history
+        history_entry = {
+            "name": names,
+            "timestamp": datetime.datetime.utcnow(),
+        }
+        add_action_to_history(history_entry)
 
         # Trigger key fob action event
         edmp.trigger_event(
