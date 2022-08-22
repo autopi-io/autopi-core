@@ -31,6 +31,20 @@ gpio-shutdown-enabled:
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
+{%- if salt["pillar.get"]("minion:hw.version", default=0.0) >= 7.0 %}
+i2c0-module-enabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtparam=(i2c_vc|i2c0).*$"
+    - repl: "dtoverlay=i2c0,pins_44_45=on"
+    - append_if_not_found: true
+i2c1-module-enabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtparam=(i2c_arm|i2c1).*$"
+    - repl: "dtoverlay=i2c1"
+    - append_if_not_found: true
+{%- else %}
 i2c-module-enabled:
   file.replace:
     - name: /boot/config.txt
@@ -42,6 +56,7 @@ i2c-module-reloaded:
     - name: modprobe i2c-bcm2708
     - onchanges:
       - file: i2c-module-enabled
+{%- endif %}
 
 i2c-dev-module-enabled:
   file.replace:
