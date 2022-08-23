@@ -1,6 +1,9 @@
 
 from RPi.GPIO import BOARD
 
+"""
+Note: Only valid for SPM versions before 4.0
+"""
 
 MODE = BOARD
 
@@ -13,7 +16,7 @@ RPI_SHUTDN = 22  # GPIO25 only on SPM 2.X (high = perform shutdown, low = keep r
 
 LED        = 32  # GPIO12 only on SPM 2.X
 
-ACC_INT   = 29  # GPIO05
+ACC_INT    = 29  # GPIO05
 
 SPI_CLK    = 36  # GPIO16
 SPI_MOSI   = 11  # GPIO17

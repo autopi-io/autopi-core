@@ -183,14 +183,15 @@ def start(**settings):
 
         context["mixer"]["settings"] = settings["mixer"]
 
-        gpio.setwarnings(False)
-        gpio.setmode(gpio.BOARD)
-        gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
+        if __opts__.get("spm.version", 1.0) < 4.0:
+            gpio.setwarnings(False)
+            gpio.setmode(gpio.BOARD)
+            gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
 
-        # Ensure amplifier is powered on
-        gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
-        if log.isEnabledFor(logging.DEBUG):
-            log.debug("Initially powered on amplifier chip by setting GPIO pin #%d high", gpio_pin.AMP_ON)
+            # Ensure amplifier is powered on
+            gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
+            if log.isEnabledFor(logging.DEBUG):
+                log.debug("Initially powered on amplifier chip by setting GPIO pin #%d high", gpio_pin.AMP_ON)
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
