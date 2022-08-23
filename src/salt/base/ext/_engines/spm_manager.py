@@ -170,6 +170,10 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 
     ret = {}
 
+    if part_id == "rb2040":
+        raise NotImplementedError("Sorry, not yet implemented - ask HN")
+
+
     if not os.path.exists(hex_file):
         raise ValueError("Hex file does not exist")
 
