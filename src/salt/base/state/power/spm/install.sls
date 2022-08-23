@@ -17,12 +17,14 @@ spm-release-installed:
     - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.hex
     {%- if salt["pillar.get"]("power:firmware:version").startswith("1.") %}
     - part_id: t24
-    {%- else %}
+    {%- elif salt["pillar.get"]("power:firmware:version")|float < 4.0 %}
     - part_id: t88
+    {%- else %}
+    - part_id: rb2040
     {%- endif %}
     - version: "{{ salt["pillar.get"]("power:firmware:version") }}"
 
-{%- if salt["pillar.get"]("power:firmware:version")|float >= 3.0 %}
+{%- if not salt["pillar.get"]("power:firmware:version").startswith("1.") and 3.0 <= salt["pillar.get"]("power:firmware:version")|float < 4.0 %}
 spm-bod-fuse-configured:
   module_extra.configured:
     - name: spm.fuse
