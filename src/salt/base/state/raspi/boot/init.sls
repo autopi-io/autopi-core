@@ -13,7 +13,11 @@ gpio-poweroff-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-poweroff.*$"
+    {%- if salt["pillar.get"]("minion:spm.version", default=0.0) >= 4.0 %}
+    - repl: "dtoverlay=gpio-poweroff,gpiopin=25,active_low=y"
+    {%- else %}
     - repl: "dtoverlay=gpio-poweroff,gpiopin=4,active_low=y"
+    {%- endif %}
     - append_if_not_found: true
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
@@ -22,7 +26,9 @@ gpio-shutdown-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-shutdown.*$"
-    {%- if salt["pillar.get"]("power:firmware:version", default=3.0)|float >= 2.0 %}
+    {%- if salt["pillar.get"]("minion:spm.version", default=0.0) >= 4.0 %}
+    - repl: "dtoverlay=gpio-shutdown,gpio_pin=16,gpio_pull=down,active_low=n"
+    {%- elif salt["pillar.get"]("minion:spm.version", default=3.0) >= 2.0 %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=25,gpio_pull=down,active_low=n"
     {%- else %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=12,gpio_pull=up"
