@@ -38,16 +38,23 @@ gpio-shutdown-enabled:
       - module: reboot-requested-after-boot-config-changed
 
 {%- if salt["pillar.get"]("minion:hw.version", default=0.0) >= 7.0 %}
+usb-enabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=dwc2.*$"
+    - repl: "dtoverlay=dwc2,dr_mode=host"
+    - append_if_not_found: true
+
 i2c0-module-enabled:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtparam=(i2c_vc|i2c0).*$"
+    - pattern: "^#?(dtparam=i2c_vc|dtoverlay=i2c0).*$"
     - repl: "dtoverlay=i2c0,pins_44_45=on"
     - append_if_not_found: true
 i2c1-module-enabled:
   file.replace:
     - name: /boot/config.txt
-    - pattern: "^#?dtparam=(i2c_arm|i2c1).*$"
+    - pattern: "^#?(dtparam=i2c_arm|dtoverlay=i2c1).*$"
     - repl: "dtoverlay=i2c1"
     - append_if_not_found: true
 {%- else %}
