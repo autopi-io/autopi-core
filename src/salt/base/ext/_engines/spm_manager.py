@@ -279,7 +279,7 @@ def start(**settings):
             conn = SPM4Conn()
             conn.init(settings["spm4_conn"])
 
-        if "spm3_conn" in settings:  # Version 3.X
+        elif "spm3_conn" in settings:  # Version 3.X
             from spm3_conn import SPM3Conn
 
             conn = SPM3Conn()
