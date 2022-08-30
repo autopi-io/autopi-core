@@ -172,7 +172,9 @@ can1-configured:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can1),spi0-1.*$"
-    {%- if salt["pillar.get"]("minion:hw.version") in [6.0, 6.2] %}
+    {%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
+    - repl: "dtoverlay=mcp2515,spi0-1,interrupt=17,oscillator=8000000,speed=20000000"
+    {%- elif salt["pillar.get"]("minion:hw.version") in [6.0, 6.2] %}
     - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=15,oscillator=40000000,speed=20000000"
     {%- else %}
     - repl: "dtoverlay=mcp2515,spi0-1,interrupt=15,oscillator=8000000,speed=20000000"
@@ -183,7 +185,9 @@ can0-configured:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can0),spi0-0.*$"
-    {%- if salt["pillar.get"]("minion:hw.version") == 6.0 %}
+    {%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
+    - repl: "dtoverlay=mcp2515,spi0-0,interrupt=4,oscillator=8000000,speed=20000000"
+    {%- elif salt["pillar.get"]("minion:hw.version") == 6.0 %}
     - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"
     {%- else %}
     - repl: "dtoverlay=mcp2515,spi0-0,interrupt=14,oscillator=8000000,speed=20000000"
