@@ -148,7 +148,7 @@ rtc-i2c-present-test:
 
 crypto-i2c-present-test:
   cmd.run:
-    {%- if salt['config.get']('hw.version', salt["pillar.get"]("minion:hw.version")) in [6.2, 6.3] %}
+    {%- if salt["pillar.get"]("minion:hw.version", salt['config.get']('hw.version')) in [6.2, 6.3] %}
     - name: "i2cdetect -y 1 | grep '40:.*48'"
     {%- else %}
     - name: "i2cdetect -y 1 | grep '60:.*60'"
