@@ -185,24 +185,39 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
     return ret
 
 
-def update_release(force=False, dry_run=False, only_retry=False):
+def update_release(force=False, demand=False, dry_run=False, only_retry=False, reset_attempts=False):
     """
     Update a minion to newest release by running a highstate if not already up-to-date.
 
     Optional arguments:
-      - force (bool): Default is 'False'.
-      - dry_run (bool): Default is 'False'.
-      - only_retry (bool): Default is 'False'.
+      - force (bool): Default is 'False'. Force an update, skipping all checks that would stop the update from occuring.
+      - demand (bool): Default is 'False'. Demand an update, even if the device is already in the latest version.
+      - dry_run (bool): Default is 'False'. Don't actually perform the update.
+      - only_retry (bool): Default is 'False'. Perform an update only if it is in the retrying state.
+      - reset_attempts (bool): Default is 'False'. Set this to true if you want to reset the attempts counter that limits the amount of failed update retries.
+
+    Notes:
+      - The difference between the 'force' and 'demand' arguments is that 'demand' is used to perform an update even if the device is already up-to-date.
+        It will not skip over the maximum allowed failed update retries. 'force' on the other hand will do both, it will perform an update on the device,
+        even if it's already up to date, but will also skip over the maximum allowed failed updates. In other words, they are almost the same, except that
+        'force' will skip over the retry limit.
     """
+
+    # TODO: Check how the update procedure is done during chekckout - we don't want the devices to stop updating even if they are far over the allowed attempts - force=True?
 
     old = __salt__["grains.get"]("release", default={"id": None, "state": None})
     if not "state" in old:  # Added for backwards compatibility
         old["state"] = None
     new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
 
+    # TODO: Maybe make this into a one-liner?
+    # Be sure to keep track of retry attempts
+    retry_attempts = old.setdefault("attempts", 0)
+    new["attempts"] = retry_attempts
+
     # Determine if latest release is already updated or pending
     if old["state"] == "updated" and old["id"] == new["id"]:
-        if force:
+        if force or demand: # Force an update if we demand it or force it
             new["state"] = "forcing"
         else:
             new["state"] = "updated"
@@ -231,6 +246,25 @@ def update_release(force=False, dry_run=False, only_retry=False):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("No failed update is pending for retry")
 
+        return ret
+
+    # Should we reset the attempts counter?
+    if reset_attempts:
+        log.warning("Resetting attempts count because 'reset_attempts' flag was set")
+        new["attempts"] = 0
+
+    if new["id"] != old["id"]:
+        log.warning("Resetting attempts count because release ID has updated")
+        new["attempts"] = 0
+
+    # TODO: make this into a configurable value
+    HARDCODED_MAX_ATTEMPTS = 5
+    # If we've hit the limit of retries, don't perform the update
+    # But, if we have set 'force' to true, perform the update anyways
+    if new["attempts"] >= HARDCODED_MAX_ATTEMPTS and not force:
+        # TODO
+        log.info("Federlizer: maximum attempts have been reached, skipping update")
+        # TODO: Consider triggering an event
         return ret
 
     if new["state"] in ["pending", "forcing", "retrying"]:
@@ -309,11 +343,19 @@ def update_release(force=False, dry_run=False, only_retry=False):
             if all(v.get("result", False) for k, v in ret["highstate"].iteritems()):
                 log.info("Completed highstate for release '{:}'".format(new["id"]))
 
+                # Succesful update, remove the attempts count
+                try:
+                    # TODO: test to see if this actually works
+                    new.pop("attempts")
+                except KeyError as e:
+                    log.warning("Unable to pop 'attempts' key from 'new' object", e)
                 new["state"] = "updated"
 
             else:
                 log.warn("Unable to complete highstate for release '{:}'".format(new["id"]))
 
+                # Failed update, increment the attempts count
+                new["attempts"] += 1
                 new["state"] = "failed"
 
             # Register 'updated' or 'failed' release in grains
