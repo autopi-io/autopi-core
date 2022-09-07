@@ -566,17 +566,29 @@ class LE910CXConn(SerialConn):
         # Calculate decimal degrees if requested
         # dd = deg + min/60 + sec/3600
         if decimal_degrees:
+            # Calculate latitude
             lat = match.group("lat")
             lat_deg = float(lat[:2])
             lat_min = float(lat[2:-1])
+            lat_direction = lat[-1]
 
+            lat_dd = lat_deg + (lat_min/60)
+            if lat_direction == "S": # multiply by -1
+                lat_dd = lat_dd * -1
+
+            # Calculate longitude
             lon = match.group("lon")
             lon_deg = float(lon[:3])
             lon_min = float(lon[3:-1])
+            lon_direction = lon[-1]
+
+            lon_dd = lon_deg + (lon_min/60)
+            if lon_direction == "W": # multiply by -1
+                lon_dd = lon_dd * -1
 
             # TODO NV: Maybe round them?
-            ret["lat"] = lat_deg + (lat_min/60)
-            ret["lon"] = lon_deg + (lon_min/60)
+            ret["lat"] = lat_dd
+            ret["lon"] = lon_dd
 
         else:
             ret["lat"] = match.group("lat")
