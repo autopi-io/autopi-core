@@ -563,8 +563,16 @@ class LE910CXConn(SerialConn):
             "nsat_glonass": int(match.group("nsat_glonass")),
         }
 
-        # Calculate decimal degrees if requested
-        # dd = deg + min/60 + sec/3600
+        """
+        Calculate decimal degrees if requested
+        The calculation is based on the formula below
+        (https://stackoverflow.com/questions/33997361/how-to-convert-degree-minute-second-to-degree-decimal)
+
+        dd = deg + min/60 + sec/3600
+
+        Keep in mind that the last character (N|S for latitude and W|E for longitude) defines if the decimal degree
+        needs to be positive or negative. More info in the link above.
+        """
         if decimal_degrees:
             # Calculate latitude
             lat = match.group("lat")
