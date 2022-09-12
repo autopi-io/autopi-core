@@ -46,8 +46,9 @@ VOLT_TRIGGER_WAKE_CHANGE      = (1 << 0x02)
 SYS_PIN_IN_RPI_PWR      = (1 << 0x00)
 SYS_PIN_OUT_SW_5V       = (1 << 0x01)
 SYS_PIN_OUT_SW_3V3      = (1 << 0x02)
-SYS_PIN_OUT_RPI_SHUTDN  = (1 << 0x03)
-SYS_PIN_OUT_MODEM_DTR   = (1 << 0x04)
+SYS_PIN_OUT_SW_AMP      = (1 << 0x03)
+SYS_PIN_OUT_RPI_SHUTDN  = (1 << 0x04)
+SYS_PIN_OUT_MODEM_DTR   = (1 << 0x05)
 
 # Usr pins
 USR_PIN_OUT_CAN0_TERM  = (1 << 0x00)
@@ -115,6 +116,7 @@ SYS_PINS_IN = {
 SYS_PINS_OUT = {
     "sw_5v":       SYS_PIN_OUT_SW_5V,
     "sw_3v3":      SYS_PIN_OUT_SW_3V3,
+    "sw_amp":      SYS_PIN_OUT_SW_AMP,
     "rpi_shutdn":  SYS_PIN_OUT_RPI_SHUTDN,
     "modem_dtr":   SYS_PIN_OUT_MODEM_DTR
 }
