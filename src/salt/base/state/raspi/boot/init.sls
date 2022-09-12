@@ -13,11 +13,7 @@ gpio-poweroff-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-poweroff.*$"
-    {%- if salt["pillar.get"]("minion:spm.version", default=0.0) >= 4.0 %}
-    - repl: "dtoverlay=gpio-poweroff,gpiopin=25,active_low=y"
-    {%- else %}
     - repl: "dtoverlay=gpio-poweroff,gpiopin=4,active_low=y"
-    {%- endif %}
     - append_if_not_found: true
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
@@ -26,9 +22,7 @@ gpio-shutdown-enabled:
   file.replace:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=gpio-shutdown.*$"
-    {%- if salt["pillar.get"]("minion:spm.version", default=0.0) >= 4.0 %}
-    - repl: "dtoverlay=gpio-shutdown,gpio_pin=16,gpio_pull=down,active_low=n"
-    {%- elif salt["pillar.get"]("minion:spm.version", default=3.0) >= 2.0 %}
+    {%- if salt["pillar.get"]("minion:spm.version", default=3.0) >= 2.0 %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=25,gpio_pull=down,active_low=n"
     {%- else %}
     - repl: "dtoverlay=gpio-shutdown,gpio_pin=12,gpio_pull=up"
@@ -186,7 +180,7 @@ can0-configured:
     - name: /boot/config.txt
     - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can0),spi0-0.*$"
     {%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
-    - repl: "dtoverlay=mcp2515,spi0-0,interrupt=4,oscillator=8000000,speed=20000000"
+    - repl: "dtoverlay=mcp2515,spi0-0,interrupt=16,oscillator=8000000,speed=20000000"
     {%- elif salt["pillar.get"]("minion:hw.version") == 6.0 %}
     - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"
     {%- else %}
