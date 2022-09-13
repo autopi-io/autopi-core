@@ -500,6 +500,7 @@ def start(**settings):
 
         # Initialize serial connection
         conn.init(settings["serial_conn"])
+        conn.on_open = lambda: _exec("ATE1")  # Ensure echo is on
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
