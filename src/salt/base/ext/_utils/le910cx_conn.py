@@ -89,16 +89,14 @@ class LE910CXConn(SerialConn):
 
     def __init__(self):
         super(LE910CXConn, self).__init__()
-        self._startup_settings = {}
 
     def init(self, settings):
         super(LE910CXConn, self).init(settings)
-        self._startup_settings = settings
 
     def open(self):
         super(LE910CXConn, self).open()
         self.config(self._settings)
-
+        
     def config(self, settings):
         """
         Configure the modem with passed settings.
@@ -122,6 +120,9 @@ class LE910CXConn(SerialConn):
 
             if not ready:
                 raise Exception("Modem isn't ready to receive commands yet")
+
+            # Configure echo on/off
+            self.execute("ATE{:d}".format(settings.get("echo_on", True)))
 
             # Configure GNSS
             if "error_config" in settings:
@@ -157,7 +158,7 @@ class LE910CXConn(SerialConn):
             self.write_line(cmd)
 
             for ready_word in ready_words:
-                res = self.read_until(ready_word, error_regex, timeout=timeout)
+                res = self.read_until(ready_word, error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
 
                 if "error" in res:
                     log.error("Command {} returned error {}".format(cmd, res["error"]))
@@ -764,6 +765,6 @@ class LE910CXConn(SerialConn):
 
         if wait:
             # Wait for the port to become available again
-            res = self.read_until("NO CARRIER", error_regex, timeout=timeout)
+            res = self.read_until("NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
             return res
 
