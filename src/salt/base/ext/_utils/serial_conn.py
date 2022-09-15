@@ -39,7 +39,7 @@ class SerialConn(object):
             return decorator
 
     def __init__(self):
-        self.on_open = None
+        pass
 
     def init(self, settings):
         if "device" in settings:
@@ -73,12 +73,6 @@ class SerialConn(object):
 
         try :
             self._serial.open()
-
-            if self.on_open:
-                try:
-                    self.on_open()
-                except:
-                    log.exception("Error in 'on_open' event handler")
 
             return self
         except Exception:
