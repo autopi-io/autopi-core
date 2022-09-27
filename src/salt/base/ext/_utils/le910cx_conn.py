@@ -33,6 +33,12 @@ class CommandExecutionException(LE910CXException):
     pass
 
 
+class NoSimPresentException(LE910CXException):
+    def __init__(self, message="No SIM present"):
+        self.message = message
+        super(NoSimPresentException, self).__init__(message)
+
+
 SMS_FORMAT_MODE_PUD = 0
 SMS_FORMAT_MODE_TEXT = 1
 
@@ -353,16 +359,17 @@ class LE910CXConn(SerialConn):
         return self.execute(cmd)
 
     def time(self):
-        # TODO HN: Parse result
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         return self.execute("AT+CCLK?")
 
     def cell_location(self):
-        # TODO HN: Parse result
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         return self.execute("AT#GTP")
 
     def sms_storage(self):
+        # TODO NV: Improve to be consistent with the rest of the class implementation
         ret = {}
 
         res = self.execute("AT+CPMS?")
@@ -379,6 +386,7 @@ class LE910CXConn(SerialConn):
         - 'pud': PUD mode
         - 'txt': Text mode
         """
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         ret = {}
 
@@ -416,6 +424,11 @@ class LE910CXConn(SerialConn):
         - "STO SENT" - stored messages already sent
         - "ALL" - all messages
         """
+
+        # First check if the SIM is present
+        sim = self.query_sim_status()
+        if sim["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
+            raise NoSimPresentException()
 
         ret = {"values": []}
 
