@@ -82,9 +82,35 @@ PERIODIC_RESET_MODE_MAP = {
     PERIODIC_RESET_MODE_PERIODIC: "periodic",
 }
 
+FW_NET_CONF_ATT     = 0
+FW_NET_CONF_VERIZON = 1
+FW_NET_CONF_BELL    = 3
+FW_NET_CONF_TELUS   = 4
+FW_NET_CONF_GLOBAL  = 40
+
+FW_NET_CONF_MAP = {
+    FW_NET_CONF_ATT:     "att",
+    FW_NET_CONF_VERIZON: "verizon",
+    FW_NET_CONF_BELL:    "bell",
+    FW_NET_CONF_TELUS:   "telus",
+    FW_NET_CONF_GLOBAL:  "global",
+}
+
+FW_STORAGE_CONF_RAM = 0
+FW_STORAGE_CONF_NVM = 1
+
+FW_STORAGE_CONF_MAP = {
+    FW_STORAGE_CONF_RAM: "ram",
+    FW_STORAGE_CONF_NVM: "nvm",
+}
+
 class LE910CXConn(SerialConn):
     """
     Connection class that implements the communication with a LE910CX modem.
+
+    A pattern that is required throughout this connection class is the use of a 'force' argument on get/set commands.
+    This means that the modem should always query the command's current status and then, only if needed or forced by
+    the 'force' argument, the set command should be run.
     """
 
     def __init__(self):
@@ -768,3 +794,73 @@ class LE910CXConn(SerialConn):
             res = self.read_until("NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
             return res
 
+    def active_firmware_image(self, net_conf=None, storage_conf=None, force=False):
+        """
+        Gets or sets the active firmware configuration on the modem. Don't pass any arguments to query (get) the
+        current configuration. If the command results in changing the firmware configuration it will reboot the modem.
+
+        Optional parameters:
+        - net_conf (string): The configuration that the modem should be set to. Check below for available configurations.
+          Default: None.
+        - storage_conf (string): The storage configuration. As per modem AT command documentation, this is just a dummy
+          argument preserved for backwards compatibility. Default: None.
+        - force (bool): Force apply the configuration to the modem. Default: False.
+
+        Available configurations:
+        - att: AT&T
+        - verizon: Verizon
+        - bell: Bell
+        - telus: Telus
+        - global: Global
+        """
+
+        # NOTE NV: It looks like, as per modem's AT command reference, there is an extra argument available on the
+        # command (restore_user_conf). However, while testing this on an LE910C4-WWXD modem, I wasn't able to get that
+        # argument to work, it always came back with an error. So, I've ommited it.
+
+        ret = {}
+        res = self.execute("AT#FWSWITCH?")
+
+        # Response format:
+        # #FWSWITCH: <net_conf>,<storage_conf>
+        # #FWSWITCH: <net_conf>,<storage_conf>,<restore_user_conf>??? <- look at note above
+        res_regex = re.compile("^#FWSWITCH: (?P<net_conf>[0-9]+),(?P<storage_conf>[0-2])")
+        match = res_regex.match(res.get("data", ""))
+
+        if not match:
+            log.error("Didn't receive expected response from mode: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        ret["net_conf"] = FW_NET_CONF_MAP[int(match.group("net_conf"))]
+        ret["storage_conf"] = FW_STORAGE_CONF_MAP[int(match.group("storage_conf"))]
+
+        if storage_conf != None and net_conf == None:
+            raise ValueError("You must set 'net_conf' value if you're also setting 'storage_conf' value")
+
+        if net_conf != None:
+            if type(net_conf) != str or net_conf not in FW_NET_CONF_MAP.values():
+                raise ValueError("'net_conf' needs to be one of {}".format(FW_NET_CONF_MAP.values()))
+
+            if ret["net_conf"] != net_conf or force:
+                net_conf_val = dict_key_by_value(FW_NET_CONF_MAP, net_conf)
+                cmd = "AT#FWSWITCH={:d}".format(net_conf_val)
+                ret["net_conf"] = net_conf
+
+                # Also decide storage method, although as per AT command spec, this is just a dummy parameter
+                if storage_conf != None:
+                    # Use passed value
+                    if type(storage_conf) != str or storage_conf not in FW_STORAGE_CONF_MAP.values():
+                        raise ValueError("'storage_conf' needs to be one of {}".format(FW_STORAGE_CONF_MAP.values()))
+
+                    storage_conf_val = dict_key_by_value(FW_STORAGE_CONF_MAP, storage_conf)
+                    cmd = "{},{:d}".format(cmd, storage_conf_val)
+                    ret["storage_conf"] = storage_conf
+
+                else:
+                    # Otherwise, just use the one set currently
+                    cmd = "{},{:d}".format(cmd, int(match.group("storage_conf")))
+
+                # Since the modem will restart, we give up the connection and give it time to reboot
+                self.execute(cmd, keep_conn=False, cooldown_delay=20)
+
+        return ret
