@@ -109,6 +109,19 @@ FW_STORAGE_CONF_MAP = {
     FW_STORAGE_CONF_NVM: "nvm",
 }
 
+QSS_STATUS_NOT_INSERTED              = 0
+QSS_STATUS_INSERTED                  = 1
+QSS_STATUS_INSERTED_AND_PIN_UNLOCKED = 2
+QSS_STATUS_INSERTED_AND_READY        = 3
+
+QSS_MAP = {
+    QSS_STATUS_NOT_INSERTED:              "not-inserted",
+    QSS_STATUS_INSERTED:                  "inserted",
+    QSS_STATUS_INSERTED_AND_PIN_UNLOCKED: "inserted-and-pin-unlocked",
+    QSS_STATUS_INSERTED_AND_READY:        "inserted-and-ready",
+}
+
+
 class LE910CXConn(SerialConn):
     """
     Connection class that implements the communication with a LE910CX modem.
@@ -867,5 +880,30 @@ class LE910CXConn(SerialConn):
 
                 # Since the modem will restart, we give up the connection and give it time to reboot
                 self.execute(cmd, keep_conn=False, cooldown_delay=20)
+
+        return ret
+
+    def query_sim_status(self):
+        """
+        TODO
+        """
+
+
+        # NOTE NV: It is possible to setup unsolicited messages (<mode>), however I skipped it for this implementation
+        # since we're not listening to those anyways.
+
+        ret = {}
+        res = self.execute("AT#QSS?")
+
+        # Response format
+        # #QSS: <mode>,<status>
+        res_regex = re.compile("^#QSS: (?P<mode>[0-2]),(?P<status>[0-3])")
+        match = res_regex.match(res.get("data", ""))
+
+        if not match:
+            log.error("Didn't receive expected response from modem: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        ret["status"] = QSS_MAP[int(match.group("status"))]
 
         return ret
