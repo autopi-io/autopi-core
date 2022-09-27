@@ -898,7 +898,13 @@ class LE910CXConn(SerialConn):
 
     def query_sim_status(self):
         """
-        TODO
+        Queries for the current SIM status.
+
+        Possible return values:
+        - not-inserted
+        - inserted
+        - inserted-and-pin-unlocked
+        - inserted-and-ready
         """
 
 
