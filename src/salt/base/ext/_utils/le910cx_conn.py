@@ -705,7 +705,7 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from mode: {}".format(res))
+            log.error("Didn't receive expected response from modem: {}".format(res))
             raise InvalidResponseException("Didn't receive expected response")
 
         # Construct return value
@@ -833,7 +833,7 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from mode: {}".format(res))
+            log.error("Didn't receive expected response from modem: {}".format(res))
             raise InvalidResponseException("Didn't receive expected response")
 
         ret["net_conf"] = FW_NET_CONF_MAP[int(match.group("net_conf"))]
