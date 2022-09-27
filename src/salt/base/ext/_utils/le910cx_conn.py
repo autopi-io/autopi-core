@@ -18,11 +18,16 @@ error_regex = re.compile("ERROR|\+(?P<type>.+) ERROR: (?P<reason>.+)")
 class LE910CXException(Exception):
     pass
 
+
 class NoFixException(LE910CXException):
-    pass
+    def __init__(self, message="No fix"):
+        self.message = message
+        super(NoFixException, self).__init__(message)
+
 
 class InvalidResponseException(LE910CXException):
     pass
+
 
 class CommandExecutionException(LE910CXException):
     pass
