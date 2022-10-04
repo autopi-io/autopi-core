@@ -39,6 +39,13 @@ usb-enabled:
     - repl: "dtoverlay=dwc2,dr_mode=host"
     - append_if_not_found: true
 
+usb-xhci-controller-enabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?otg_mode=.*$"
+    - repl: "otg_mode=1"
+    - append_if_not_found: true
+
 i2c0-module-enabled:
   file.replace:
     - name: /boot/config.txt
