@@ -8,21 +8,23 @@ from i2c_conn import I2CConn
 # Registers
 REG_HEARTBEAT             = 0x00  # Read-only
 REG_STATUS                = 0x01  # Read-only
-REG_STATS                 = 0x02  # Read-only
-REG_VERSION               = 0x03  # Read-only
+REG_VOLT_READOUT          = 0x02  # Read-only
+REG_VOLT_CONFIG_FLAGS     = 0x03  # Read-only
 REG_WAKE_FLAGS            = 0x04  # Read-only
-REG_VOLT_READOUT          = 0x05  # Read/write
-REG_VOLT_CONFIG_FLAGS     = 0x06  # Read-only
-REG_SYS_PINS              = 0x07  # Read/write
-REG_USR_PINS              = 0x08  # Read/write
-REG_EXT_PINS              = 0x09  # Read/write
-REG_SLEEP_DURATION        = 0x0A  # Read/write
-REG_WAKE_VOLT_CHANGE      = 0x0B  # Read/write
-REG_WAKE_VOLT_LEVEL       = 0x0C  # Read/write
-REG_HIBERNATE_VOLT_LEVEL  = 0x0D  # Read/write
-REG_VOLT_LIMIT            = 0x0E  # Read/write
-REG_VOLT_FACTOR           = 0x0F  # Read/write
-REG_VOLT_EWMA_ALPHA       = 0x10  # Read/write
+REG_STATS                 = 0x05  # Read-only
+REG_VERSION               = 0x06  # Read-only
+REG_BOARD_ID              = 0x07  # Read-only
+REG_SLEEP_DURATION        = 0x10  # Read/write
+REG_SHUTDOWN_DELAY        = 0x11  # Read/write
+REG_SYS_PINS              = 0x12  # Read/write
+REG_USR_PINS              = 0x13  # Read/write
+REG_EXT_PINS              = 0x14  # Read/write
+REG_WAKE_VOLT_CHANGE      = 0x15  # Read/write
+REG_WAKE_VOLT_LEVEL       = 0x16  # Read/write
+REG_HIBERNATE_VOLT_LEVEL  = 0x17  # Read/write
+REG_VOLT_LIMIT            = 0x18  # Read/write
+REG_VOLT_FACTOR           = 0x19  # Read/write
+REG_VOLT_EWMA_ALPHA       = 0x1A  # Read/write
 
 # Wake flags
 WAKE_FLAG_UNKNOWN  = (1 << 0x00)
@@ -210,8 +212,9 @@ class SPM4Conn(I2CConn):
         """
 
         res = self.read_block(REG_HEARTBEAT, 2)
+        ret, crc = struct.unpack("<BB", bytearray(res))
 
-        return res
+        return ret
 
     def status(self):
         """
@@ -240,7 +243,7 @@ class SPM4Conn(I2CConn):
         """
 
         res = self.read_block(REG_STATS, 10)
-        completed_cycles, last_boot_retries, last_boot_duration, forced_shutdowns, crc = struct.unpack("<HBLHB", bytearray(res))
+        completed_cycles, last_boot_retries, last_boot_duration, forced_shutdowns, watchdog_resets, crc = struct.unpack("<HBLHBB", bytearray(res))
 
         ret = {
             "completed_cycles": completed_cycles,
@@ -248,7 +251,8 @@ class SPM4Conn(I2CConn):
                 "retries": last_boot_retries,
                 "duration": last_boot_duration
             },
-            "forced_shutdowns": forced_shutdowns
+            "forced_shutdowns": forced_shutdowns,
+            "watchdog_resets": watchdog_resets
         }
 
         return ret
@@ -456,6 +460,19 @@ class SPM4Conn(I2CConn):
         ret["duration"] = duration
 
         return ret
+
+    def shutdown_delay(self, value=None):
+        """
+        Get or set shutdown delay (in milliseconds).
+        """
+
+        if value != None:
+            self.write_block(REG_SHUTDOWN_DELAY, list(bytearray(struct.pack("<H", value))))
+        
+        res = self.read_block(REG_SHUTDOWN_DELAY, 3)
+        value, crc = struct.unpack("<HB", bytearray(res))
+
+        return value
 
     def sleep_duration(self, value=None):
         """
