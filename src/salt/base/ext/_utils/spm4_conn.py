@@ -212,7 +212,7 @@ class SPM4Conn(I2CConn):
         """
 
         res = self.read_block(REG_HEARTBEAT, 2)
-        ret, crc = struct.unpack("<BB", bytearray(res))
+        ret, crc8 = struct.unpack("<BB", bytearray(res))
 
         return ret
 
@@ -242,7 +242,7 @@ class SPM4Conn(I2CConn):
         Get life cycle statistics.
         """
 
-        res = self.read_block(REG_STATS, 10)
+        res = self.read_block(REG_STATS, 11)
         completed_cycles, last_boot_retries, last_boot_duration, forced_shutdowns, watchdog_resets, crc = struct.unpack("<HBLHBB", bytearray(res))
 
         ret = {
@@ -259,13 +259,23 @@ class SPM4Conn(I2CConn):
 
     def version(self):
         """
-        Get firmware version.
+        Get the firmware version.
         """
 
         res = self.read_block(REG_VERSION, 3)
-        major, minor, crc = struct.unpack("<BBB", bytearray(res))
+        major, minor, crc8 = struct.unpack("<BBB", bytearray(res))
 
         return "{:d}.{:d}".format(major, minor)
+
+    def board_id(self):
+        """
+        Get the unique board ID.
+        """
+
+        res = self.read_block(REG_BOARD_ID, 11)
+        ret, crc16, crc8 = struct.unpack("<QHB", bytearray(res))
+
+        return ret
 
     def wake_flags(self):
         """
@@ -341,9 +351,14 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_VOLT_LIMIT, list(bytearray(struct.pack("<I", int(value*100000000)))))
 
         res = self.read_block(REG_VOLT_LIMIT, 7)
-        value, crc16, crc8 = struct.unpack("<IHB", bytearray(res))
+        val, crc16, crc8 = struct.unpack("<IHB", bytearray(res))
 
-        return round(float(value)/100000000, 2)
+        ret = round(float(val)/100000000, 2)
+
+        if value != None:
+            assert value == ret, "Value mismatch"
+
+        return ret
 
     def volt_factor(self, value=None):
         """
@@ -357,9 +372,14 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_VOLT_FACTOR, list(bytearray(struct.pack("<H", int(value*1000)))))
 
         res = self.read_block(REG_VOLT_FACTOR, 5)
-        value, crc16, crc8 = struct.unpack("<HHB", bytearray(res))
+        val, crc16, crc8 = struct.unpack("<HHB", bytearray(res))
 
-        return round(float(value)/1000, 3)
+        ret = round(float(val)/1000, 3)
+
+        if value != None:
+            assert value == ret, "Value mismatch"
+
+        return ret
 
     def volt_ewma_alpha(self, value=None):
         """
@@ -373,9 +393,14 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_VOLT_EWMA_ALPHA, list(bytearray(struct.pack("<B", int(value*100)))))
 
         res = self.read_block(REG_VOLT_EWMA_ALPHA, 4)
-        value, crc16, crc8 = struct.unpack("<BHB", bytearray(res))
+        val, crc16, crc8 = struct.unpack("<BHB", bytearray(res))
 
-        return round(float(value)/100, 2)
+        ret = round(float(val)/100, 2)
+
+        if value != None:
+            assert value == ret, "Value mismatch"
+
+        return ret
 
     def sys_pins(self, **kwargs):
         """
@@ -412,10 +437,15 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_WAKE_VOLT_CHANGE, list(bytearray(struct.pack("<hH", int(difference*100), period))))
 
         res = self.read_block(REG_WAKE_VOLT_CHANGE, 7)
-        difference, period, crc16, crc8 = struct.unpack("<hHHB", bytearray(res))
+        dif, per, crc16, crc8 = struct.unpack("<hHHB", bytearray(res))
 
-        ret["difference"] = round(float(difference)/100, 2)
-        ret["period"] = period
+        ret["difference"] = round(float(dif)/100, 2)
+        ret["period"] = per
+
+        if difference != None:
+            assert difference == ret["difference"], "Difference value mismatch"
+        if period != None:
+            assert period == ret["period"], "Period value mismatch"
 
         return ret
 
@@ -433,10 +463,15 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_WAKE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
         res = self.read_block(REG_WAKE_VOLT_LEVEL, 9)
-        threshold, duration, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
+        thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
-        ret["threshold"] = round(float(threshold)/100, 2)
-        ret["duration"] = duration
+        ret["threshold"] = round(float(thr)/100, 2)
+        ret["duration"] = dur
+
+        if threshold != None:
+            assert threshold == ret["threshold"], "Threshold value mismatch"
+        if duration != None:
+            assert duration == ret["duration"], "Duration value mismatch"
 
         return ret
 
@@ -454,10 +489,15 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_HIBERNATE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
         res = self.read_block(REG_HIBERNATE_VOLT_LEVEL, 9)
-        threshold, duration, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
+        thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
-        ret["threshold"] = round(float(threshold)/100, 2)
-        ret["duration"] = duration
+        ret["threshold"] = round(float(thr)/100, 2)
+        ret["duration"] = dur
+
+        if threshold != None:
+            assert threshold == ret["threshold"], "Threshold value mismatch"
+        if duration != None:
+            assert duration == ret["duration"], "Duration value mismatch"
 
         return ret
 
@@ -470,9 +510,12 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_SHUTDOWN_DELAY, list(bytearray(struct.pack("<H", value))))
         
         res = self.read_block(REG_SHUTDOWN_DELAY, 3)
-        value, crc = struct.unpack("<HB", bytearray(res))
+        ret, crc8 = struct.unpack("<HB", bytearray(res))
 
-        return value
+        if value != None:
+            assert value == ret, "Value mismatch"
+
+        return ret
 
     def sleep_duration(self, value=None):
         """
@@ -483,9 +526,12 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_SLEEP_DURATION, list(bytearray(struct.pack("<L", value))))
         
         res = self.read_block(REG_SLEEP_DURATION, 5)
-        value, crc = struct.unpack("<LB", bytearray(res))
+        ret, crc8 = struct.unpack("<LB", bytearray(res))
 
-        return value
+        if value != None:
+            assert value == ret, "Value mismatch"
+
+        return ret
 
     def sleep_interval(self, value=None):
         """
