@@ -201,7 +201,7 @@ class LE910CXConn(SerialConn):
         - raise_on_error (bool): Set this to true to raise an error when the modem responds with an error. Default: True.
         """
 
-        log.info("Executing AT command: %s", cmd)
+        log.debug("Executing AT command: %s", cmd)
         res = None
 
         try:
@@ -214,7 +214,7 @@ class LE910CXConn(SerialConn):
                     log.error("Command {} returned error {}".format(cmd, res["error"]))
                     break
 
-            log.info("Got result: %s", res)
+            log.debug("Got result: %s", res)
 
         finally:
             if not keep_conn:
@@ -534,8 +534,6 @@ class LE910CXConn(SerialConn):
 
         delete_all = kwargs.pop("delete_all", False)
         confirm = kwargs.pop("confirm", False)
-
-        log.info("Federlizer: user wants to delete indexes {}".format(indexes))
 
         ret = {}
 
