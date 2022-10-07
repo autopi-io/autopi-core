@@ -268,7 +268,6 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
     # If we've hit the limit of retries, don't perform the update
     # But, if we have set 'force' to true, perform the update anyways
     if not force and new["attempts"] >= MAX_ATTEMPTS:
-        log.info("Federlizer: maximum attempts have been reached, skipping update")
         trigger_event("system/release/suspended", data={ "id": new["id"], "attempts": new["attempts"], "limit": MAX_ATTEMPTS })
 
         return ret
@@ -323,7 +322,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
             # Trigger a release event with initial state
-            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempt": new["attempts"], "limit": MAX_ATTEMPTS})
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempts": new["attempts"] + 1, "limit": MAX_ATTEMPTS})
 
             # Broadcast notification to all terminals
             try:
@@ -367,7 +366,8 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
             # Fetch the (maybe changed in the meantime) attempts from the grains.
             grains_attempts = __salt__["grains.get"]("release:attempts", default=0)
             if 'attempts' in new and increment_attempts:
-                new["attempts"] = grains_attempts + 1
+                grains_attempts += 1
+                new["attempts"] = grains_attempts
 
             # Register 'updated' or 'failed' release in grains
             res = __salt__["grains.setval"]("release", new, destructive=True)
@@ -375,7 +375,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
             # Trigger a release event with final state
-            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempts": new["attempts"], "limit": MAX_ATTEMPTS})
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempts": grains_attempts, "limit": MAX_ATTEMPTS})
 
             # Broadcast notification to all terminals
             try:
