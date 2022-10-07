@@ -214,6 +214,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
     # Be sure to keep track of retry attempts
     retry_attempts = old.setdefault("attempts", 0)
     new["attempts"] = retry_attempts
+    increment_attempts = False
 
     # Determine if latest release is already updated or pending
     if old["state"] == "updated" and old["id"] == new["id"]:
@@ -257,14 +258,19 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
         log.warning("Resetting attempts count because release ID has updated")
         new["attempts"] = 0
 
-    # TODO: make this into a configurable value
-    HARDCODED_MAX_ATTEMPTS = 5
+    MAX_ATTEMPTS = 5
+    try:
+        if not force:
+            MAX_ATTEMPTS = __salt__["config.get"]("update_release_attempts_limit")
+    except Exception:
+        log.exception("An error occurred while reading update_release_attempts_limit from minion config.")
+
     # If we've hit the limit of retries, don't perform the update
     # But, if we have set 'force' to true, perform the update anyways
-    if new["attempts"] >= HARDCODED_MAX_ATTEMPTS and not force:
-        # TODO
+    if not force and new["attempts"] >= MAX_ATTEMPTS:
         log.info("Federlizer: maximum attempts have been reached, skipping update")
-        # TODO: Consider triggering an event
+        trigger_event("system/release/suspended", data={ "id": new["id"], "attempts": new["attempts"], "limit": MAX_ATTEMPTS })
+
         return ret
 
     if new["state"] in ["pending", "forcing", "retrying"]:
@@ -277,6 +283,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
             raise salt.exceptions.CommandExecutionError("Another state run is currently active - please wait and try again later")
 
         try:
+            increment_attempts = True
 
             # Disable all scheduled jobs to prevent restart, shutdown etc. during update
             res = __salt__["schedule.disable"]()
@@ -316,7 +323,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
             # Trigger a release event with initial state
-            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"]})
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempt": new["attempts"], "limit": MAX_ATTEMPTS})
 
             # Broadcast notification to all terminals
             try:
@@ -354,9 +361,13 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
             else:
                 log.warn("Unable to complete highstate for release '{:}'".format(new["id"]))
 
-                # Failed update, increment the attempts count
-                new["attempts"] += 1
+                # Failed update
                 new["state"] = "failed"
+            
+            # Fetch the (maybe changed in the meantime) attempts from the grains.
+            grains_attempts = __salt__["grains.get"]("release:attempts", default=0)
+            if 'attempts' in new and increment_attempts:
+                new["attempts"] = grains_attempts + 1
 
             # Register 'updated' or 'failed' release in grains
             res = __salt__["grains.setval"]("release", new, destructive=True)
@@ -364,7 +375,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
                 log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
 
             # Trigger a release event with final state
-            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"]})
+            trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempts": new["attempts"], "limit": MAX_ATTEMPTS})
 
             # Broadcast notification to all terminals
             try:
