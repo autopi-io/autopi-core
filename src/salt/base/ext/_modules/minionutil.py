@@ -363,11 +363,15 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
                 # Failed update
                 new["state"] = "failed"
             
-            # Fetch the (maybe changed in the meantime) attempts from the grains.
-            grains_attempts = __salt__["grains.get"]("release:attempts", default=0)
-            if 'attempts' in new and increment_attempts:
-                grains_attempts += 1
-                new["attempts"] = grains_attempts
+            # Fetch the (maybe changed in the meantime) attempts from the grains, so we don't keep it in memory for a while.
+            grains_attempts = 0
+            try:
+                grains_attempts = __salt__["grains.get"]("release:attempts", default=0)
+                if 'attempts' in new and increment_attempts:
+                    grains_attempts += 1
+                    new["attempts"] = grains_attempts
+            except Exception:
+                log.exception("Error when reading/incrementing update release attempts")
 
             # Register 'updated' or 'failed' release in grains
             res = __salt__["grains.setval"]("release", new, destructive=True)
