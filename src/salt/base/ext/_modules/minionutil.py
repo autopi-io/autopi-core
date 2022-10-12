@@ -261,7 +261,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
     MAX_ATTEMPTS = 5
     try:
         if not force:
-            MAX_ATTEMPTS = __salt__["config.get"]("update_release_attempts_limit")
+            MAX_ATTEMPTS = __salt__["config.get"]("update_release_attempts_limit", default=MAX_ATTEMPTS)
     except Exception:
         log.exception("An error occurred while reading update_release_attempts_limit from minion config.")
 
