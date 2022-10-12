@@ -49,3 +49,10 @@ spm-voltage-recalibrated:
 # TODO: Only applicable for hwversion 6.1+. Also, not currently working?
 secure-element-provisioned:
   secure_element.provisioned
+
+assert-clock-synchronized:
+  test.module:
+    - name: clock.status
+    - validate:
+      - ret["ntp_service"] == "active"
+      - ret["system_clock_synchronized"] == "yes"
