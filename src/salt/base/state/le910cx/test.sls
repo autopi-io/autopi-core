@@ -1,4 +1,8 @@
 
+le910cx-assert-lsusb-test:
+  cmd.run:
+    - name: "lsusb | grep Telit"
+
 le910cx-assert-modem-tty-usb-test:
   cmd.run:
     - name: "ls /dev/ | grep -e \"ttyUSB0\" && ls /dev/ | grep -e \"ttyUSB1\" && ls /dev/ | grep -e \"ttyUSB2\""
@@ -14,8 +18,4 @@ le910cx-sim-card-present-test:
 le910cx-qmi-test:
   module.run:
     - name: qmi.system_info
-
-le910cx-assert-lsusb-test:
-  cmd.run:
-    - name: "lsusb | grep Telit"
 
