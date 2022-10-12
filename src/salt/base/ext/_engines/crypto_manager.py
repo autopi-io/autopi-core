@@ -105,6 +105,13 @@ def start(**settings):
             except Exception as err:
                 log.error(err)
                 raise Exception('Error importing or creating SE05x connection class')
+        elif 'softhsm_conn' in settings:
+            try:
+                from softhsm_conn import SoftHSMCryptoConnection
+                conn = SoftHSMCryptoConnection(settings['softhsm_conn'])
+            except Exception as err:
+                log.error(err)
+                raise Exception('Error importing or creating SoftHSMCryptoConnection')
         else:
             raise Exception('Unknown secure element')
 
