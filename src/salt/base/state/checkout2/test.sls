@@ -17,3 +17,23 @@ include:
 
   - secure_element.test
 
+no-op-test:
+  cmd.run:
+    - name: "echo 0"
+    - require:
+      - sls: acc.test
+
+      - sls: audio.test
+
+      - sls: le910cx.test
+
+      - sls: obd.test
+
+      - sls: power.test
+      - sls: power.spm.test
+
+      - sls: raspi.test
+      - sls: raspi.hwclock.test
+      - sls: raspi.kernel.test
+
+      - sls: secure_element.test

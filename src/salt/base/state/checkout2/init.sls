@@ -30,6 +30,7 @@ restart-minion-if-pending-after-release-updated:
     - reason: changes_during_checkout
 
 # Re-generate ssh host keys
+# This takes around 30 seconds, so that's why we keep it here and not in finalize - we want to keep finalize lean
 "rm -v /etc/ssh/ssh_host_*":
   cmd.run
 "dpkg-reconfigure openssh-server":
@@ -46,7 +47,6 @@ spm-voltage-recalibrated:
     - require:
       - sls: checkout2.test
 
-# TODO: Only applicable for hwversion 6.1+. Also, not currently working?
 secure-element-provisioned:
   secure_element.provisioned
 
