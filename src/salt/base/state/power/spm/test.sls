@@ -6,15 +6,14 @@ spm-version-test:
     - name: spm.query
     - args:
       - version
-    - validate: ret["value"] in ["3.1", "3.2"]
+    - validate: float(ret["value"]) >= 4.0
 
 spm-volt-readout-test:
   test.module:
     - name: spm.query
     - args:
       - volt_readout
-    - validate: ret["value"] >= 12.8
-    # TODO: how can we change this? Does this require calibration first?
+    - validate: ret["value"] >= 12.5
 
 spm-volt-config-flags-test:
   test.module:

@@ -7,6 +7,5 @@ power-status-test:
     - validate:
       - '"rpi" in ret'
       - '"spm" in ret'
-      - ret["spm"]["last_state"]["up"] == "on"
-      - ret["spm"]["last_trigger"]["up"] == "plug"
+      - ret["spm"]["last_state"]["up"] in ["on", "booting"]
 
