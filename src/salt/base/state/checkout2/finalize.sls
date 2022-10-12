@@ -1,4 +1,13 @@
 
+# Clean up wifi
+wpa_supplicant:networks:
+  grains.present:
+    - value: null
+    - force: true
+
+/etc/wpa_supplicant/wpa_supplicant.conf:
+  file.absent
+
 # Delete 'pi' user files
 /home/pi/.*_history:
   file.absent
