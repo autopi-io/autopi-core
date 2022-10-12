@@ -10,10 +10,9 @@ REG_HEARTBEAT             = 0x00  # Read-only
 REG_STATUS                = 0x01  # Read-only
 REG_VOLT_READOUT          = 0x02  # Read-only
 REG_VOLT_CONFIG_FLAGS     = 0x03  # Read-only
-REG_WAKE_FLAGS            = 0x04  # Read-only
-REG_STATS                 = 0x05  # Read-only
-REG_VERSION               = 0x06  # Read-only
-REG_BOARD_ID              = 0x07  # Read-only
+REG_STATS                 = 0x04  # Read-only
+REG_VERSION               = 0x05  # Read-only
+REG_BOARD_ID              = 0x06  # Read-only
 REG_SLEEP_DURATION        = 0x10  # Read/write
 REG_SHUTDOWN_DELAY        = 0x11  # Read/write
 REG_SYS_PINS              = 0x12  # Read/write
@@ -25,14 +24,22 @@ REG_HIBERNATE_VOLT_LEVEL  = 0x17  # Read/write
 REG_VOLT_LIMIT            = 0x18  # Read/write
 REG_VOLT_FACTOR           = 0x19  # Read/write
 REG_VOLT_EWMA_ALPHA       = 0x1A  # Read/write
+REG_WAKE_FLAGS            = 0x20  # Read/write
+REG_HIBERNATE_FLAGS       = 0x21  # Read/write
+REG_BUTTON_PRESS          = 0x22  # Read/write
 
 # Wake flags
-WAKE_FLAG_UNKNOWN  = (1 << 0x00)
-WAKE_FLAG_VOLT     = (1 << 0x01)
-WAKE_FLAG_RTC      = (1 << 0x02)
-WAKE_FLAG_ACC      = (1 << 0x03)
-WAKE_FLAG_EXT      = (1 << 0x04)
-WAKE_FLAG_MODEM    = (1 << 0x05)
+WAKE_FLAG_UNKNOWN      = (1 << 0x00)
+WAKE_FLAG_VOLT_CHANGE  = (1 << 0x01)
+WAKE_FLAG_VOLT_LEVEL   = (1 << 0x02)
+WAKE_FLAG_RTC          = (1 << 0x03)
+WAKE_FLAG_ACC          = (1 << 0x04)
+WAKE_FLAG_EXT          = (1 << 0x05)
+WAKE_FLAG_MODEM        = (1 << 0x06)
+
+# Hibernate flags
+HIBERNATE_FLAG_UNKNOWN     = (1 << 0x00)
+HIBERNATE_FLAG_VOLT_LEVEL  = (1 << 0x01)
 
 # Volt meter parameters
 VOLT_METER_LIMIT       = (1 << 0x00)
@@ -66,38 +73,80 @@ EXT_PIN_OUT_SW_5V   = (1 << 0x02)
 EXT_PIN_OUT_MISC1   = (1 << 0x03)
 EXT_PIN_OUT_MISC2   = (1 << 0x04)
 
-# Status register
+# States
+STATE_NONE              = 0x00
+STATE_OFF               = 0x01
+STATE_BOOTING           = 0x02
+STATE_ON                = 0x03
+STATE_SHUTDOWN_PLANNED  = 0x04
+STATE_SHUTTING_DOWN     = 0x05
+STATE_SLEEPING          = 0x06
+STATE_HIBERNATING       = 0x07
+STATE_SETUP             = 0x08
+STATE_EMMC_FLASHING     = 0x09
+
+# Triggers
+TRIGGER_NONE               = 0x00
+TRIGGER_PLUG               = 0x01
+TRIGGER_BUTTON             = 0x02
+TRIGGER_RPI                = 0x03
+TRIGGER_VOLT_CHANGE        = 0x04
+TRIGGER_VOLT_LEVEL         = 0x05
+TRIGGER_RTC                = 0x06
+TRIGGER_ACC                = 0x07
+TRIGGER_EXT                = 0x08
+TRIGGER_MODEM              = 0x09
+TRIGGER_TIMER              = 0x0A
+TRIGGER_BOOT_TIMEOUT       = 0x0B
+TRIGGER_HEARTBEAT_TIMEOUT  = 0x0C
+TRIGGER_SHUTDOWN_TIMEOUT   = 0x0D
+TRIGGER_UNKNOWN            = 0xFE
+
 STATES = {
-    0x00: "none",
-    0x01: "off",
-    0x02: "booting",
-    0x03: "on",
-    0x04: "sleeping",
-    0x05: "hibernating"
+    STATE_NONE:              "none",
+    STATE_OFF:               "off",
+    STATE_BOOTING:           "booting",
+    STATE_ON:                "on",
+    STATE_SHUTDOWN_PLANNED:  "shutdown_planned",
+    STATE_SHUTTING_DOWN:     "shutting_down",
+    STATE_SLEEPING:          "sleeping",
+    STATE_HIBERNATING:       "hibernating",
+    STATE_SETUP:             "setup",
+    STATE_EMMC_FLASHING:     "emmc_flashing"
 }
 
 TRIGGERS = {
-    0x00: "none",
-    0x01: "plug",
-    0x02: "rpi",
-    0x03: "volt",
-    0x04: "rtc",
-    0x05: "acc",
-    0x06: "ext",
-    0x07: "modem",
-    0x08: "timer",
-    0x09: "boot_timeout",
-    0x0A: "heartbeat_timeout",
-    0xFE: "unknown"
+    TRIGGER_NONE:               "none",
+    TRIGGER_PLUG:               "plug",
+    TRIGGER_BUTTON:             "button",
+    TRIGGER_RPI:                "rpi",
+    TRIGGER_VOLT_CHANGE:        "volt_change",
+    TRIGGER_VOLT_LEVEL:         "volt_level",
+    TRIGGER_RTC:                "rtc",
+    TRIGGER_ACC:                "acc",
+    TRIGGER_EXT:                "ext",
+    TRIGGER_MODEM:              "modem",
+    TRIGGER_TIMER:              "timer",
+    TRIGGER_BOOT_TIMEOUT:       "boot_timeout",
+    TRIGGER_HEARTBEAT_TIMEOUT:  "heartbeat_timeout",
+    TRIGGER_SHUTDOWN_TIMEOUT:   "shutdown_timeout",
+    TRIGGER_UNKNOWN:            "unknown"
 }
 
 WAKE_FLAGS = {
-    "unknown":  WAKE_FLAG_UNKNOWN,
-    "volt":     WAKE_FLAG_VOLT,
-    "rtc":      WAKE_FLAG_RTC,
-    "acc":      WAKE_FLAG_ACC,
-    "ext":      WAKE_FLAG_EXT,
-    "modem":    WAKE_FLAG_MODEM
+    "unknown":      WAKE_FLAG_UNKNOWN,
+    "volt_change":  WAKE_FLAG_VOLT_CHANGE,
+    "volt_level":   WAKE_FLAG_VOLT_LEVEL,
+    "rtc":          WAKE_FLAG_RTC,
+    "acc":          WAKE_FLAG_ACC,
+    "ext":          WAKE_FLAG_EXT,
+    "modem":        WAKE_FLAG_MODEM
+}
+
+# TODO HN:
+HIBERNATE_FLAGS = {
+    "unknown":     HIBERNATE_FLAG_UNKNOWN,
+    "volt_level":  HIBERNATE_FLAG_VOLT_LEVEL
 }
 
 VOLT_METER_FLAGS = {
@@ -277,17 +326,6 @@ class SPM4Conn(I2CConn):
 
         return ret
 
-    def wake_flags(self):
-        """
-        Get current wake event flags. 
-        """
-
-        res = self.read_block(REG_WAKE_FLAGS, 2)
-
-        ret = {k: bool(res[0] & v) for k, v in WAKE_FLAGS.iteritems()}
-
-        return ret
-
     def volt_readout(self, reset=False, samples=1):
         """
         Readout of current, minimum and maximum voltage.
@@ -356,7 +394,7 @@ class SPM4Conn(I2CConn):
         ret = round(float(val)/100000000, 2)
 
         if value != None:
-            assert value == ret, "Value mismatch"
+            assert value == ret, "Return value mismatch"
 
         return ret
 
@@ -377,7 +415,7 @@ class SPM4Conn(I2CConn):
         ret = round(float(val)/1000, 3)
 
         if value != None:
-            assert value == ret, "Value mismatch"
+            assert value == ret, "Return value mismatch"
 
         return ret
 
@@ -398,7 +436,7 @@ class SPM4Conn(I2CConn):
         ret = round(float(val)/100, 2)
 
         if value != None:
-            assert value == ret, "Value mismatch"
+            assert value == ret, "Return value mismatch"
 
         return ret
 
@@ -513,7 +551,7 @@ class SPM4Conn(I2CConn):
         ret, crc8 = struct.unpack("<HB", bytearray(res))
 
         if value != None:
-            assert value == ret, "Value mismatch"
+            assert value == ret, "Return value mismatch"
 
         return ret
 
@@ -529,7 +567,7 @@ class SPM4Conn(I2CConn):
         ret, crc8 = struct.unpack("<LB", bytearray(res))
 
         if value != None:
-            assert value == ret, "Value mismatch"
+            assert value == ret, "Return value mismatch"
 
         return ret
 
@@ -576,6 +614,60 @@ class SPM4Conn(I2CConn):
         res = self.sys_pins(toggle="sw_3v3")
         if not res["output"]["sw_3v3"]:
             raise Exception("The 3V3 power supply did not switch on again")
+
+    def wake_flags(self, value=None):
+        """
+        Get or set current wake event flags. 
+        """
+
+        if value != None:
+            self.write_block(REG_WAKE_FLAGS, list(bytearray(struct.pack("<B", value))))
+
+        res = self.read_block(REG_WAKE_FLAGS, 2)
+        val, crc8 = struct.unpack("<BB", bytearray(res))
+
+        if value != None:
+            assert value == val, "Return value mismatch"
+
+        ret = {k: bool(val & v) for k, v in WAKE_FLAGS.iteritems()}
+        ret["value"] = val
+
+        return ret
+
+    def hibernate_flags(self, value=None):
+        """
+        Get or set current hibernate event flags. 
+        """
+
+        if value != None:
+            self.write_block(REG_HIBERNATE_FLAGS, list(bytearray(struct.pack("<B", value))))
+
+        res = self.read_block(REG_HIBERNATE_FLAGS, 2)
+        val, crc8 = struct.unpack("<BB", bytearray(res))
+
+        if value != None:
+            assert value == val, "Return value mismatch"
+
+        ret = {k: bool(val & v) for k, v in HIBERNATE_FLAGS.iteritems()}
+        ret["value"] = val
+
+        return ret
+
+    def button_press(self, value=None):
+        """
+        Get or set current button press. 
+        """
+
+        if value != None:
+            self.write_block(REG_BUTTON_PRESS, list(bytearray(struct.pack("<B", value))))
+
+        res = self.read_block(REG_BUTTON_PRESS, 2)
+        ret, crc8 = struct.unpack("<BB", bytearray(res))
+
+        if value != None:
+            assert value == ret, "Return value mismatch"
+
+        return ret
 
     def test(self, register=0, length=1, loops=20):
         for i in range(1, loops):
