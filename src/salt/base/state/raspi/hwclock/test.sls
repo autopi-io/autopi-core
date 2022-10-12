@@ -5,7 +5,6 @@ rtc-i2c-present-test:
   cmd.run:
     - name: "i2cdetect -y 1 0x51 0x51 | grep UU"
 
-# Applicable for all?
 rtc-device-present-test:
   cmd.run:
     - name: "ls -la /dev/rtc"
