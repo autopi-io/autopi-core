@@ -45,45 +45,39 @@ def battery(**kwargs):
 
 def reset():
     """
-    Reset/restart ATtiny. 
+    Reset/restart the MCU. 
     """
 
     return client.send_sync(_msg_pack(_handler="reset"))
 
 
 
-def flash_firmware(hex_file, part_id, confirm=False, check_only=True, timeout=90):
+def flash_firmware(file, part_id, confirm=False, timeout=90):
     """
-    Flashes new SPM firmware to the ATtiny.
+    Flashes new SPM firmware to the MCU.
     """
 
     ret = {}
 
     if not confirm:
         raise salt.exceptions.CommandExecutionError(
-            "This command will flash firmware release '{:s}' onto the ATtiny - add parameter 'confirm=true' to continue anyway".format(hex_file))
-
-    # TODO: It is only possible to test flash an already installed version without getting verification errors from avrdude!
-    # Test flash firmware in read-only mode
-    #res = client.send_sync(_msg_pack(hex_file, no_write=True, _handler="flash_firmware"), timeout=timeout)
-    #ret["output"] = res.get("output", None)
+            "This command will flash firmware release '{:s}' onto the MCU - add parameter 'confirm=true' to continue anyway".format(file))
 
     # Flash firmware
-    if not check_only:
-        res = client.send_sync(_msg_pack(hex_file, part_id, no_write=False, _handler="flash_firmware"), timeout=timeout)
-        ret["output"] = res.get("output", None)
+    res = client.send_sync(_msg_pack(file, part_id, _handler="flash_firmware"), timeout=timeout)
+    ret["output"] = res.get("output", None)
 
     return ret
 
 
 def fuse(name, part_id, value=None, confirm=False):
     """
-    Manage fuse of the ATtiny.
+    Manages the fuse of the MCU.
     """
 
     if value != None and not confirm:
         raise salt.exceptions.CommandExecutionError(
-            "This command will set the '{:}fuse' of the ATtiny - add parameter 'confirm=true' to continue anyway".format(name))
+            "This command will set the '{:}fuse' of the MCU - add parameter 'confirm=true' to continue anyway".format(name))
 
     return client.send_sync(_msg_pack(name, part_id, value=value, _handler="fuse"))
 
