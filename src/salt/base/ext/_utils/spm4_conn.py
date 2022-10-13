@@ -27,6 +27,7 @@ REG_VOLT_EWMA_ALPHA       = 0x1A  # Read/write
 REG_WAKE_FLAGS            = 0x20  # Read/write
 REG_HIBERNATE_FLAGS       = 0x21  # Read/write
 REG_BUTTON_PRESS          = 0x22  # Read/write
+REG_WATCHDOG              = 0x23  # Read/write
 
 # Wake flags
 WAKE_FLAG_UNKNOWN      = (1 << 0x00)
@@ -662,6 +663,22 @@ class SPM4Conn(I2CConn):
             self.write_block(REG_BUTTON_PRESS, list(bytearray(struct.pack("<B", value))))
 
         res = self.read_block(REG_BUTTON_PRESS, 2)
+        ret, crc8 = struct.unpack("<BB", bytearray(res))
+
+        if value != None:
+            assert value == ret, "Return value mismatch"
+
+        return ret
+
+    def watchdog(self, value=None):
+        """
+        Get or set watchdog configuration. 
+        """
+
+        if value != None:
+            self.write_block(REG_WATCHDOG, list(bytearray(struct.pack("<B", value))))
+
+        res = self.read_block(REG_WATCHDOG, 2)
         ret, crc8 = struct.unpack("<BB", bytearray(res))
 
         if value != None:
