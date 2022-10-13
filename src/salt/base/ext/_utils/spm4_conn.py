@@ -60,11 +60,11 @@ SYS_PIN_OUT_SW_AMP      = (1 << 0x03)
 SYS_PIN_OUT_RPI_SHUTDN  = (1 << 0x04)
 
 # Usr pins
-USR_PIN_OUT_CAN0_TERM  = (1 << 0x00)
-USR_PIN_OUT_CAN1_TERM  = (1 << 0x01)
-USR_PIN_OUT_CAN1_MS    = (1 << 0x02)
-USR_PIN_OUT_DOIP_ACT   = (1 << 0x03)
-USR_PIN_OUT_DOIP_ALT   = (1 << 0x04)
+USR_PIN_OUT_CAN0_RESET  = (1 << 0x00)
+USR_PIN_OUT_CAN0_TERM   = (1 << 0x01)
+USR_PIN_OUT_CAN1_RESET  = (1 << 0x02)
+USR_PIN_OUT_CAN1_TERM   = (1 << 0x03)
+USR_PIN_OUT_DOIP_ACT    = (1 << 0x04)
 
 # Ext pins
 EXT_PIN_IN_WAKE     = (1 << 0x00)
@@ -173,11 +173,11 @@ SYS_PINS_OUT = {
 
 USR_PINS_IN = {}
 USR_PINS_OUT = {
+    "can0_reset":  USR_PIN_OUT_CAN0_RESET,
     "can0_term":  USR_PIN_OUT_CAN0_TERM,
+    "can1_reset":  USR_PIN_OUT_CAN1_RESET,
     "can1_term":  USR_PIN_OUT_CAN1_TERM,
-    "can1_ms":    USR_PIN_OUT_CAN1_MS,
-    "doip_act":   USR_PIN_OUT_DOIP_ACT,
-    "doip_alt":   USR_PIN_OUT_DOIP_ALT
+    "doip_act":   USR_PIN_OUT_DOIP_ACT
 }
 
 EXT_PINS_IN = {
