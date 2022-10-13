@@ -27,7 +27,7 @@ REG_VOLT_EWMA_ALPHA       = 0x1A  # Read/write
 REG_WAKE_FLAGS            = 0x20  # Read/write
 REG_HIBERNATE_FLAGS       = 0x21  # Read/write
 REG_BUTTON_PRESS          = 0x22  # Read/write
-REG_WATCHDOG              = 0x23  # Read/write
+REG_DEBUG_FLAGS           = 0x23  # Read/write
 
 # Wake flags
 WAKE_FLAG_UNKNOWN      = (1 << 0x00)
@@ -58,7 +58,6 @@ SYS_PIN_OUT_SW_5V       = (1 << 0x01)
 SYS_PIN_OUT_SW_3V3      = (1 << 0x02)
 SYS_PIN_OUT_SW_AMP      = (1 << 0x03)
 SYS_PIN_OUT_RPI_SHUTDN  = (1 << 0x04)
-SYS_PIN_OUT_MODEM_DTR   = (1 << 0x05)
 
 # Usr pins
 USR_PIN_OUT_CAN0_TERM  = (1 << 0x00)
@@ -169,8 +168,7 @@ SYS_PINS_OUT = {
     "sw_5v":       SYS_PIN_OUT_SW_5V,
     "sw_3v3":      SYS_PIN_OUT_SW_3V3,
     "sw_amp":      SYS_PIN_OUT_SW_AMP,
-    "rpi_shutdn":  SYS_PIN_OUT_RPI_SHUTDN,
-    "modem_dtr":   SYS_PIN_OUT_MODEM_DTR
+    "rpi_shutdn":  SYS_PIN_OUT_RPI_SHUTDN
 }
 
 USR_PINS_IN = {}
@@ -670,15 +668,15 @@ class SPM4Conn(I2CConn):
 
         return ret
 
-    def watchdog(self, value=None):
+    def debug_flags(self, value=None):
         """
-        Get or set watchdog configuration. 
+        Get or set debug flags. 
         """
 
         if value != None:
-            self.write_block(REG_WATCHDOG, list(bytearray(struct.pack("<B", value))))
+            self.write_block(REG_DEBUG_FLAGS, list(bytearray(struct.pack("<B", value))))
 
-        res = self.read_block(REG_WATCHDOG, 2)
+        res = self.read_block(REG_DEBUG_FLAGS, 2)
         ret, crc8 = struct.unpack("<BB", bytearray(res))
 
         if value != None:
