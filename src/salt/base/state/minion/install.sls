@@ -7,7 +7,7 @@ include:
 minion-id-cron-configured:
   cron.present:
     - identifier: minion-id-setup
-    - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' | tee /etc/salt/minion_id | cut -c21- | sed 's/^/autopi-/g' > /etc/hostname"
+    - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' | tee /etc/salt/minion_id | sed 's/^/autopi-/g' > /etc/hostname"
     - special: "@reboot"
 
 #minion-start-before-network:
