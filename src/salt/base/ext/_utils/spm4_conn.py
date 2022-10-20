@@ -100,6 +100,7 @@ TRIGGER_TIMER              = 0x0A
 TRIGGER_BOOT_TIMEOUT       = 0x0B
 TRIGGER_HEARTBEAT_TIMEOUT  = 0x0C
 TRIGGER_SHUTDOWN_TIMEOUT   = 0x0D
+TRIGGER_WATCHDOG           = 0x0E
 TRIGGER_UNKNOWN            = 0xFE
 
 STATES = {
@@ -130,6 +131,7 @@ TRIGGERS = {
     TRIGGER_BOOT_TIMEOUT:       "boot_timeout",
     TRIGGER_HEARTBEAT_TIMEOUT:  "heartbeat_timeout",
     TRIGGER_SHUTDOWN_TIMEOUT:   "shutdown_timeout",
+    TRIGGER_WATCHDOG:           "watchdog",
     TRIGGER_UNKNOWN:            "unknown"
 }
 
