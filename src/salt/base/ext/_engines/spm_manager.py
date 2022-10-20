@@ -153,8 +153,8 @@ def reset_handler():
 
     finally:
 
-        log.info("Sleeping for 1 sec to give the MCU time to recover")
-        time.sleep(1)
+        log.info("Sleeping for 3 secs to give the MCU time to recover")
+        time.sleep(3)
 
         log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
         gpio.output(hold_pwr_pin, gpio.LOW)
