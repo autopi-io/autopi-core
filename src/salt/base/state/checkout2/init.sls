@@ -1,9 +1,24 @@
+# ATTENTION: This checkout flow is only compatible with >=7.0 boards
 
 include:
   - .test
 
-# Calibrate
-spm-voltage-calibrated:
+# Force re-flash of SPM firmware
+checkout-spm-release-distributed:
+  file.managed:
+    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.elf
+    - source: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.elf
+    - source_hash: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.elf.sha1
+    - makedirs: True
+checkout-spm-release-installed:
+  spm.firmware_flashed:
+    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.elf
+    - part_id: rp2040
+    - version: "{{ salt["pillar.get"]("power:firmware:version") }}"
+    - force: True
+
+# SPM voltage calibrate
+checkout-spm-voltage-calibrated:
   spm.voltage_calibrated:
     - url: {{ salt['pillar.get']('reference_voltage_url') }}
     - checks: 10
@@ -14,7 +29,7 @@ spm-voltage-calibrated:
       - sls: checkout2.test
 
 # Update
-force-release-updated:
+checkout-force-release-updated:
   module.run:
     - name: minionutil.update_release
     - force: true
@@ -22,7 +37,7 @@ force-release-updated:
       - sls: checkout2.test
 
 # Restart minion if restart is pending (after running pending SLS or update release)
-restart-minion-if-pending-after-release-updated:
+checkout-restart-minion-if-pending-after-release-updated:
   module.run:
     - name: minionutil.request_restart
     - pending: false
@@ -37,7 +52,7 @@ restart-minion-if-pending-after-release-updated:
   cmd.run
 
 # Run recalibration
-spm-voltage-recalibrated:
+checkout-spm-voltage-recalibrated:
   spm.voltage_calibrated:
     - url: {{ salt['pillar.get']('reference_voltage_url') }}
     - checks: 10

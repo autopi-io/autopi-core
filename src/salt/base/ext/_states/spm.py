@@ -12,9 +12,9 @@ def __virtual__():
     return __virtualname__
 
 
-def firmware_flashed(name, part_id, version):
+def firmware_flashed(name, part_id, version, force=False):
     """
-    Ensures a specific SPM firmware version is flashed onto the ATtiny.
+    Ensures a specific SPM firmware version is flashed onto the MCU.
     """
 
     ret = {
@@ -33,7 +33,7 @@ def firmware_flashed(name, part_id, version):
     old = res["value"]
     new = str(version)
 
-    if old == new:
+    if old == new and not force:
         ret["result"] = True
         ret["comment"] = "Firmware is already up-to-date"
         return ret
