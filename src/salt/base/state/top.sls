@@ -23,6 +23,8 @@ base:
     {%- endif %}
     {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
     - ec2x.config
+    {%- elif salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "le910cx" %}
+    - le910cx.config
     {%- endif %}
     {%- if salt["pillar.get"]("ble:enabled", default=False) %}
     - ble.install
