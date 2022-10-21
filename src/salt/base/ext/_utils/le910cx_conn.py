@@ -823,10 +823,12 @@ class LE910CXConn(SerialConn):
             res = self.read_until("NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
             return res
 
-    def active_firmware_image(self, net_conf=None, storage_conf=None, force=False):
+    def active_firmware_image(self, net_conf=None, storage_conf=None, force=False, cooldown_delay=20):
         """
         Gets or sets the active firmware configuration on the modem. Don't pass any arguments to query (get) the
         current configuration. If the command results in changing the firmware configuration it will reboot the modem.
+        You can specify the `cooldown_delay` parameter to set the amount of time the function waits after the modem
+        reboots.
 
         Optional parameters:
         - net_conf (string): The configuration that the modem should be set to. Check below for available configurations.
@@ -834,6 +836,7 @@ class LE910CXConn(SerialConn):
         - storage_conf (string): The storage configuration. As per modem AT command documentation, this is just a dummy
           argument preserved for backwards compatibility. Default: None.
         - force (bool): Force apply the configuration to the modem. Default: False.
+        - cooldown_delay (int): How long should this function wait after dropping the connection to the modem.
 
         Available configurations:
         - att: AT&T
@@ -890,7 +893,7 @@ class LE910CXConn(SerialConn):
                     cmd = "{},{:d}".format(cmd, int(match.group("storage_conf")))
 
                 # Since the modem will restart, we give up the connection and give it time to reboot
-                self.execute(cmd, keep_conn=False, cooldown_delay=20)
+                self.execute(cmd, keep_conn=False, cooldown_delay=cooldown_delay)
 
         return ret
 
