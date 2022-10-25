@@ -14,8 +14,8 @@ except ImportError:
 
 sys.path.append(os.path.abspath(os.path.dirname(__file__) + os.sep + "sss"))
 
-os.popen('cp ./lib/* /usr/local/lib')
-os.popen('ldconfig /usr/local/lib')
+# os.popen('cp ./lib/* /usr/local/lib')
+# os.popen('ldconfig /usr/local/lib')
 
 
 try:
