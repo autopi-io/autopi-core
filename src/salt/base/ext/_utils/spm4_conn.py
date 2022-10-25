@@ -3,7 +3,7 @@ import struct
 import time
 
 from i2c_conn import I2CConn
-
+from common_util import call_retrying
 
 # Registers
 REG_HEARTBEAT             = 0x00  # Read-only
@@ -389,7 +389,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_VOLT_LIMIT, list(bytearray(struct.pack("<I", int(value*100000000)))))
 
-        res = self.read_block(REG_VOLT_LIMIT, 7)
+        res = call_retrying(self.read_block, args=[REG_VOLT_LIMIT, 7], limit=3, wait=0.1)
         val, crc16, crc8 = struct.unpack("<IHB", bytearray(res))
 
         ret = round(float(val)/100000000, 2)
@@ -410,7 +410,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_VOLT_FACTOR, list(bytearray(struct.pack("<H", int(value*1000)))))
 
-        res = self.read_block(REG_VOLT_FACTOR, 5)
+        res = call_retrying(self.read_block, args=[REG_VOLT_FACTOR, 5], limit=3, wait=0.1)
         val, crc16, crc8 = struct.unpack("<HHB", bytearray(res))
 
         ret = round(float(val)/1000, 3)
@@ -431,7 +431,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_VOLT_EWMA_ALPHA, list(bytearray(struct.pack("<B", int(value*100)))))
 
-        res = self.read_block(REG_VOLT_EWMA_ALPHA, 4)
+        res = call_retrying(self.read_block, args=[REG_VOLT_EWMA_ALPHA, 4], limit=3, wait=0.1)
         val, crc16, crc8 = struct.unpack("<BHB", bytearray(res))
 
         ret = round(float(val)/100, 2)
@@ -475,7 +475,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_WAKE_VOLT_CHANGE, list(bytearray(struct.pack("<hH", int(difference*100), period))))
 
-        res = self.read_block(REG_WAKE_VOLT_CHANGE, 7)
+        res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_CHANGE, 7], limit=3, wait=0.1)
         dif, per, crc16, crc8 = struct.unpack("<hHHB", bytearray(res))
 
         ret["difference"] = round(float(dif)/100, 2)
@@ -501,7 +501,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_WAKE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
-        res = self.read_block(REG_WAKE_VOLT_LEVEL, 9)
+        res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_LEVEL, 9], limit=3, wait=0.1)
         thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
         ret["threshold"] = round(float(thr)/100, 2)
@@ -527,7 +527,7 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_HIBERNATE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
-        res = self.read_block(REG_HIBERNATE_VOLT_LEVEL, 9)
+        res = call_retrying(self.read_block, args=[REG_HIBERNATE_VOLT_LEVEL, 9], limit=3, wait=0.1)
         thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
         ret["threshold"] = round(float(thr)/100, 2)
