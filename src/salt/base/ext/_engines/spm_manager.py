@@ -181,7 +181,9 @@ def flash_firmware_handler(file, part_id):
 
         log.info("Flashing firmware release '{:}'".format(file))
         if part_id == "rp2040":
-            ret = __salt__["openocd.program"](file, "interface/raspberrypi-swd.cfg", "target/rp2040.cfg", raise_on_error=False)
+            start_address = "0x10000000" if file.endswith(".bin") else None
+
+            ret = __salt__["openocd.program"](file, "interface/raspberrypi-swd.cfg", "target/rp2040.cfg", raise_on_error=False, start_address=start_address)
         else:
             ret = __salt__["avrdude.flash"](file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=False)
 

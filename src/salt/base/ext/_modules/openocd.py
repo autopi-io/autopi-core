@@ -20,22 +20,25 @@ def help():
     return __salt__["sys.doc"](__virtualname__)
 
 
-def program(elf_file, *cfg_files, **kwargs):
+def program(file, *cfg_files, **kwargs):
     """
     Loads a program onto a MCU.
 
     Arguments:
-      - elf_file (str): Path of program binary file.
+      - file (str): Path of program binary file.
       - interface_cfg (str): Path of interface configuration file.
       - target_cfg (str): Path of target configuration file.
 
     Optional arguments:
       - raise_on_error (bool): Raise an error upon failure. Default is 'True'.
+      - start_address (string): Flash memory start address in hex format (required for .bin files)
     """
 
     ret = {}
 
-    cmd = "program {:} verify reset exit".format(elf_file)
+    start_address = kwargs.get("start_address")
+
+    cmd = "program {:} verify reset exit {:}".format(file, start_address if start_address else "")
 
     params = ["openocd"]
     params.extend(["-f {:}".format(c) for c in cfg_files])
