@@ -1,4 +1,20 @@
 
+finalize-spm-amp-enabled:
+  test.module:
+    - name: spm.query
+    - args:
+      - sys_pins
+    - kwargs:
+        high: sw_amp
+    - validate: ret["output"]["sw_amp"]
+
+finalize-audio-test:
+  module.run:
+    - name: audio.play
+    - audio_file: /opt/autopi/audio/sound/beep.wav
+    - require:
+      - test: finalize-spm-amp-enabled
+
 # Clean up wifi
 wpa_supplicant:networks:
   grains.present:
