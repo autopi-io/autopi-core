@@ -9,6 +9,9 @@ base:
     {%- else %}
     - network.wwan.qmi.uninstall
     {%- endif %}
+    {%- if salt["pillar.get"]("minion:hw.version", salt["config.get"]("hw.version")) == 7.0 %}
+    - network.eth.config
+    {%- endif %}
     - network.wlan.client.config
     - network.wlan.hotspot.install
     - network.firewall.config
