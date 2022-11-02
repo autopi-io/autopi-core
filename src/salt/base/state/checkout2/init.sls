@@ -6,13 +6,13 @@ include:
 # Force re-flash of SPM firmware
 checkout-spm-release-distributed:
   file.managed:
-    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.elf
-    - source: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.elf
-    - source_hash: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.elf.sha1
+    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.bin
+    - source: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.bin
+    - source_hash: salt://power/spm/firmware-{{ salt["pillar.get"]("power:firmware:version") }}.bin.sha1
     - makedirs: True
 checkout-spm-release-installed:
   spm.firmware_flashed:
-    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.elf
+    - name: /opt/autopi/power/spm-{{ salt["pillar.get"]("power:firmware:version") }}.bin
     - part_id: rp2040
     - version: "{{ salt["pillar.get"]("power:firmware:version") }}"
     - force: True

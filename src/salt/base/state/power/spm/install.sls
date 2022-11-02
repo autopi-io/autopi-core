@@ -6,7 +6,7 @@
 {% set file_ext = "hex" -%}
 {% set part_id = "t88" -%}
 {%- else %}
-{% set file_ext = "elf" -%}
+{% set file_ext = "bin" -%}
 {% set part_id = "rp2040" -%}
 {%- endif %}
 
