@@ -940,6 +940,14 @@ class LE910CXConn(SerialConn):
         return ret
 
     def generate_regex(self, at_command, params, multiline_identifier):
+        """
+        Generates a regex with named params for interpreting an AT command response
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        """
         rx_string = ''
 
         # Prepend the identifier to dictionary type
@@ -963,6 +971,19 @@ class LE910CXConn(SerialConn):
         return rx_string
 
     def read_modem_config(self, at_command, params, multiline_identifier=None):
+        """
+        Reads an AT command based on a given command signature and parameter list/tuple and formats to dictionary
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+
+        Optional arguments:
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response.
+
+        Returns:
+        Dictionary formatted as { param.name: param.datatype(value), ... }
+        """
         res = self.execute(at_command + '?')
         config_line = ''
         rx_string = ''
@@ -1011,6 +1032,16 @@ class LE910CXConn(SerialConn):
         return converted_data
 
     def update_modem_config(self, at_command, params, current_values, multiline_identifier=None, force=False):
+        """
+        Updates configs where the current_values do not match the desired ones
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - current_values (dictionary): currently active config values
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - force (bool): Force applying the settings to the modem.
+        """
         update_commands = []
         numbered_index = 0
         indexed_index = 0
@@ -1054,6 +1085,9 @@ class LE910CXConn(SerialConn):
             self.execute(cmd)
 
     def is_update_requested_raise_on_error(self, params):
+        """
+        Check if an update has been requested based on parameter list's/tuple's desired values
+        """
         has_none_type = False
         has_value_type = False
 
@@ -1072,6 +1106,16 @@ class LE910CXConn(SerialConn):
         return has_value_type
 
     def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None):
+        """
+        Query given AT command. If params have desired_values and they don't match the real data, update the modem config.
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
         ret = {}
 
         update = self.is_update_requested_raise_on_error(params)
