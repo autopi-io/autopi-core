@@ -21,7 +21,7 @@ le910cx-evmoni-configured:
     - cmd: evmoni_config
     - kwargs:
         instance: 3
-        urcmod: 1
+        urcmod: True
         timeout: 5
         confirm: True
     - require:

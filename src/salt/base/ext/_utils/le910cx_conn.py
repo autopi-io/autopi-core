@@ -1091,6 +1091,16 @@ class LE910CXConn(SerialConn):
 
 
     def evmoni_smsin_config(self, enabled=None, command=None, match_content=None, confirm=False, force=False):
+        """
+        Sets the configuration of sms received event
+
+        Arguments:
+        - enabled (bool):  Enables/disables the SMSIN event monitor
+        - command (str): AT command that gets run on received SMS
+        - match_content (str): text that has to be matched in the SMS. Empty string for no match
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
         params = (
             Param('enabled', PARAM_TYPES['indexed'], bool, enabled), 
             Param('command', PARAM_TYPES['numbered'], str, command), 
@@ -1108,6 +1118,21 @@ class LE910CXConn(SerialConn):
 
 
     def evmoni_gpio_config(self, peripheral_num, enabled=None, command=None, gpio_pin=None, watch_status=None, delay=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+
+        Required arguments:
+        - peripheral_num (int): number of the GPIO peripheral to update
+
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the GPIOX event monitor
+        - command (str): AT command that gets run on event match
+        - gpio_pin (int): gpio pin on which to listen for the change
+        - watch_status (bool): watch for rising edge (true) or falling edge (false)
+        - delay (int): how many seconds after triggering will the command be executed
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
         params = (
             Param('enabled', PARAM_TYPES['indexed'], bool, enabled), 
             Param('command', PARAM_TYPES['numbered'], str, command), 
@@ -1127,6 +1152,14 @@ class LE910CXConn(SerialConn):
         return res
 
     def evmoni_enabled(self, enabled=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+        
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the event monitor
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
         params = (
             Param("mode", PARAM_TYPES['indexed_readonly'], bool, None),
             Param("status", PARAM_TYPES['indexed'], bool, enabled)
@@ -1137,9 +1170,19 @@ class LE910CXConn(SerialConn):
         return res
 
     def evmoni_config(self, instance=None, timeout=None, urcmod=None, confirm=False, force=False):
+        """
+        Configures the event monitor
+        
+        Optional Arguments:
+        - instance (int): AT instance used by the service to run the AT command (1-3)
+        - urcmod (bool): enable/disable unsolicited message
+        - timeout (int): timeout in minutes for AT command execution
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
         params = (
             Param("instance", PARAM_TYPES["indexed"], int, instance),
-            Param("urcmod", PARAM_TYPES["indexed"], int, urcmod),
+            Param("urcmod", PARAM_TYPES["indexed"], bool, urcmod),
             Param("timeout", PARAM_TYPES["indexed"], int, timeout)
         )
 
