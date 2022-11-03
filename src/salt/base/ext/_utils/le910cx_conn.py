@@ -127,6 +127,17 @@ QSS_MAP = {
     QSS_STATUS_INSERTED_AND_READY:        "inserted-and-ready",
 }
 
+# EVMONI_GPIOX_WATCH_STATUS_LOW     = "high"
+# EVMONI_GPIOX_WATCH_STATUS_HIGH    = "low"
+
+# EVMONI_GPIOX_WATCH_STATUS_MAP = {
+#     EVMONI_GPIOX_WATCH_STATUS_LOW: False,
+#     EVMONI_GPIOX_WATCH_STATUS_HIGH: True
+# }
+
+SUPPORTED_DATATYPES = (bool, int, str)
+PARAM_TYPES = {'indexed': 1, 'indexed_readonly': 2, 'numbered': 3}
+MULTILINE_TYPES = {'dictionary': 1, 'array': 2}
 
 class LE910CXConn(SerialConn):
     """
@@ -927,3 +938,741 @@ class LE910CXConn(SerialConn):
         ret["status"] = QSS_MAP[int(match.group("status"))]
 
         return ret
+
+    def generate_regex(self, at_command, params, multiline_identifier):
+        rx_string = ''
+
+        # Prepend the identifier to dictionary type
+        if multiline_identifier != None and multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            rx_param_string = ''
+            for param in params: 
+                rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: "{}"{}$'.format(multiline_identifier.label.desired_value, rx_param_string)
+        
+        else:
+            for i in range(len(params)): 
+                param = params[i]
+                if i == 0:
+                    rx_param_string = param.get_named_regex_string()
+                else:
+                    rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: {}$'.format(rx_param_string)
+
+        return rx_string
+
+    def read_modem_config(self, at_command, params, multiline_identifier=None):
+        res = self.execute(at_command + '?')
+        config_line = ''
+        rx_string = ''
+
+        # Find correct string in response data 
+
+        if multiline_identifier == None:
+            if not type(res["data"]) == str:
+                raise Exception("Got multiple lines in response data, without a specified line identifier")
+            config_line = res.get("data")
+        else:
+            if not type(res["data"]) == list:
+                raise Exception("Got single line in response data, when expecting multiple")
+
+            if multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+                index = multiline_identifier.index
+                if not multiline_identifier.zero_indexed:
+                    index -= 1
+                
+                config_line = res.get("data")[index]                
+
+            elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+                config_line = [line for line in res.get("data") if multiline_identifier.label.desired_value in line][0]
+            
+        # Compile and match regex string
+
+        rx_string = self.generate_regex(at_command, params, multiline_identifier)
+        match = re.match(rx_string, config_line)
+        if not match:
+            raise Exception('Could not match generated regex')
+        match_dict = match.groupdict()
+
+        log.info("Match Dict: {}".format(match_dict))
+
+        # Convert to correct types
+
+        converted_data = {}
+        for param in params:
+            try:
+                retrieved_value = match_dict.get(param.name)
+                converted_data[param.name] = param.to_native_datatype_from_AT_string(retrieved_value)  # param.datatype(match_dict.get(param.name))
+            except ValueError:
+                raise ValueError("Data '{}' for '{}' could not be converted to {}".format(match_dict.get(param.name),
+                                 param.name, param.datatype))
+
+        return converted_data
+
+    def update_modem_config(self, at_command, params, current_values, multiline_identifier=None, force=False):
+        update_commands = []
+        numbered_index = 0
+        indexed_index = 0
+        base_command = ''
+
+        # Generate the commands necessary to do the update
+        if multiline_identifier == None:
+            base_command = '{}='.format(at_command)
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.label.get_AT_formatted_named_value())
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.index)
+
+        for i in range(len(params)):
+            param = params[i]
+            if param.paramtype == PARAM_TYPES['indexed']:
+
+                # Handle first comma not being needed on first param
+                if indexed_index == 0 and multiline_identifier == None:
+                    base_command = '{}{}'.format(base_command, param.get_AT_formatted_named_value())
+                else:
+                    base_command = '{},{}'.format(base_command, param.get_AT_formatted_named_value())
+
+                # Ensure indexed configs are all updated at once
+                if len(update_commands) > 0:
+                    update_commands[0] = base_command
+
+                # Ensure config is updated when there are no numbered params to update.
+                elif current_values.get(param.name) != param.desired_value or len(update_commands) > 0 or force:
+                    update_commands.append(base_command)
+                
+                indexed_index += 1
+                
+            elif param.paramtype == PARAM_TYPES['numbered']:
+                if current_values.get(param.name) != param.desired_value or force:
+                    update_commands.append('{},{},{}'.format(base_command, numbered_index, param.get_AT_formatted_named_value()))
+
+                numbered_index += 1
+            
+        for cmd in update_commands:
+            self.execute(cmd)
+
+    def is_update_requested_raise_on_error(self, params):
+        has_none_type = False
+        has_value_type = False
+
+        for param in params:
+            if param.paramtype != PARAM_TYPES["indexed_readonly"]:
+                if param.desired_value == None:
+                    has_none_type = True
+                else:
+                    has_value_type = True
+
+        if has_value_type and has_none_type:
+            raise ValueError('All params are required when updating: {}'.format([param.name
+                             + ': ' + str(param.datatype) for param in
+                             params]))
+
+        return has_value_type
+
+    def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None):
+        ret = {}
+
+        update = self.is_update_requested_raise_on_error(params)
+
+        if update and not confirm:
+            raise Exception("This command will modify configuration directly on the Modem - add parameter 'confirm=true' to continue anyway.")
+
+        current_data = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+
+        if update:
+            update_res = self.update_modem_config(at_command, params, current_data, multiline_identifier=multiline_identifier)
+            ret['data'] = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+        else:
+            ret['data'] = current_data
+
+        return ret
+
+
+    def evmoni_smsin_config(self, enabled=None, command=None, match_content=None, confirm=False, force=False):
+        params = (
+            Param('enabled', PARAM_TYPES['indexed'], bool, enabled), 
+            Param('command', PARAM_TYPES['numbered'], str, command), 
+            Param('match_content',PARAM_TYPES['numbered'], str, match_content)
+        )
+
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['indexed'], str, "SMSIN")
+        )
+
+        res = self.query('AT#EVMONI', params, multiline_identifier=idfr, confirm=confirm, force=force)
+
+        return res
+
+
+    def evmoni_gpio_config(self, peripheral_num, enabled=None, command=None, gpio_pin=None, watch_status=None, delay=None, confirm=False, force=False):
+        params = (
+            Param('enabled', PARAM_TYPES['indexed'], bool, enabled), 
+            Param('command', PARAM_TYPES['numbered'], str, command), 
+            Param('gpio_pin',PARAM_TYPES['numbered'], int, gpio_pin),
+            Param('watch_status', PARAM_TYPES['numbered'], bool, watch_status),
+            Param('delay', PARAM_TYPES['numbered'], int, delay)
+        )
+
+        label = "GPIO" + str(peripheral_num)
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['indexed'], str, label)
+        )
+
+        res = self.query('AT#EVMONI', params, multiline_identifier=idfr, confirm=confirm, force=force)
+
+        return res
+
+    def evmoni_enabled(self, enabled=None, confirm=False, force=False):
+        params = (
+            Param("mode", PARAM_TYPES['indexed_readonly'], bool, None),
+            Param("status", PARAM_TYPES['indexed'], bool, enabled)
+        )
+
+        res = self.query("AT#ENAEVMONI", params, confirm=confirm, force=force)
+
+        return res
+
+    def evmoni_config(self, instance=None, timeout=None, urcmod=None, confirm=False, force=False):
+        params = (
+            Param("instance", PARAM_TYPES["indexed"], int, instance),
+            Param("urcmod", PARAM_TYPES["indexed"], int, urcmod),
+            Param("timeout", PARAM_TYPES["indexed"], int, timeout)
+        )
+
+        res = self.query("AT#ENAEVMONICFG", params, confirm=confirm, force=force)
+
+        return res
+
+
+class MultilineIdentifier:
+    def __init__(self, multilineType, index=None, label=None, zero_indexed=True):
+        if multilineType not in MULTILINE_TYPES.values():
+            raise ValueError("Type must be one of (MULTILINE_TYPES.values)")
+        
+        if multilineType == MULTILINE_TYPES["dictionary"]:
+            if not isinstance(label, Param):
+                raise ValueError("Dictionary identifier must have a label of type <Param>")
+            self.label = label
+
+        elif multilineType == MULTILINE_TYPES["array"]:
+            if not isinstance(index, int):
+                raise ValueError("Array identifier must have an index of type <int>")
+            self.index = index
+            self.zero_indexed = zero_indexed
+
+        self.multilineType = multilineType
+
+
+class Param:
+    def __init__(self, name, paramtype, datatype, desired_value, value_map=None):
+        if datatype not in SUPPORTED_DATATYPES:
+            raise ValueError('Unsupported type. Supported types: {}'.format(SUPPORTED_DATATYPES))
+
+        if desired_value != None and type(desired_value) != datatype:
+            raise ValueError("Provided type's ({}) and expected value's types ({}) don't match for {}".format(datatype, type(desired_value), name))
+
+        self.datatype = datatype
+        self.desired_value = desired_value
+        self.name = name
+        self.paramtype = paramtype
+
+    def to_native_datatype_from_AT_string(self, value):
+        if type(value) == str:
+            if self.datatype == str:
+                return value
+            elif self.datatype == bool:
+                return bool(int(value))
+            elif self.datatype == int:
+                return int(value)
+        else:
+            raise Exception("Can not convert to native type of {} from {}".format(type(value), self.datatype))
+
+    def get_named_regex_string(self):
+        if self.datatype == str:
+            return '"(?P<{}>[^"]*)"'.format(self.name)
+        elif self.datatype == bool:
+            return '(?P<{}>[0-1])'.format(self.name)
+        elif self.datatype == int:
+            return '(?P<{}>[0-9]*)'.format(self.name)
+
+    def get_AT_formatted_named_value(self):
+        if self.datatype == str:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <str>')
+
+            return '"{}"'.format(self.desired_value)
+
+        elif self.datatype == bool:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <bool>')
+
+            return str(int(self.desired_value))
+
+        elif self.datatype == int:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <int>')
+
+            return str(self.desired_value)
+
+    
+
+
+
+
+
+
+
+
+
+
+
+    # def sms_wake_enabled(self, enabled=None, confirm=False, force=False):
+    #     ret = {}
+
+    #     smsin_config_data = self.evmoni_smsin_config().get("data")
+    #     gpio_config_data = self.evmoni_gpio_config(1).get("data")
+    #     evmoni_enabled_data = self.evmoni_config().get("data")  
+
+    #     if force:
+    #         self.evmoni_enabled(enabled=False, confirm=confirm, force=force)
+    #         self.evmoni_config(instance=3, urcmod=1, timeout=5, confirm=confirm, force=force)
+    #         self.evmoni_smsin_config(enabled=True, command="AT#GPIO=3,1,1", content_match="", confirm=confirm, force=force)
+    #         self.evmoni_gpio_config(1, enabled=True, command="AT#GPIO=3,0,1", gpio_pin=3, watch_status=True, confirm=confirm, force=force)
+    #         self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+
+    #     return ret
+
+    # EVMONI_LABEL_GPIO1      = "GPIO1"
+    # EVMONI_LABEL_GPIO2      = "GPIO2"
+    # EVMONI_LABEL_GPIO3      = "GPIO3"
+    # EVMONI_LABEL_GPIO4      = "GPIO4"
+    # EVMONI_LABEL_GPIO5      = "GPIO5"
+    # EVMONI_LABEL_SMSIN      = "SMSIN"
+
+    # EVMONI_LABEL_LIST = [
+    #     EVMONI_LABEL_GPIO1,
+    #     EVMONI_LABEL_GPIO2,
+    #     EVMONI_LABEL_GPIO3,
+    #     EVMONI_LABEL_GPIO4,
+    #     EVMONI_LABEL_GPIO5,
+    #     EVMONI_LABEL_SMSIN,
+    # ]
+
+    # def update_test(self, enabled=None):
+    #     params = (
+    #         Param("mode", PARAM_TYPES['indexed_readonly'], bool, None),
+    #         Param("status", PARAM_TYPES['indexed'], bool, enabled)
+    #     )
+    #     res = self.read_modem_config("AT#ENAEVMONI", params)
+    #     # res = self.read_modem_config("AT#EVMONI")
+
+    #     log.info("Current Result: {}".format(res))
+
+    #     self.update_modem_config("AT#ENAEVMONI", params, res)
+    
+    #     res = self.read_modem_config("AT#ENAEVMONI", params)
+
+    #     log.info("Updated Result: {}".format(res))
+
+    #     return res
+
+    # def gpio(self, gpio_pin, direction=None, mode=None, confirm=False, force=False):
+    #     ret = {}
+
+    #     if gpio_pin < 1 or gpio_pin > 10:
+    #         raise ValueError("GPIOs indexed from 1 to 10")
+        
+    #     param_mode = Param("mode", PARAM_TYPES["indexed"], int, mode)
+    #     param_direction = Param("direction", PARAM_TYPES["indexed"], int, direction)
+    #     param_save = Param("save", PARAM_TYPES["indexed"], bool, True)
+    #     param_state = Param("state", PARAM_TYPES["indexed"], bool, None)
+
+    #     GPIO_DIR_IN = 0
+    #     GPIO_DIR_OUT = 1
+        
+    #     GPIO_MODE_OUT_LOW = 0
+    #     GPIO_MODE_OUT_HIGH = 1
+
+
+    #     # The GPIO command used a different parameter order for reads and writes
+    #     read_params = (
+    #         param_direction,
+    #         param_state,
+    #     )
+    #     write_params = (
+    #         param_mode,
+    #         param_direction,    
+    #         param_save
+    #     )
+
+    #     idfr = MultilineIdentifier(MULTILINE_TYPES["array"], index=gpio_pin, zero_indexed=False)
+
+    #     read_res = self.read_modem_config("AT#GPIO", read_params, multiline_identifier=idfr)
+
+    #     update = False
+    #     if (direction != read_res.get("direction") or mode != read_res.get("state")) and (direction != None or mode != None):
+    #         if direction == None or mode == None:
+    #             raise ValueError("Both direction (IN/OUT) and mode (LOW/HIGH) are required")
+    #         if not confirm:
+    #             raise Exception("This command will modify configuration directly on the Modem - add parameter 'confirm=true' to continue anyway.")
+
+    #         self.update_modem_config("AT#GPIO", write_params, read_res, multiline_identifier=idfr, force=force)
+
+    #         ret["data"] = self.read_modem_config("AT#GPIO", read_params, multiline_identifier=idfr)
+
+    #     else:
+    #         ret["data"] = read_res
+
+    #     return ret
+
+
+    # def read_simple_config(self, at_command, params):
+    #     res = self.execute(at_command + '?')
+
+    #     rx_param_string = ''
+
+
+    #     # Compile and match regex string
+
+    #     match = re.match(rx_string, res["data"])
+    #     if not match:
+    #         raise Exception('Could not match generated regex')
+    #     match_dict = match.groupdict()
+
+    #     log.info("Match Dict: {}".format(match_dict))
+
+    #     # Convert to correct types
+
+    #     converted_data = {}
+    #     for param in params:
+    #         try:
+    #             retrieved_value = match_dict.get(param.name)
+    #             converted_data[param.name] = param.to_native_datatype_from_AT_string(retrieved_value)  # param.datatype(match_dict.get(param.name))
+    #         except ValueError:
+    #             raise ValueError("Data '{}' for '{}' could not be converted to {}".format(match_dict.get(param.name),
+    #                              param.name, param.datatype))
+        
+    #     log.info("Converted Dict: {}".format(converted_data))
+
+    #     return converted_data
+
+
+
+    # def read_nested_config(self, at_command, config_label, params):
+    #     res = self.execute(at_command + '?')
+
+    #     matched_line = [line for line in res['data'] if config_label in line][0]
+
+    #     log.info("Line: {}".format(matched_line))
+
+    #     # Build regex string
+
+    #     rx_param_string = ''
+    #     for param in params: 
+    #         rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+    #     rx_string = '^#[A-Z]*: "{}"{}$'.format(config_label,
+    #             rx_param_string)
+
+    #     log.info("Rx string: {}".format(rx_string))
+
+    #     # Compile and match regex string
+
+    #     match = re.match(rx_string, matched_line)
+    #     if not match:
+    #         raise Exception('Could not match generated regex')
+    #     match_dict = match.groupdict()
+
+    #     log.info("Match Dict: {}".format(match_dict))
+
+    #     # Convert to correct types
+
+    #     converted_data = {}
+    #     for param in params:
+    #         try:
+    #             retrieved_value = match_dict.get(param.name)
+    #             converted_data[param.name] = param.to_native_datatype_from_AT_string(retrieved_value)  # param.datatype(match_dict.get(param.name))
+    #         except ValueError:
+    #             raise ValueError("Data '{}' for '{}' could not be converted to {}".format(match_dict.get(param.name),
+    #                              param.name, param.datatype))
+        
+    #     log.info("Converted Dict: {}".format(converted_data))
+
+    #     return converted_data
+
+
+
+    # def nested_config(self, at_command, config_label, params, confirm=False, force=False):
+    #     ret = {}
+
+    #     update = self.is_update_requested_raise_on_error(params)
+
+    #     current_data = self.read_nested_config(at_command,
+    #             config_label, params)
+
+    #     if update:
+    #         update_res = self.update_nested(at_command,
+    #                 config_label, params, current_data)
+
+    #         # TODO EP: Check if succeeded
+
+    #         ret['data'] = self.read_nested_config(at_command,
+    #                 config_label, params)
+    #     else:
+    #         ret['data'] = current_data
+
+    #     return ret
+
+
+    # def update_nested(self, at_command, config_label, params, current_values, force=False):
+    #     update_commands = []
+    #     numbered_index = 0
+    #     base_command = '{}="{}"'.format(at_command, config_label)
+
+    #     for param in params:
+    #         if param.paramtype == PARAM_TYPES['indexed']:
+    #             base_command = '{},{}'.format(base_command,
+    #                     param.get_AT_formatted_named_value())
+
+    #     # Ran to ensure value is updated even when numbered values are not updated
+
+    #             if current_values.get(param.name) \
+    #                 != param.desired_value or force:
+    #                 update_commands.append(base_command)
+    #         elif param.paramtype == PARAM_TYPES['numbered']:
+
+    #             if current_values.get(param.name) \
+    #                 != param.desired_value or force:
+    #                 update_commands.append('{},{},{}'.format(base_command,
+    #                         numbered_index,
+    #                         param.get_AT_formatted_named_value()))
+
+    #             numbered_index += 1
+
+    #     for cmd in update_commands:
+    #         self.execute(cmd)
+
+
+
+
+    # def evmoni_config(self, config_label, *args, **kwargs):
+    #     force = kwargs.get("force", False)
+    #     confirm = kwargs.get("confirm", False)
+
+    #     ret = {}
+    #     ret["label"] = config_label
+        
+    #     at_command = "AT#EVMONI"
+
+    #     # Query command
+    #     # response = {'data': ['#EVMONI: "VBATT",0,"",0,0', '#EVMONI: "DTR",0,"",0,0', '#EVMONI: "ROAM",0,""', '#EVMONI: "CONTDEACT",0,""', '#EVMONI: "RING",0,"",1', '#EVMONI: "STARTUP",0,""', '#EVMONI: "REGISTERED",0,""', '#EVMONI: "GPIO1",0,"",1,0,0', '#EVMONI: "GPIO2",0,"",1,0,0', '#EVMONI: "GPIO3",0,"",1,0,0', '#EVMONI: "GPIO4",0,"",1,0,0', '#EVMONI: "GPIO5",0,"",1,0,0', '#EVMONI: "ADCH1",0,"",1,0,0', '#EVMONI: "ADCL1",0,"",1,0,0', '#EVMONI: "DTMF1",0,"","",1000', '#EVMONI: "DTMF2",0,"","",1000', '#EVMONI: "DTMF3",0,"","",1000', '#EVMONI: "DTMF4",0,"","",1000', '#EVMONI: "SMSIN",0,"AT#GPIO=3,1,1",""']}
+    #     response = self.execute("AT#EVMONI?")
+
+    #     # TODO: handle error
+
+    #     log.info("CURRENT. Retrieved {:} total lines".format(len(response["data"])))
+    #     log.info(response)
+
+    #     # Find the line matching the config label
+    #     config_lines = [line for line in response["data"] if config_label in line]
+    #     if len(config_lines) != 1:
+    #         raise Exception("Got unexpected number of lines from modem that match the label")
+    #     config_line = config_lines[0]
+
+    #     log.info("Matched {:} lines".format(len(config_lines)))
+    #     log.info(config_line)
+        
+
+    #     # Processing for the SMSIN label
+    #     if (config_label == EVMONI_LABEL_SMSIN):
+    #         res_regex = re.compile('^#EVMONI: "{:}",(?P<enabled>[0-1]),"(?P<command>[^"]*)","(?P<content_match>[^"]*)"$'.format(config_label))
+            
+    #         # response_values = res_regex.match(config_lines[0], "").groupdict()
+    #         match = res_regex.match(config_line)
+    #         if not match:
+    #             log.info("Didn't receive expected response from modem: {}".format(response))
+    #             # raise InvalidResponseException("Didn't receive expected response")
+    #             raise Exception("Didn't receive expected response")
+
+    #         log.info("Response values: {}".format(match.groupdict()))
+
+    #         # Convert to correct types
+    #         ret["enabled"] = bool(int(match.group("enabled")))
+    #         ret["content_match"] = str(match.group("content_match"))
+    #         ret["command"] = str(match.group("command"))
+
+    #         desired_enabled = kwargs.get("enabled", False)
+    #         desired_content_match = kwargs.get("content_match", None)
+    #         desired_command = kwargs.get("command", None)
+
+    #         if desired_enabled != False \
+    #                 or desired_content_match != None \
+    #                 or desired_command != None:
+
+    #             if type(desired_enabled) != bool \
+    #                     or type(desired_content_match) != str \
+    #                     or type(desired_command) != str:
+    #                 raise ValueError("Parameters need to be of types:\t enabled: bool, content_match: str, command: str")
+
+    #             if ret["enabled"] != desired_enabled \
+    #                     or ret["content_match"] != desired_content_match \
+    #                     or ret["command"] != desired_command \
+    #                     or force:
+
+    #                 commands = (
+    #                     'AT#EVMONI="{:s}",{:d},{:d},"{:s}"'.format(config_label,desired_enabled,0,desired_command),
+    #                     'AT#EVMONI="{:s}",{:d},{:d},"{:s}"'.format(config_label,desired_enabled,1,desired_content_match)
+    #                 )
+    #                 for command in commands:
+    #                     log.info(command)
+    #                     config_cmd_response = self.execute(command)
+
+    #                 ret = self.evmoni_config(config_label)
+
+    #     return ret
+
+
+
+    # def evmoni_config(self, config_label, *args, **kwargs):
+
+    #     at_command = "AT#EVMONI"
+
+    #     # Query command
+    #     response = self.execute(at_command + "?")
+
+    #     # TODO: handle error
+
+    #     log.info("CURRENT. Retrieved {:} total lines".format(len(response["data"])))
+    #     log.info(response)
+
+    #     # Find the line matching the config label
+    #     matched_lines = [line for line in response["data"] if config_label in line]
+
+    #     log.info("CURRENT. Matched {:} lines".format(len(matched_lines)))
+    #     log.info(matched_lines)
+        
+    #     if len(matched_lines) != 1:
+    #         raise Exception("Got unexpected number of lines from modem that match the label")
+        
+    #     if (config_label == EVMONI_LABEL_SMSIN):
+    #         res_regex = re.compile('^#EVMONI: {:},(?P<enabled>[0-1]),(?P<command>"[^"]*"),(?P<content_match>"[^"]*")$'.format(config_label))
+    #         response_values = res_regex.match(response.get["data"], "").groupdict()
+
+    #         for (name, value) in response_values.items():
+    #             expected_value = kwargs.get(name)
+    #             if expected_value == None:
+    #                 raise "Kwarg '{}' is required".format(name)
+
+    #     if config_label == EVMONI_LABEL_GPIO1 
+    #         || config_label == EVMONI_LABEL_GPIO2 
+    #         || config_label == EVMONI_LABEL_GPIO3 
+    #         || config_label == EVMONI_LABEL_GPIO4 
+    #         || config_label == EVMONI_LABEL_GPIO5:
+    #         res_regex = re.compile('^#EVMONI: {:},(?P<enabled>[0-1]),(?P<command>"[^"]*"),(?P<gpio_pin>[0-9]+),(?P<stat>[0-1])$'.format(config_label))
+    #         values = res_regex.match(response.get["data"], "").groupdict()
+        
+    #     param_values = matched_lines[0].split(": ")[1].split(",")[1:]
+
+    #     log.info(param_values)
+    #     log.info("Number of args: {}".format(len(args)))
+    #     log.info("Args: {}".format(args))
+
+    #     if len(args) != 0:  
+    #         log.info("Updating value")
+
+    #         if len(args) != len(param_values):
+    #             raise Exception("Argument count does not match the one returned by command.")
+
+    #         formatted_args = []
+    #         match = True
+    #         for i in range(len(args)):
+
+    #             if isinstance(args[i], str):
+    #                 log.info("{} string".format(args[i]))
+    #                 formatted_args.append('"{}"'.format(args[i]))
+    #             else:
+    #                 log.info("{} not String".format(args[i]))
+    #                 formatted_args.append(args[i])
+
+    #             if args[i] != param_values[i]:
+    #                 log.info("Mismatch on arg {} ({} != {})".format(i, formatted_args[i], param_values[i]))
+    #                 match = False
+
+    #         log.info("Args after formatting: {}".format(formatted_args)) 
+
+    #         if not match:
+    #             # Construct the command
+    #             command = "{}={}".format(at_command, '"{}"'.format(config_label))
+
+    #             for arg in formatted_args:
+    #                 log.info("Adding config {}".format(arg))
+    #                 command = command + ",{}".format(arg)
+ 
+    #             log.info("Constructed command '{}'".format(command))
+    #             update_response = self.execute(command)
+
+    #             log.info(update_response)
+
+        
+
+            
+
+
+
+        # If len of args > 0
+        # Comapare each value in sequence of comma_seperated_values
+
+        # If don't match, update with at_command=config_label,*args 
+
+        # return param_values
+
+        # return ("GPIO1", 1, 0, 40, "AT#GPIO=1,1,1")
+
+
+
+
+
+    # def evmoni_config(label, command=None, enabled=None):
+    
+
+        
+        
+    #     if len(matched_lines) != 1:
+    #         raise Exception("Got unexpected number of lines from modem that match the label")
+
+    #     line = matched_lines[0]
+
+
+    #     for line in res_lines:
+    #         res_regex = re.compile("^#EVMONI: (?P<mode>[0-1])(?P<stat>[0-1])f?$")
+
+
+    #     None
+
+
+    # def evmoni_enabled(self, value):
+    #     res = self.execute("AT#ENAEVMONI")
+
+    #     res_regex = res_regex = re.compile("^#ENAEVMONI: (?P<mode>[0-1])(?P<stat>[0-1])?$")
+    #     mode = res_regex.match(res.get("mode", ""))
+    #     stat = res_regex.match(res.get("stat", ""))
+
+    #     if mode == 0
+
+
+    # AT#ENAEVMONI=0
+    # AT#GPIO=3,0,1
+    # AT#ENAEVMONICFG=3,1,2
+    # AT#EVMONI="SMSIN",0,1,""     (Text to match for event trigger (empty brackets = doesn't care about text))
+    # AT#EVMONI="SMSIN",0,0,"AT#GPIO=3,1,1"    (command to execute when SMS arrives)
+    # AT#EVMONI="SMSIN",1
+    # AT#EVMONI="GPIO1",1,1,3    (GPIO #3)
+    # AT#EVMONI="GPIO1",1,2,1    (monitor GPIO #3 for HIGH)
+    # AT#EVMONI="GPIO1",1,3,1    (last number is how many seconds to activate the pin for)
+    # AT#EVMONI="GPIO1",1,0,"AT#GPIO=3,0,1"    (Command that's executed a specified time after GPIO 3 goes high)
+    # AT#EVMONI="GPIO1",1
+    # AT#ENAEVMONI=1
