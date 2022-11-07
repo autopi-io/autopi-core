@@ -1,50 +1,40 @@
-
 # TODO: Make this configurable from the advanced settings
 le910cx-fw-switch-configured:
-  module.run:
+  module_extra.configured:
     - name: modem.connection
-    - cmd: active_firmware_image
+    - args: 
+        - active_firmware_image
     - kwargs:
         net_conf: global
-
-le910cx-evmoni-disabled-for-config:
-  module.run:
-    - name: modem.connection
-    - cmd: evmoni_enabled
-    - kwargs:
-        enabled: False
-        confirm: True
+        storage_conf: ram
 
 le910cx-evmoni-configured:
-  module.run:
+  module_extra.configured:
     - name: modem.connection
-    - cmd: evmoni_config
+    - args: 
+        - evmoni_config
     - kwargs:
         instance: 3
         urcmod: True
         timeout: 5
         confirm: True
-    - require:
-      - module: le910cx-evmoni-disabled-for-config
 
 le910cx-evmoni-smsin-configured:
-  module.run:
+  module_extra.configured:
     - name: modem.connection
-    - cmd: evmoni_smsin_config
+    - args: 
+        - evmoni_smsin_config
     - kwargs:
         enabled: True
         command: "AT#GPIO=3,1,1"
         match_content: ""
         confirm: True
-        force: False
-    - require:
-      - module: le910cx-evmoni-disabled-for-config
 
 le910cx-evmoni-gpio-configured:
-  module.run:
+  module_extra.configured:
     - name: modem.connection
-    - cmd: evmoni_gpio_config
     - args:
+      - evmoni_gpio_config
       - 1
     - kwargs:
         enabled: True
@@ -53,18 +43,3 @@ le910cx-evmoni-gpio-configured:
         watch_status: True
         confirm: True
         delay: 5
-    - require:
-      - module: le910cx-evmoni-disabled-for-config
-
-le910cx-evmoni-enabled:
-  module.run:
-    - name: modem.connection
-    - cmd: evmoni_enabled
-    - kwargs:
-        enabled: True
-        confirm: True
-    - require:
-      - module: le910cx-evmoni-configured
-      - module: le910cx-evmoni-smsin-configured
-      - module: le910cx-evmoni-gpio-configured
-        
