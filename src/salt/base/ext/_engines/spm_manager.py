@@ -131,7 +131,7 @@ def heartbeat_handler():
 @edmp.register_hook()
 def reset_handler():
     """
-    Reset/restart ATtiny. 
+    Reset/restart the MCU. 
     """
 
     ret = {}
@@ -143,7 +143,7 @@ def reset_handler():
         log.info("Setting GPIO output pin {:} high".format(hold_pwr_pin))
         gpio.output(hold_pwr_pin, gpio.HIGH)
 
-        log.warn("Resetting ATtiny")
+        log.warn("Resetting the MCU")
         gpio.output(reset_pin, gpio.LOW)
 
         # Keep pin low for a while
@@ -153,8 +153,8 @@ def reset_handler():
 
     finally:
 
-        log.info("Sleeping for 1 sec to give ATtiny time to recover")
-        time.sleep(1)
+        log.info("Sleeping for 3 secs to give the MCU time to recover")
+        time.sleep(3)
 
         log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
         gpio.output(hold_pwr_pin, gpio.LOW)
@@ -163,19 +163,15 @@ def reset_handler():
 
 
 @edmp.register_hook()
-def flash_firmware_handler(hex_file, part_id, no_write=True):
+def flash_firmware_handler(file, part_id):
     """
-    Flashes new SPM firmware to the ATtiny.
+    Flashes new SPM firmware to the MCU.
     """
 
     ret = {}
 
-    if part_id == "rb2040":
-        raise NotImplementedError("Sorry, not yet implemented - ask HN")
-
-
-    if not os.path.exists(hex_file):
-        raise ValueError("Hex file does not exist")
+    if not os.path.exists(file):
+        raise ValueError("Firmware file does not exist")
 
     hold_pwr_pin = gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR)
     try:
@@ -183,14 +179,17 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
         log.info("Setting GPIO output pin {:} high".format(hold_pwr_pin))
         gpio.output(hold_pwr_pin, gpio.HIGH)
 
-        ret = __salt__["avrdude.flash"](hex_file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=no_write)
+        log.info("Flashing firmware release '{:}'".format(file))
+        if part_id == "rp2040":
+            start_address = "0x10000000" if file.endswith(".bin") else None
 
-        if not no_write:
-            log.info("Flashed firmware release '{:}'".format(hex_file))
+            ret = __salt__["openocd.program"](file, "interface/raspberrypi-swd.cfg", "target/rp2040.cfg", raise_on_error=False, start_address=start_address)
+        else:
+            ret = __salt__["avrdude.flash"](file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=False)
 
     finally:
 
-        log.info("Sleeping for 5 secs to give ATtiny time to recover")
+        log.info("Sleeping for 5 secs to give the MCU time to recover")
         time.sleep(5)
 
         log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
@@ -202,7 +201,7 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 @edmp.register_hook()
 def fuse_handler(name, part_id, value=None):
     """
-    Manage fuse of the ATtiny.
+    Manage fuse of the MCU.
     """
 
     if __opts__.get("spm.version", 1.0) >= 4.0:
@@ -220,7 +219,7 @@ def fuse_handler(name, part_id, value=None):
 
     finally:
 
-        log.info("Sleeping for 2 secs to give ATtiny time to recover")
+        log.info("Sleeping for 2 secs to give the MCU time to recover")
         time.sleep(2)
 
         log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))

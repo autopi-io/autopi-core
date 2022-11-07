@@ -9,7 +9,7 @@ no-kernel-usb-errors-test:
     - name: "dmesg | grep -c \"usb .*error\" | grep 0"  # We expect to NOT have that line in dmesg
 
 # Test modem as default unless none is specified in pillar
-{%- if salt['pillar.get']('setup:mpcie:module', 'ec2x') %}
+{%- if salt['pillar.get']('setup:mpcie:module') == 'ec2x' %}
 
 assert-modem-tty-usb-test:
   cmd.run:

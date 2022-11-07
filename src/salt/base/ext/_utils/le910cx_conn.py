@@ -18,14 +18,25 @@ error_regex = re.compile("ERROR|\+(?P<type>.+) ERROR: (?P<reason>.+)")
 class LE910CXException(Exception):
     pass
 
+
 class NoFixException(LE910CXException):
-    pass
+    def __init__(self, message="No fix"):
+        self.message = message
+        super(NoFixException, self).__init__(message)
+
 
 class InvalidResponseException(LE910CXException):
     pass
 
+
 class CommandExecutionException(LE910CXException):
     pass
+
+
+class NoSimPresentException(LE910CXException):
+    def __init__(self, message="No SIM present"):
+        self.message = message
+        super(NoSimPresentException, self).__init__(message)
 
 
 SMS_FORMAT_MODE_PUD = 0
@@ -82,23 +93,63 @@ PERIODIC_RESET_MODE_MAP = {
     PERIODIC_RESET_MODE_PERIODIC: "periodic",
 }
 
+FW_NET_CONF_ATT     = 0
+FW_NET_CONF_VERIZON = 1
+FW_NET_CONF_BELL    = 3
+FW_NET_CONF_TELUS   = 4
+FW_NET_CONF_GLOBAL  = 40
+
+FW_NET_CONF_MAP = {
+    FW_NET_CONF_ATT:     "att",
+    FW_NET_CONF_VERIZON: "verizon",
+    FW_NET_CONF_BELL:    "bell",
+    FW_NET_CONF_TELUS:   "telus",
+    FW_NET_CONF_GLOBAL:  "global",
+}
+
+FW_STORAGE_CONF_RAM = 0
+FW_STORAGE_CONF_NVM = 1
+
+FW_STORAGE_CONF_MAP = {
+    FW_STORAGE_CONF_RAM: "ram",
+    FW_STORAGE_CONF_NVM: "nvm",
+}
+
+QSS_STATUS_NOT_INSERTED              = 0
+QSS_STATUS_INSERTED                  = 1
+QSS_STATUS_INSERTED_AND_PIN_UNLOCKED = 2
+QSS_STATUS_INSERTED_AND_READY        = 3
+
+QSS_MAP = {
+    QSS_STATUS_NOT_INSERTED:              "not-inserted",
+    QSS_STATUS_INSERTED:                  "inserted",
+    QSS_STATUS_INSERTED_AND_PIN_UNLOCKED: "inserted-and-pin-unlocked",
+    QSS_STATUS_INSERTED_AND_READY:        "inserted-and-ready",
+}
+
+SUPPORTED_DATATYPES = (bool, int, str)
+PARAM_TYPES = {'rdInline_wrInline': 1, 'inline_readonly': 2, 'rdInline_wrIndexed': 3}
+MULTILINE_TYPES = {'dictionary': 1, 'array': 2}
+
 class LE910CXConn(SerialConn):
     """
     Connection class that implements the communication with a LE910CX modem.
+
+    A pattern that is required throughout this connection class is the use of a 'force' argument on get/set commands.
+    This means that the modem should always query the command's current status and then, only if needed or forced by
+    the 'force' argument, the set command should be run.
     """
 
     def __init__(self):
         super(LE910CXConn, self).__init__()
-        self._startup_settings = {}
 
     def init(self, settings):
         super(LE910CXConn, self).init(settings)
-        self._startup_settings = settings
 
     def open(self):
         super(LE910CXConn, self).open()
         self.config(self._settings)
-
+        
     def config(self, settings):
         """
         Configure the modem with passed settings.
@@ -122,6 +173,9 @@ class LE910CXConn(SerialConn):
 
             if not ready:
                 raise Exception("Modem isn't ready to receive commands yet")
+
+            # Configure echo on/off
+            self.execute("ATE{:d}".format(settings.get("echo_on", True)))
 
             # Configure GNSS
             if "error_config" in settings:
@@ -150,20 +204,20 @@ class LE910CXConn(SerialConn):
         - raise_on_error (bool): Set this to true to raise an error when the modem responds with an error. Default: True.
         """
 
-        log.info("Executing AT command: %s", cmd)
+        log.debug("Executing AT command: %s", cmd)
         res = None
 
         try:
             self.write_line(cmd)
 
             for ready_word in ready_words:
-                res = self.read_until(ready_word, error_regex, timeout=timeout)
+                res = self.read_until(ready_word, error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
 
                 if "error" in res:
                     log.error("Command {} returned error {}".format(cmd, res["error"]))
                     break
 
-            log.info("Got result: %s", res)
+            log.debug("Got result: %s", res)
 
         finally:
             if not keep_conn:
@@ -308,16 +362,17 @@ class LE910CXConn(SerialConn):
         return self.execute(cmd)
 
     def time(self):
-        # TODO HN: Parse result
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         return self.execute("AT+CCLK?")
 
     def cell_location(self):
-        # TODO HN: Parse result
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         return self.execute("AT#GTP")
 
     def sms_storage(self):
+        # TODO NV: Improve to be consistent with the rest of the class implementation
         ret = {}
 
         res = self.execute("AT+CPMS?")
@@ -334,6 +389,7 @@ class LE910CXConn(SerialConn):
         - 'pud': PUD mode
         - 'txt': Text mode
         """
+        # TODO NV: Improve to be consistent with the rest of the class implementation
 
         ret = {}
 
@@ -371,6 +427,11 @@ class LE910CXConn(SerialConn):
         - "STO SENT" - stored messages already sent
         - "ALL" - all messages
         """
+
+        # First check if the SIM is present
+        sim = self.query_sim_status()
+        if sim["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
+            raise NoSimPresentException()
 
         ret = {"values": []}
 
@@ -477,8 +538,6 @@ class LE910CXConn(SerialConn):
         delete_all = kwargs.pop("delete_all", False)
         confirm = kwargs.pop("confirm", False)
 
-        log.info("Federlizer: user wants to delete indexes {}".format(indexes))
-
         ret = {}
 
         # Always confirm first!
@@ -563,20 +622,40 @@ class LE910CXConn(SerialConn):
             "nsat_glonass": int(match.group("nsat_glonass")),
         }
 
-        # Calculate decimal degrees if requested
-        # dd = deg + min/60 + sec/3600
+        """
+        Calculate decimal degrees if requested
+        The calculation is based on the formula below
+        (https://stackoverflow.com/questions/33997361/how-to-convert-degree-minute-second-to-degree-decimal)
+
+        dd = deg + min/60 + sec/3600
+
+        Keep in mind that the last character (N|S for latitude and W|E for longitude) defines if the decimal degree
+        needs to be positive or negative. More info in the link above.
+        """
         if decimal_degrees:
+            # Calculate latitude
             lat = match.group("lat")
             lat_deg = float(lat[:2])
             lat_min = float(lat[2:-1])
+            lat_direction = lat[-1]
 
+            lat_dd = lat_deg + (lat_min/60)
+            if lat_direction == "S": # multiply by -1
+                lat_dd = lat_dd * -1
+
+            # Calculate longitude
             lon = match.group("lon")
             lon_deg = float(lon[:3])
             lon_min = float(lon[3:-1])
+            lon_direction = lon[-1]
+
+            lon_dd = lon_deg + (lon_min/60)
+            if lon_direction == "W": # multiply by -1
+                lon_dd = lon_dd * -1
 
             # TODO NV: Maybe round them?
-            ret["lat"] = lat_deg + (lat_min/60)
-            ret["lon"] = lon_deg + (lon_min/60)
+            ret["lat"] = lat_dd
+            ret["lon"] = lon_dd
 
         else:
             ret["lat"] = match.group("lat")
@@ -653,7 +732,7 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from mode: {}".format(res))
+            log.error("Didn't receive expected response from modem: {}".format(res))
             raise InvalidResponseException("Didn't receive expected response")
 
         # Construct return value
@@ -744,6 +823,513 @@ class LE910CXConn(SerialConn):
 
         if wait:
             # Wait for the port to become available again
-            res = self.read_until("NO CARRIER", error_regex, timeout=timeout)
+            res = self.read_until("NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
             return res
 
+    def active_firmware_image(self, net_conf=None, storage_conf=None, force=False, cooldown_delay=20):
+        """
+        Gets or sets the active firmware configuration on the modem. Don't pass any arguments to query (get) the
+        current configuration. If the command results in changing the firmware configuration it will reboot the modem.
+        You can specify the `cooldown_delay` parameter to set the amount of time the function waits after the modem
+        reboots.
+
+        Optional parameters:
+        - net_conf (string): The configuration that the modem should be set to. Check below for available configurations.
+          Default: None.
+        - storage_conf (string): The storage configuration. As per modem AT command documentation, this is just a dummy
+          argument preserved for backwards compatibility. Default: None.
+        - force (bool): Force apply the configuration to the modem. Default: False.
+        - cooldown_delay (int): How long should this function wait after dropping the connection to the modem.
+
+        Available configurations:
+        - att: AT&T
+        - verizon: Verizon
+        - bell: Bell
+        - telus: Telus
+        - global: Global
+        """
+
+        # NOTE NV: It looks like, as per modem's AT command reference, there is an extra argument available on the
+        # command (restore_user_conf). However, while testing this on an LE910C4-WWXD modem, I wasn't able to get that
+        # argument to work, it always came back with an error. So, I've ommited it.
+
+        ret = {}
+        res = self.execute("AT#FWSWITCH?")
+
+        # Response format:
+        # #FWSWITCH: <net_conf>,<storage_conf>
+        # #FWSWITCH: <net_conf>,<storage_conf>,<restore_user_conf>??? <- look at note above
+        res_regex = re.compile("^#FWSWITCH: (?P<net_conf>[0-9]+),(?P<storage_conf>[0-2])")
+        match = res_regex.match(res.get("data", ""))
+
+        if not match:
+            log.error("Didn't receive expected response from modem: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        ret["net_conf"] = FW_NET_CONF_MAP[int(match.group("net_conf"))]
+        ret["storage_conf"] = FW_STORAGE_CONF_MAP[int(match.group("storage_conf"))]
+
+        if storage_conf != None and net_conf == None:
+            raise ValueError("You must set 'net_conf' value if you're also setting 'storage_conf' value")
+
+        if net_conf != None:
+            if type(net_conf) != str or net_conf not in FW_NET_CONF_MAP.values():
+                raise ValueError("'net_conf' needs to be one of {}".format(FW_NET_CONF_MAP.values()))
+
+            if ret["net_conf"] != net_conf or force:
+                net_conf_val = dict_key_by_value(FW_NET_CONF_MAP, net_conf)
+                cmd = "AT#FWSWITCH={:d}".format(net_conf_val)
+                ret["net_conf"] = net_conf
+
+                # Also decide storage method, although as per AT command spec, this is just a dummy parameter
+                if storage_conf != None:
+                    # Use passed value
+                    if type(storage_conf) != str or storage_conf not in FW_STORAGE_CONF_MAP.values():
+                        raise ValueError("'storage_conf' needs to be one of {}".format(FW_STORAGE_CONF_MAP.values()))
+
+                    storage_conf_val = dict_key_by_value(FW_STORAGE_CONF_MAP, storage_conf)
+                    cmd = "{},{:d}".format(cmd, storage_conf_val)
+                    ret["storage_conf"] = storage_conf
+
+                else:
+                    # Otherwise, just use the one set currently
+                    cmd = "{},{:d}".format(cmd, int(match.group("storage_conf")))
+
+                # Since the modem will restart, we give up the connection and give it time to reboot
+                self.execute(cmd, keep_conn=False, cooldown_delay=cooldown_delay)
+
+        return ret
+
+    def query_sim_status(self):
+        """
+        Queries for the current SIM status.
+
+        Possible return values:
+        - not-inserted
+        - inserted
+        - inserted-and-pin-unlocked
+        - inserted-and-ready
+        """
+
+
+        # NOTE NV: It is possible to setup unsolicited messages (<mode>), however I skipped it for this implementation
+        # since we're not listening to those anyways.
+
+        ret = {}
+        res = self.execute("AT#QSS?")
+
+        # Response format
+        # #QSS: <mode>,<status>
+        res_regex = re.compile("^#QSS: (?P<mode>[0-2]),(?P<status>[0-3])")
+        match = res_regex.match(res.get("data", ""))
+
+        if not match:
+            log.error("Didn't receive expected response from modem: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        ret["status"] = QSS_MAP[int(match.group("status"))]
+
+        return ret
+
+    def generate_regex(self, at_command, params, multiline_identifier):
+        """
+        Generates a regex with named params for interpreting an AT command response
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        """
+        rx_string = ''
+
+        # Prepend the identifier to dictionary type
+        if multiline_identifier != None and multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            rx_param_string = ''
+            for param in params: 
+                rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: "{}"{}$'.format(multiline_identifier.label.desired_value, rx_param_string)
+        
+        else:
+            for i in range(len(params)): 
+                param = params[i]
+                if i == 0:
+                    rx_param_string = param.get_named_regex_string()
+                else:
+                    rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: {}$'.format(rx_param_string)
+
+        return rx_string
+
+    def read_modem_config(self, at_command, params, multiline_identifier=None):
+        """
+        Reads an AT command based on a given command signature and parameter list/tuple and formats to dictionary
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+
+        Optional arguments:
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response.
+
+        Returns:
+        Dictionary formatted as { param.name: param.datatype(value), ... }
+        """
+        res = self.execute(at_command + '?')
+        config_line = ''
+        rx_string = ''
+
+        # Find correct string in response data 
+
+        if multiline_identifier == None:
+            if not type(res["data"]) == str:
+                raise Exception("Got multiple lines in response data, without a specified line identifier")
+            config_line = res.get("data")
+        else:
+            if not type(res["data"]) == list:
+                raise Exception("Got single line in response data, when expecting multiple")
+
+            if multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+                index = multiline_identifier.index
+                if not multiline_identifier.zero_indexed:
+                    index -= 1
+                
+                config_line = res.get("data")[index]                
+
+            elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+                config_line = [line for line in res.get("data") if multiline_identifier.label.desired_value in line][0]
+            
+        # Compile and match regex string
+
+        rx_string = self.generate_regex(at_command, params, multiline_identifier)
+        match = re.match(rx_string, config_line)
+        if not match:
+            raise Exception('Could not match generated regex')
+        match_dict = match.groupdict()
+
+        log.info("Match Dict: {}".format(match_dict))
+
+        # Convert to correct types
+
+        converted_data = {}
+        for param in params:
+            try:
+                retrieved_value = match_dict.get(param.name)
+                converted_data[param.name] = param.to_native_datatype_from_AT_string(retrieved_value)  # param.datatype(match_dict.get(param.name))
+            except ValueError:
+                raise ValueError("Data '{}' for '{}' could not be converted to {}".format(match_dict.get(param.name),
+                                 param.name, param.datatype))
+
+        return converted_data
+
+    def update_modem_config(self, at_command, params, current_values, multiline_identifier=None, force=False):
+        """
+        Updates configs where the current_values do not match the desired ones
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - current_values (dictionary): currently active config values
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - force (bool): Force applying the settings to the modem.
+        """
+        update_commands = []
+        indexed_index = 0
+        inline_index = 0
+        base_command = ''
+
+        # Generate the commands necessary to do the update
+        if multiline_identifier == None:
+            base_command = '{}='.format(at_command)
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.label.get_AT_formatted_named_value())
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.index)
+
+        for i in range(len(params)):
+            param = params[i]
+            if param.paramtype == PARAM_TYPES['rdInline_wrInline']:
+
+                # Handle first comma not being needed on first param
+                if inline_index == 0 and multiline_identifier == None:
+                    base_command = '{}{}'.format(base_command, param.get_AT_formatted_named_value())
+                else:
+                    base_command = '{},{}'.format(base_command, param.get_AT_formatted_named_value())
+
+                # Ensure inline configs are all updated at once
+                if len(update_commands) > 0:
+                    update_commands[0] = base_command
+
+                # Ensure config is updated when there are no rdInline_wrIndexed params to update.
+                elif current_values.get(param.name) != param.desired_value or len(update_commands) > 0 or force:
+                    update_commands.append(base_command)
+                
+                inline_index += 1
+                
+            elif param.paramtype == PARAM_TYPES['rdInline_wrIndexed']:
+                if current_values.get(param.name) != param.desired_value or force:
+                    update_commands.append('{},{},{}'.format(base_command, indexed_index, param.get_AT_formatted_named_value()))
+
+                indexed_index += 1
+            
+        for cmd in update_commands:
+            self.execute(cmd)
+
+    def is_update_requested_raise_on_error(self, params):
+        """
+        Check if an update has been requested based on parameter list's/tuple's desired values
+        """
+        has_none_type = False
+        has_value_type = False
+
+        for param in params:
+            if param.paramtype != PARAM_TYPES["inline_readonly"]:
+                if param.desired_value == None:
+                    has_none_type = True
+                else:
+                    has_value_type = True
+
+        if has_value_type and has_none_type:
+            raise ValueError('All params are required when updating: {}'.format([param.name
+                             + ': ' + str(param.datatype) for param in
+                             params]))
+
+        return has_value_type
+
+    def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None, pre_update_task=None, post_update_task=None):
+        """
+        Query given AT command. If params have desired_values and they don't match the real data, update the modem config.
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        ret = {}
+
+        update = self.is_update_requested_raise_on_error(params)
+
+        if update and not confirm:
+            raise Exception("This command will modify configuration directly on the Modem - add parameter 'confirm=true' to continue anyway.")
+
+        current_data = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+
+        if update:
+            if pre_update_task:
+                pre_update_task()
+
+            self.update_modem_config(at_command, params, current_data, multiline_identifier=multiline_identifier, force=force)
+
+            if post_update_task:
+                pre_update_task()
+
+            ret = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+        else:
+            ret = current_data
+
+        return ret
+
+
+    def evmoni_smsin_config(self, enabled=None, command=None, match_content=None, confirm=False, force=False):
+        """
+        Sets the configuration of sms received event
+
+        Arguments:
+        - enabled (bool):  Enables/disables the SMSIN event monitor
+        - command (str): AT command that gets run on received SMS
+        - match_content (str): text that has to be matched in the SMS. Empty string for no match
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param('enabled', PARAM_TYPES['rdInline_wrInline'], bool, enabled), 
+            Param('command', PARAM_TYPES['rdInline_wrIndexed'], str, command), 
+            Param('match_content',PARAM_TYPES['rdInline_wrIndexed'], str, match_content)
+        )
+
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, "SMSIN")
+        )
+
+        res = self.query(
+            'AT#EVMONI', 
+            params, 
+            multiline_identifier=idfr, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+
+    def evmoni_gpio_config(self, peripheral_num, enabled=None, command=None, gpio_pin=None, watch_status=None, delay=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+
+        Required arguments:
+        - peripheral_num (int): number of the GPIO peripheral to update
+
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the GPIOX event monitor
+        - command (str): AT command that gets run on event match
+        - gpio_pin (int): gpio pin on which to listen for the change
+        - watch_status (bool): watch for rising edge (true) or falling edge (false)
+        - delay (int): how many seconds after triggering will the command be executed
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param('enabled', PARAM_TYPES['rdInline_wrInline'], bool, enabled), 
+            Param('command', PARAM_TYPES['rdInline_wrIndexed'], str, command), 
+            Param('gpio_pin',PARAM_TYPES['rdInline_wrIndexed'], int, gpio_pin),
+            Param('watch_status', PARAM_TYPES['rdInline_wrIndexed'], bool, watch_status),
+            Param('delay', PARAM_TYPES['rdInline_wrIndexed'], int, delay)
+        )
+
+        label = "GPIO" + str(peripheral_num)
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, label)
+        )
+
+        res = self.query(
+            'AT#EVMONI', 
+            params, 
+            multiline_identifier=idfr, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+    def evmoni_enabled(self, enabled=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+        
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the event monitor
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param("_mode", PARAM_TYPES['inline_readonly'], bool, None),
+            Param("_status", PARAM_TYPES['rdInline_wrInline'], bool, enabled)
+        )
+
+        res = self.query(
+            "AT#ENAEVMONI", 
+            params, 
+            confirm=confirm, 
+            force=force
+        )
+
+        res["enabled"] = res.get("_status") and res.get("_mode")
+
+        return res
+
+    def evmoni_config(self, instance=None, timeout=None, urcmod=None, confirm=False, force=False):
+        """
+        Configures the event monitor
+        
+        Optional Arguments:
+        - instance (int): AT instance used by the service to run the AT command (1-3)
+        - urcmod (bool): enable/disable unsolicited message
+        - timeout (int): timeout in minutes for AT command execution
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param("instance", PARAM_TYPES['rdInline_wrInline'], int, instance),
+            Param("urcmod", PARAM_TYPES['rdInline_wrInline'], bool, urcmod),
+            Param("timeout", PARAM_TYPES['rdInline_wrInline'], int, timeout)
+        )
+
+        res = self.query(
+            "AT#ENAEVMONICFG", 
+            params, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+
+class MultilineIdentifier:
+    def __init__(self, multilineType, index=None, label=None, zero_indexed=True):
+        if multilineType not in MULTILINE_TYPES.values():
+            raise ValueError("Type must be one of (MULTILINE_TYPES.values)")
+        
+        if multilineType == MULTILINE_TYPES["dictionary"]:
+            if not isinstance(label, Param):
+                raise ValueError("Dictionary identifier must have a label of type <Param>")
+            self.label = label
+
+        elif multilineType == MULTILINE_TYPES["array"]:
+            if not isinstance(index, int):
+                raise ValueError("Array identifier must have an index of type <int>")
+            self.index = index
+            self.zero_indexed = zero_indexed
+
+        self.multilineType = multilineType
+
+
+class Param:
+    def __init__(self, name, paramtype, datatype, desired_value):
+        if datatype not in SUPPORTED_DATATYPES:
+            raise ValueError('Unsupported type. Supported types: {}'.format(SUPPORTED_DATATYPES))
+
+        if desired_value != None and type(desired_value) != datatype:
+            raise ValueError("Type mismatch for {}. Expected: {}, got: {}".format(name, datatype, type(desired_value)))
+
+        self.datatype = datatype
+        self.desired_value = desired_value
+        self.name = name
+        self.paramtype = paramtype
+
+    def to_native_datatype_from_AT_string(self, value):
+        if type(value) == str:
+            if self.datatype == str:
+                return value
+            elif self.datatype == bool:
+                return bool(int(value))
+            elif self.datatype == int:
+                return int(value)
+        else:
+            raise Exception("Can not convert from {} to native type of {}".format(type(value), self.datatype))
+
+    def get_named_regex_string(self):
+        if self.datatype == str:
+            return '"(?P<{}>[^"]*)"'.format(self.name)
+        elif self.datatype == bool:
+            return '(?P<{}>[0-1])'.format(self.name)
+        elif self.datatype == int:
+            return '(?P<{}>[0-9]*)'.format(self.name)
+
+    def get_AT_formatted_named_value(self):
+        if self.datatype == str:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <str>')
+
+            return '"{}"'.format(self.desired_value)
+
+        elif self.datatype == bool:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <bool>')
+
+            return str(int(self.desired_value))
+
+        elif self.datatype == int:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <int>')
+
+            return str(self.desired_value)
