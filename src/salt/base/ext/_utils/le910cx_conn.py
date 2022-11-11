@@ -127,6 +127,22 @@ QSS_MAP = {
     QSS_STATUS_INSERTED_AND_READY:        "inserted-and-ready",
 }
 
+CGDCONT_PDP_TYPE_IP     = "IP"
+CGDCONT_PDP_TYPE_PPP    = "PPP"
+CGDCONT_PDP_TYPE_IPV6   = "IPV6"
+CGDCONT_PDP_TYPE_IPV4V6 = "IPV4V6"
+
+CGDCONT_PDP_TYPE_MAP = {
+    CGDCONT_PDP_TYPE_IP:     "ip",
+    CGDCONT_PDP_TYPE_PPP:    "ppp",
+    CGDCONT_PDP_TYPE_IPV6:   "ipv6",
+    CGDCONT_PDP_TYPE_IPV4V6: "ipv4v6",
+}
+
+SUPPORTED_DATATYPES = (bool, int, str)
+PARAM_TYPES = {'rdInline_wrInline': 1, 'inline_readonly': 2, 'rdInline_wrIndexed': 3}
+MULTILINE_TYPES = {'dictionary': 1, 'array': 2}
+
 
 class LE910CXConn(SerialConn):
     """
@@ -908,7 +924,6 @@ class LE910CXConn(SerialConn):
         - inserted-and-ready
         """
 
-
         # NOTE NV: It is possible to setup unsolicited messages (<mode>), however I skipped it for this implementation
         # since we're not listening to those anyways.
 
@@ -927,3 +942,557 @@ class LE910CXConn(SerialConn):
         ret["status"] = QSS_MAP[int(match.group("status"))]
 
         return ret
+
+    def pdp_context(self, cid=None, pdp_type=None, apn=None, delete_cid=False, force=False):
+        """
+        Optional parameters:
+          - cid (number): The context ID to change. Default: None.
+          - pdp_type (string): The type of the PDP context. Check available options below. Default: None.
+          - apn (string): The APN to be set on the context cid. Default: None.
+          - delete_cid (bool): Should the cid be unset? Default: False.
+          - force (bool): Force set the parameters, even if they have already been set. Default: False.
+
+        pdp_types:
+          - "ip": Internet Protocol
+          - "ppp": Point to Point Protocol
+          - "ipv6": Internet Protocol, Version 6
+          - "ipv4v6" (default): Virtual <PDP_type> introduced to handle dual IP stack UE capability
+        """
+
+        # First check if the SIM is present
+        sim_status = self.query_sim_status()
+        if sim_status["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
+            raise NoSimPresentException()
+
+        ret = []
+        res = self.execute("AT+CGDCONT?")
+
+        # Response format
+        # +CGDCONT: <cid>,<PDP_type>,<APN>,<PDP_addr>,<d_comp>,<h_comp>,<IPv4AddrAlloc>,<Emergency_ind><CR><LF>[...]
+
+        # Example response:
+        # +CGDCONT: 1,"IPV4V6","","",0,0,0,0
+        # +CGDCONT: 2,"IPV4V6","ims","",0,0,0,0
+
+        # Example response:
+        # +CGDCONT: 1,"IPV4V6","","",0,0,0,0
+
+        # Prepare response data to be processed
+        res_data = [] # Allocate
+        if type(res.get("data")) == str: # Single line res
+            res_data = [res.get("data", "")]
+        elif type(res.get("data")) == list: # Multiple line res
+            res_data = res.get("data", [])
+        else: # Invalid response?
+            log.error("Didn't receive expected response from modem: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        # Process response data
+        res_regex = re.compile("^\+CGDCONT: " + \
+            "(?P<cid>[0-9]+)," + \
+            "\"(?P<pdp_type>[a-zA-Z0-9]+)\"," + \
+            "\"(?P<apn>[a-zA-Z0-9\.-]+)?\"," + \
+            "\"(?P<pdp_addr>[a-zA-Z0-9]+)?\"," + \
+            "(?P<d_comp>[0-9])," + \
+            "(?P<h_comp>[0-9])," + \
+            "(?P<ipv4addralloc>[0-9])," + \
+            "(?P<emergency_ind>[0-9])"
+        )
+
+        # Construct
+        for line in res_data:
+            match = res_regex.match(line)
+
+            if not match:
+                log.error("Didn't receive expected response from modem: {}".format(res))
+                raise InvalidResponseException("Didn't receive expected response")
+
+            ret.append({
+                "cid": int(match.group("cid")),
+                "pdp_type": match.group("pdp_type"),
+                "apn": match.group("apn") if match.group("apn") else "",
+                #"pdp_addr": match.group("pdp_addr") if match.group("pdp_addr") else "", # Not implemented
+                #"d_comp": int(match.group("d_comp")), # Not implemented
+                #"h_comp": int(match.group("h_comp")), # Not implemented
+                #"ipv4addralloc": int(match.group("ipv4addralloc")), # Not implemented
+                #"emergency_ind": int(match.group("emergency_ind")), # Not implemented
+            })
+
+        # Make any changes if necessary
+        if cid != None:
+            if type(cid) != int:
+                raise ValueError("'cid' argument needs to be a number")
+
+            # Find the pdp_entry that the cid references
+            pdp_entry = None
+            for entry in ret:
+                if entry["cid"] == cid:
+                    pdp_entry = entry
+                    break
+
+            if pdp_entry: # PDP already exists
+                if delete_cid == True: # User wants to unset this CID
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("Going to unset cid {}".format(cid))
+                    self.execute("AT+CGDCONT={:d}".format(cid))
+                    ret = [pdp_entry for pdp_entry in ret if pdp_entry["cid"] != cid]
+
+                else: # User wants to change the pdp context
+                    if pdp_type == None or apn == None:
+                        raise ValueError("Both 'pdp_type' and 'apn' arguments needs to be set when changing an existing PDP context")
+
+                    if pdp_entry["pdp_type"] != pdp_type or pdp_entry["apn"] != apn or force:
+                        # Difference in PDP, set it
+                        if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
+                            raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+
+                        pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
+                        if log.isEnabledFor(logging.DEBUG):
+                            log.debug("Going to change a PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
+                        self.execute("AT+CGDCONT={:d},\"{:s}\",\"{:s}\"".format(cid, pdp_type_val, apn))
+
+                        new_pdp_context = {
+                            "cid": cid,
+                            "pdp_type": pdp_type,
+                            "apn": apn,
+                            #"pdp_addr": "",
+                            #"d_comp": 0, # Not implemented
+                            #"h_comp": 0, # Not implemented
+                            #"ipv4addralloc": 0, # Not implemented
+                            #"emergency_ind": 0, # Not implemented
+                        }
+
+                        ret = [ new_pdp_context if pdp_context["cid"] == cid else pdp_context for pdp_context in ret ]
+
+            else: # PDP doesn't exist
+                if delete_cid == True:
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("CID {} already doesn't exist. Noop due to delete_cid == {}".format(cid, delete_cid))
+                    return ret
+
+                if pdp_type == None or apn == None:
+                    raise ValueError("cid {} doesn't exist. Both 'pdp_type' and 'apn' arguments needs to be set when defining a new PDP context".format(cid))
+
+                if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
+                    raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+
+                pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Going to set new PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
+                self.execute("AT+CGDCONT={:d},\"{}\",\"{}\"".format(cid, pdp_type_val, apn))
+
+                ret.append({
+                    "cid": cid, # already ensured to be an int
+                    "pdp_type": pdp_type,
+                    "apn": apn,
+                    #"pdp_addr": "",
+                    #"d_comp": 0, # Not implemented
+                    #"h_comp": 0, # Not implemented
+                    #"ipv4addralloc": 0, # Not implemented
+                    #"emergency_ind": 0, # Not implemented
+                })
+
+        return ret
+
+    def generate_regex(self, at_command, params, multiline_identifier):
+        """
+        Generates a regex with named params for interpreting an AT command response
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        """
+        rx_string = ''
+
+        # Prepend the identifier to dictionary type
+        if multiline_identifier != None and multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            rx_param_string = ''
+            for param in params: 
+                rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: "{}"{}$'.format(multiline_identifier.label.desired_value, rx_param_string)
+        
+        else:
+            for i in range(len(params)): 
+                param = params[i]
+                if i == 0:
+                    rx_param_string = param.get_named_regex_string()
+                else:
+                    rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
+
+            rx_string = '^#[A-Z]*: {}$'.format(rx_param_string)
+
+        return rx_string
+
+    def read_modem_config(self, at_command, params, multiline_identifier=None):
+        """
+        Reads an AT command based on a given command signature and parameter list/tuple and formats to dictionary
+
+        Arguments:
+        at_command (string): AT command beginning (without proceding ? or =...)
+        params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+
+        Optional arguments:
+        multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response.
+
+        Returns:
+        Dictionary formatted as { param.name: param.datatype(value), ... }
+        """
+        res = self.execute(at_command + '?')
+        config_line = ''
+        rx_string = ''
+
+        # Find correct string in response data 
+
+        if multiline_identifier == None:
+            if not type(res["data"]) == str:
+                raise Exception("Got multiple lines in response data, without a specified line identifier")
+            config_line = res.get("data")
+        else:
+            if not type(res["data"]) == list:
+                raise Exception("Got single line in response data, when expecting multiple")
+
+            if multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+                index = multiline_identifier.index
+                if not multiline_identifier.zero_indexed:
+                    index -= 1
+                
+                config_line = res.get("data")[index]                
+
+            elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+                config_line = [line for line in res.get("data") if multiline_identifier.label.desired_value in line][0]
+            
+        # Compile and match regex string
+
+        rx_string = self.generate_regex(at_command, params, multiline_identifier)
+        match = re.match(rx_string, config_line)
+        if not match:
+            raise Exception('Could not match generated regex')
+        match_dict = match.groupdict()
+
+        log.info("Match Dict: {}".format(match_dict))
+
+        # Convert to correct types
+
+        converted_data = {}
+        for param in params:
+            try:
+                retrieved_value = match_dict.get(param.name)
+                converted_data[param.name] = param.to_native_datatype_from_AT_string(retrieved_value)  # param.datatype(match_dict.get(param.name))
+            except ValueError:
+                raise ValueError("Data '{}' for '{}' could not be converted to {}".format(match_dict.get(param.name),
+                                 param.name, param.datatype))
+
+        return converted_data
+
+    def update_modem_config(self, at_command, params, current_values, multiline_identifier=None, force=False):
+        """
+        Updates configs where the current_values do not match the desired ones
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - current_values (dictionary): currently active config values
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - force (bool): Force applying the settings to the modem.
+        """
+        update_commands = []
+        indexed_index = 0
+        inline_index = 0
+        base_command = ''
+
+        # Generate the commands necessary to do the update
+        if multiline_identifier == None:
+            base_command = '{}='.format(at_command)
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["dictionary"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.label.get_AT_formatted_named_value())
+        elif multiline_identifier.multilineType == MULTILINE_TYPES["array"]:
+            base_command = '{}={}'.format(at_command, multiline_identifier.index)
+
+        for i in range(len(params)):
+            param = params[i]
+            if param.paramtype == PARAM_TYPES['rdInline_wrInline']:
+
+                # Handle first comma not being needed on first param
+                if inline_index == 0 and multiline_identifier == None:
+                    base_command = '{}{}'.format(base_command, param.get_AT_formatted_named_value())
+                else:
+                    base_command = '{},{}'.format(base_command, param.get_AT_formatted_named_value())
+
+                # Ensure inline configs are all updated at once
+                if len(update_commands) > 0:
+                    update_commands[0] = base_command
+
+                # Ensure config is updated when there are no rdInline_wrIndexed params to update.
+                elif current_values.get(param.name) != param.desired_value or len(update_commands) > 0 or force:
+                    update_commands.append(base_command)
+                
+                inline_index += 1
+                
+            elif param.paramtype == PARAM_TYPES['rdInline_wrIndexed']:
+                if current_values.get(param.name) != param.desired_value or force:
+                    update_commands.append('{},{},{}'.format(base_command, indexed_index, param.get_AT_formatted_named_value()))
+
+                indexed_index += 1
+            
+        for cmd in update_commands:
+            self.execute(cmd)
+
+    def is_update_requested_raise_on_error(self, params):
+        """
+        Check if an update has been requested based on parameter list's/tuple's desired values
+        """
+        has_none_type = False
+        has_value_type = False
+
+        for param in params:
+            if param.paramtype != PARAM_TYPES["inline_readonly"]:
+                if param.desired_value == None:
+                    has_none_type = True
+                else:
+                    has_value_type = True
+
+        if has_value_type and has_none_type:
+            raise ValueError('All params are required when updating: {}'.format([param.name
+                             + ': ' + str(param.datatype) for param in
+                             params]))
+
+        return has_value_type
+
+    def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None, pre_update_task=None, post_update_task=None):
+        """
+        Query given AT command. If params have desired_values and they don't match the real data, update the modem config.
+
+        Arguments:
+        - at_command (string): AT command beginning (without proceding ? or =...)
+        - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
+        - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        ret = {}
+
+        update = self.is_update_requested_raise_on_error(params)
+
+        if update and not confirm:
+            raise Exception("This command will modify configuration directly on the Modem - add parameter 'confirm=true' to continue anyway.")
+
+        current_data = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+
+        if update:
+            if pre_update_task:
+                pre_update_task()
+
+            self.update_modem_config(at_command, params, current_data, multiline_identifier=multiline_identifier, force=force)
+
+            if post_update_task:
+                pre_update_task()
+
+            ret = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+        else:
+            ret = current_data
+
+        return ret
+
+
+    def evmoni_smsin_config(self, enabled=None, command=None, match_content=None, confirm=False, force=False):
+        """
+        Sets the configuration of sms received event
+
+        Arguments:
+        - enabled (bool):  Enables/disables the SMSIN event monitor
+        - command (str): AT command that gets run on received SMS
+        - match_content (str): text that has to be matched in the SMS. Empty string for no match
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param('enabled', PARAM_TYPES['rdInline_wrInline'], bool, enabled), 
+            Param('command', PARAM_TYPES['rdInline_wrIndexed'], str, command), 
+            Param('match_content',PARAM_TYPES['rdInline_wrIndexed'], str, match_content)
+        )
+
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, "SMSIN")
+        )
+
+        res = self.query(
+            'AT#EVMONI', 
+            params, 
+            multiline_identifier=idfr, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+
+    def evmoni_gpio_config(self, peripheral_num, enabled=None, command=None, gpio_pin=None, watch_status=None, delay=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+
+        Required arguments:
+        - peripheral_num (int): number of the GPIO peripheral to update
+
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the GPIOX event monitor
+        - command (str): AT command that gets run on event match
+        - gpio_pin (int): gpio pin on which to listen for the change
+        - watch_status (bool): watch for rising edge (true) or falling edge (false)
+        - delay (int): how many seconds after triggering will the command be executed
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param('enabled', PARAM_TYPES['rdInline_wrInline'], bool, enabled), 
+            Param('command', PARAM_TYPES['rdInline_wrIndexed'], str, command), 
+            Param('gpio_pin',PARAM_TYPES['rdInline_wrIndexed'], int, gpio_pin),
+            Param('watch_status', PARAM_TYPES['rdInline_wrIndexed'], bool, watch_status),
+            Param('delay', PARAM_TYPES['rdInline_wrIndexed'], int, delay)
+        )
+
+        label = "GPIO" + str(peripheral_num)
+        idfr = MultilineIdentifier(
+            MULTILINE_TYPES["dictionary"], 
+            label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, label)
+        )
+
+        res = self.query(
+            'AT#EVMONI', 
+            params, 
+            multiline_identifier=idfr, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+    def evmoni_enabled(self, enabled=None, confirm=False, force=False):
+        """
+        Sets the configuration of gpio change event
+        
+        Optional Arguments:
+        - enabled (bool):  Enables/disables the event monitor
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param("_mode", PARAM_TYPES['inline_readonly'], bool, None),
+            Param("_status", PARAM_TYPES['rdInline_wrInline'], bool, enabled)
+        )
+
+        res = self.query(
+            "AT#ENAEVMONI", 
+            params, 
+            confirm=confirm, 
+            force=force
+        )
+
+        res["enabled"] = res.get("_status") and res.get("_mode")
+
+        return res
+
+    def evmoni_config(self, instance=None, timeout=None, urcmod=None, confirm=False, force=False):
+        """
+        Configures the event monitor
+        
+        Optional Arguments:
+        - instance (int): AT instance used by the service to run the AT command (1-3)
+        - urcmod (bool): enable/disable unsolicited message
+        - timeout (int): timeout in minutes for AT command execution
+        - confirm (bool): confirm updates
+        - force (bool): Force applying the settings to the modem.
+        """
+        params = (
+            Param("instance", PARAM_TYPES['rdInline_wrInline'], int, instance),
+            Param("urcmod", PARAM_TYPES['rdInline_wrInline'], bool, urcmod),
+            Param("timeout", PARAM_TYPES['rdInline_wrInline'], int, timeout)
+        )
+
+        res = self.query(
+            "AT#ENAEVMONICFG", 
+            params, 
+            confirm=confirm, 
+            force=force,
+            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+        )
+
+        return res
+
+
+class MultilineIdentifier:
+    def __init__(self, multilineType, index=None, label=None, zero_indexed=True):
+        if multilineType not in MULTILINE_TYPES.values():
+            raise ValueError("Type must be one of (MULTILINE_TYPES.values)")
+        
+        if multilineType == MULTILINE_TYPES["dictionary"]:
+            if not isinstance(label, Param):
+                raise ValueError("Dictionary identifier must have a label of type <Param>")
+            self.label = label
+
+        elif multilineType == MULTILINE_TYPES["array"]:
+            if not isinstance(index, int):
+                raise ValueError("Array identifier must have an index of type <int>")
+            self.index = index
+            self.zero_indexed = zero_indexed
+
+        self.multilineType = multilineType
+
+
+class Param:
+    def __init__(self, name, paramtype, datatype, desired_value):
+        if datatype not in SUPPORTED_DATATYPES:
+            raise ValueError('Unsupported type. Supported types: {}'.format(SUPPORTED_DATATYPES))
+
+        if desired_value != None and type(desired_value) != datatype:
+            raise ValueError("Type mismatch for {}. Expected: {}, got: {}".format(name, datatype, type(desired_value)))
+
+        self.datatype = datatype
+        self.desired_value = desired_value
+        self.name = name
+        self.paramtype = paramtype
+
+    def to_native_datatype_from_AT_string(self, value):
+        if type(value) == str:
+            if self.datatype == str:
+                return value
+            elif self.datatype == bool:
+                return bool(int(value))
+            elif self.datatype == int:
+                return int(value)
+        else:
+            raise Exception("Can not convert from {} to native type of {}".format(type(value), self.datatype))
+
+    def get_named_regex_string(self):
+        if self.datatype == str:
+            return '"(?P<{}>[^"]*)"'.format(self.name)
+        elif self.datatype == bool:
+            return '(?P<{}>[0-1])'.format(self.name)
+        elif self.datatype == int:
+            return '(?P<{}>[0-9]*)'.format(self.name)
+
+    def get_AT_formatted_named_value(self):
+        if self.datatype == str:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <str>')
+
+            return '"{}"'.format(self.desired_value)
+
+        elif self.datatype == bool:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <bool>')
+
+            return str(int(self.desired_value))
+
+        elif self.datatype == int:
+            if self.desired_value == None:
+                raise Exception('Can not format None to <int>')
+
+            return str(self.desired_value)
