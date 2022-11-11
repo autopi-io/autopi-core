@@ -25,6 +25,7 @@ AUTO_REBOOT=false
 MODE=qmi
 PING_HOST=google.com
 SIM_CONF=/etc/qmi-sim.conf
+DELETE_SECOND_PDP_CONTEXT=false
 
 
 # Helper functions
@@ -347,12 +348,32 @@ ensure_auto_network ()
     return $OK
 }
 
+ensure_second_pdp_context_deleted ()
+{
+    # Ensure second PDP context is removed when that's a requirement, but only if SIM is present
+    retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
+    if [ $? -eq 0 ]
+    then
+        # Requires le910cx modem...
+        echo "[INFO] Removing second PDP context"
+        autopi modem.connection pdp_context cid=2 delete_cid=true
+    else
+        echo "[INFO] No SIM present, skipping removing of second PDP context, even though it was requested"
+    fi
+}
+
 run ()
 {
     [ $VERBOSE == true ] && echo "[INFO] Running QMI manager..."
 
     # Ensure automatic network selection once during startup
     ensure_auto_network
+
+    # Ensure PDP context is deleted if requested
+    if [ $DELETE_SECOND_PDP_CONTEXT == true ]
+    then
+        ensure_second_pdp_context_deleted
+    fi
 
     local has_been_up=false
     local interval=0
