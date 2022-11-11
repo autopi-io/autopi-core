@@ -127,6 +127,18 @@ QSS_MAP = {
     QSS_STATUS_INSERTED_AND_READY:        "inserted-and-ready",
 }
 
+CGDCONT_PDP_TYPE_IP     = "IP"
+CGDCONT_PDP_TYPE_PPP    = "PPP"
+CGDCONT_PDP_TYPE_IPV6   = "IPV6"
+CGDCONT_PDP_TYPE_IPV4V6 = "IPV4V6"
+
+CGDCONT_PDP_TYPE_MAP = {
+    CGDCONT_PDP_TYPE_IP:     "ip",
+    CGDCONT_PDP_TYPE_PPP:    "ppp",
+    CGDCONT_PDP_TYPE_IPV6:   "ipv6",
+    CGDCONT_PDP_TYPE_IPV4V6: "ipv4v6",
+}
+
 SUPPORTED_DATATYPES = (bool, int, str)
 PARAM_TYPES = {'rdInline_wrInline': 1, 'inline_readonly': 2, 'rdInline_wrIndexed': 3}
 MULTILINE_TYPES = {'dictionary': 1, 'array': 2}
@@ -911,7 +923,6 @@ class LE910CXConn(SerialConn):
         - inserted-and-ready
         """
 
-
         # NOTE NV: It is possible to setup unsolicited messages (<mode>), however I skipped it for this implementation
         # since we're not listening to those anyways.
 
@@ -928,6 +939,157 @@ class LE910CXConn(SerialConn):
             raise InvalidResponseException("Didn't receive expected response")
 
         ret["status"] = QSS_MAP[int(match.group("status"))]
+
+        return ret
+
+    def pdp_context(self, cid=None, pdp_type=None, apn=None, delete_cid=False, force=False):
+        """
+        Optional parameters:
+          - cid (number): The context ID to change. Default: None.
+          - pdp_type (string): The type of the PDP context. Check available options below. Default: None.
+          - apn (string): The APN to be set on the context cid. Default: None.
+          - delete_cid (bool): Should the cid be unset? Default: False.
+          - force (bool): Force set the parameters, even if they have already been set. Default: False.
+
+        pdp_types:
+          - "ip": Internet Protocol
+          - "ppp": Point to Point Protocol
+          - "ipv6": Internet Protocol, Version 6
+          - "ipv4v6" (default): Virtual <PDP_type> introduced to handle dual IP stack UE capability
+        """
+
+        # First check if the SIM is present
+        sim_status = self.query_sim_status()
+        if sim_status["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
+            raise NoSimPresentException()
+
+        ret = []
+        res = self.execute("AT+CGDCONT?")
+
+        # Response format
+        # +CGDCONT: <cid>,<PDP_type>,<APN>,<PDP_addr>,<d_comp>,<h_comp>,<IPv4AddrAlloc>,<Emergency_ind><CR><LF>[...]
+
+        # Example response:
+        # +CGDCONT: 1,"IPV4V6","","",0,0,0,0
+        # +CGDCONT: 2,"IPV4V6","ims","",0,0,0,0
+
+        # Example response:
+        # +CGDCONT: 1,"IPV4V6","","",0,0,0,0
+
+        # Prepare response data to be processed
+        res_data = [] # Allocate
+        if type(res.get("data")) == str: # Single line res
+            res_data = [res.get("data", "")]
+        elif type(res.get("data")) == list: # Multiple line res
+            res_data = res.get("data", [])
+        else: # Invalid response?
+            log.error("Didn't receive expected response from modem: {}".format(res))
+            raise InvalidResponseException("Didn't receive expected response")
+
+        # Process response data
+        res_regex = re.compile("^\+CGDCONT: " + \
+            "(?P<cid>[0-9]+)," + \
+            "\"(?P<pdp_type>[a-zA-Z0-9]+)\"," + \
+            "\"(?P<apn>[a-zA-Z0-9\.-]+)?\"," + \
+            "\"(?P<pdp_addr>[a-zA-Z0-9]+)?\"," + \
+            "(?P<d_comp>[0-9])," + \
+            "(?P<h_comp>[0-9])," + \
+            "(?P<ipv4addralloc>[0-9])," + \
+            "(?P<emergency_ind>[0-9])"
+        )
+
+        # Construct
+        for line in res_data:
+            match = res_regex.match(line)
+
+            if not match:
+                log.error("Didn't receive expected response from modem: {}".format(res))
+                raise InvalidResponseException("Didn't receive expected response")
+
+            ret.append({
+                "cid": int(match.group("cid")),
+                "pdp_type": match.group("pdp_type"),
+                "apn": match.group("apn") if match.group("apn") else "",
+                #"pdp_addr": match.group("pdp_addr") if match.group("pdp_addr") else "", # Not implemented
+                #"d_comp": int(match.group("d_comp")), # Not implemented
+                #"h_comp": int(match.group("h_comp")), # Not implemented
+                #"ipv4addralloc": int(match.group("ipv4addralloc")), # Not implemented
+                #"emergency_ind": int(match.group("emergency_ind")), # Not implemented
+            })
+
+        # Make any changes if necessary
+        if cid != None:
+            if type(cid) != int:
+                raise ValueError("'cid' argument needs to be a number")
+
+            # Find the pdp_entry that the cid references
+            pdp_entry = None
+            for entry in ret:
+                if entry["cid"] == cid:
+                    pdp_entry = entry
+                    break
+
+            if pdp_entry: # PDP already exists
+                if delete_cid == True: # User wants to unset this CID
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("Going to unset cid {}".format(cid))
+                    self.execute("AT+CGDCONT={:d}".format(cid))
+                    ret = [pdp_entry for pdp_entry in ret if pdp_entry["cid"] != cid]
+
+                else: # User wants to change the pdp context
+                    if pdp_type == None or apn == None:
+                        raise ValueError("Both 'pdp_type' and 'apn' arguments needs to be set when changing an existing PDP context")
+
+                    if pdp_entry["pdp_type"] != pdp_type or pdp_entry["apn"] != apn or force:
+                        # Difference in PDP, set it
+                        if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
+                            raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+
+                        pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
+                        if log.isEnabledFor(logging.DEBUG):
+                            log.debug("Going to change a PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
+                        self.execute("AT+CGDCONT={:d},\"{:s}\",\"{:s}\"".format(cid, pdp_type_val, apn))
+
+                        new_pdp_context = {
+                            "cid": cid,
+                            "pdp_type": pdp_type,
+                            "apn": apn,
+                            #"pdp_addr": "",
+                            #"d_comp": 0, # Not implemented
+                            #"h_comp": 0, # Not implemented
+                            #"ipv4addralloc": 0, # Not implemented
+                            #"emergency_ind": 0, # Not implemented
+                        }
+
+                        ret = [ new_pdp_context if pdp_context["cid"] == cid else pdp_context for pdp_context in ret ]
+
+            else: # PDP doesn't exist
+                if delete_cid == True:
+                    if log.isEnabledFor(logging.DEBUG):
+                        log.debug("CID {} already doesn't exist. Noop due to delete_cid == {}".format(cid, delete_cid))
+                    return ret
+
+                if pdp_type == None or apn == None:
+                    raise ValueError("cid {} doesn't exist. Both 'pdp_type' and 'apn' arguments needs to be set when defining a new PDP context".format(cid))
+
+                if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
+                    raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+
+                pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
+                if log.isEnabledFor(logging.DEBUG):
+                    log.debug("Going to set new PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
+                self.execute("AT+CGDCONT={:d},\"{}\",\"{}\"".format(cid, pdp_type_val, apn))
+
+                ret.append({
+                    "cid": cid, # already ensured to be an int
+                    "pdp_type": pdp_type,
+                    "apn": apn,
+                    #"pdp_addr": "",
+                    #"d_comp": 0, # Not implemented
+                    #"h_comp": 0, # Not implemented
+                    #"ipv4addralloc": 0, # Not implemented
+                    #"emergency_ind": 0, # Not implemented
+                })
 
         return ret
 
