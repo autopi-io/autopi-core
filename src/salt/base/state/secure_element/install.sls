@@ -39,18 +39,18 @@ sss_050_build_loaded:
 {%- endif %}
 
 {%- elif salt["pillar.get"]("minion:secure_element") == 'softhsm' %}
-
 edge-identity-extracted:
   archive.extracted:
-    - name: /opt/autopi/bin/edge-identity/
-    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-amd64.tar.gz
-    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-amd64.tar.gz.md5
+    - name: /opt/autopi/bin/edge-identity
+    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-arm.tar.gz
+    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-arm.tar.gz.md5
     - keep_source: true
     - clean: true
+    - enforce_toplevel: False
 
 edge-identity-made-executable:
   file.managed:
-    - name: /user/bin/edge-identity
+    - name: /usr/bin/edge-identity
     - replace: true
     - user: root
     - group: root
@@ -58,7 +58,7 @@ edge-identity-made-executable:
 
 edge-identity-linked:
   file.symlink:
-    - name: /user/bin/edge-identity
+    - name: /usr/bin/edge-identity
     - target: /opt/autopi/bin/edge-identity/edge-identity
     - force: true
     - require:

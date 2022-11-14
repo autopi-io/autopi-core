@@ -210,6 +210,10 @@ class Se05xCryptoConnection():
 
         return key_pem.decode("UTF-8")
 
+    def _key_exists(self, keyid=None):
+        key = self._public_key(keyid=keyid)
+        return bool(key)
+
     def _ethereum_address(self, keyid=None):
         """
         Retrieve a previously generated ECC key, will use default keyid if not specified.

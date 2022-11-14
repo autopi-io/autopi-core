@@ -50,14 +50,14 @@ def sign_string(*args, **kwargs):
     """
     return client.send_sync(_msg_pack(*args, _handler="sign_string", **kwargs))
 
-def get_public_key(*args, **kwargs):
-    """
-    Gets a public key from Secure Element 
+# def get_public_key(*args, **kwargs):
+#     """
+#     Gets a public key from Secure Element 
 
-    Arguments:
-      - keyid (str/int): key's id 
-    """
-    return client.send_sync(_msg_pack(*args, _handler="get_public_key", **kwargs))
+#     Arguments:
+#       - keyid (str/int): key's id 
+#     """
+#     return client.send_sync(_msg_pack(*args, _handler="get_public_key", **kwargs))
 
 def generate_key(*args, **kwargs):
     """
@@ -70,3 +70,6 @@ def generate_key(*args, **kwargs):
 
 def get_serial(*args, **kwargs):
     return client.send_sync(_msg_pack(*args, _handler="get_serial", **kwargs))
+
+def key_exists(*args, **kwargs):
+    return client.send_sync(_msg_pack(*args, _handler="key_exists", **kwargs))
