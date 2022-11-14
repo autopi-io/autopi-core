@@ -171,19 +171,6 @@ class SoftHSMCryptoConnection():
         """
         raise AttributeError("SoftHSM does not support retrieving public keys")
 
-        ## There is the EC point, though I don't see the point in handling the formatting since all we need is the ETH address.
-         
-        # label = self.default_key_label if keyid == None else str(keyid)
-        # keys_str = self.keys_by_label(label)
-
-        # ec_points = re.findall(r"CKA_EC_POINT: (?P<point>[0-9a-fA-F]*) \(hex\)", keys_str)
-        # if len(ec_points) == 1:
-        #     return ec_points[0]
-        # elif len(ec_points) > 1:
-        #     raise Exception("Retrieved more than 1 public key. Got {}".format(len(ec_points)))
-        # else:
-        #     return None
-
     def get_slots(self):
         command = ["softhsm2-util", "--show-slots"]
         self.print_command(command)

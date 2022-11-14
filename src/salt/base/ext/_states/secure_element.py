@@ -79,8 +79,8 @@ def provisioned(name):
 
         # Generate the keys
         try:
-            key_valid = __salt__["crypto.key_exists"]().get("value")
-            if key_valid:
+            key_exists = __salt__["crypto.key_exists"]().get("value")
+            if key_exists:
                 ret["result"] = True
                 ret["comment"] = "Key already exists"
                 return ret
