@@ -456,9 +456,10 @@ def start(**settings):
 
         # Setup interrupt GPIO pin
         gpio.setwarnings(False)
-        gpio.setmode(gpio.BOARD)
-        gpio.setup(gpio_pin.ACC_INT, gpio.IN)
-        gpio.add_event_detect(gpio_pin.ACC_INT, gpio.FALLING, callback=lambda ch: interrupt_event.set())
+        gpio.setmode(settings.get("gpio", {}).get("mode", gpio_pin.MODE))
+        data_int_pin = settings.get("gpio", {}).get("pins", {}).get("data_int", gpio_pin.ACC_INT)
+        gpio.setup(data_int_pin, gpio.IN)
+        gpio.add_event_detect(data_int_pin, gpio.FALLING, callback=lambda ch: interrupt_event.set())
 
         # Initialize connection
         global conn

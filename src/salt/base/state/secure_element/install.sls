@@ -10,6 +10,18 @@ sss_dir_downloaded:
     - name: /opt/autopi/se05x_sss
     - source: salt://secure_element/se05x_sss
 
+sss_base_files_copied:
+  cmd.run:
+    - name: "cp -f /opt/autopi/se05x_sss/lib_051/* /usr/local/lib"
+    - require:
+      - file: sss_dir_downloaded
+
+sss_base_files_loaded:
+  cmd.run:
+    - name: ldconfig /usr/local/lib
+    - require:
+      - cmd: sss_base_files_copied
+
 pip_requirements_installed:
   pip.installed:
     - editable: /opt/autopi/se05x_sss
@@ -17,9 +29,16 @@ pip_requirements_installed:
       - pkg: packages_installed
       - file: sss_dir_downloaded
 
+{%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
+sss_050_build_loaded:
+  cmd.run:
+    - name: "cp -f /opt/autopi/se05x_sss/lib_050/* /usr/local/lib && ldconfig /usr/local/lib"
+    - unless: "ssscli se05x uid | egrep 'Unique ID: [a-fA-F0-9]{36}'"
+    - require:
+      - pip: pip_requirements_installed
 {%- endif %}
 
-{%- if salt["pillar.get"]("minion:secure_element") == 'softhsm' %}
+{%- elif salt["pillar.get"]("minion:secure_element") == 'softhsm' %}
 
 edge-identity-extracted:
   archive.extracted:

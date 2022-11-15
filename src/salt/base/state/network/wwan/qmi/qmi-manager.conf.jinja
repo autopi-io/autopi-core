@@ -8,3 +8,4 @@ VERBOSE=false
 ONLINE_CALLBACK='autopi event.fire "{}" "system/network/$INTERFACE/online"'
 OFFLINE_CALLBACK='autopi event.fire "{\"reason\": \"$REASON\"}" "system/network/$INTERFACE/offline"'
 MODEM={{ salt['pillar.get']('setup:mpcie:module', None) }}
+DELETE_SECOND_PDP_CONTEXT={{ salt['pillar.get']('qmi_manager:delete_second_pdp_context', 'false')|lower }}

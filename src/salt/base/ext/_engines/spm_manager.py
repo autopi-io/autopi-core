@@ -19,6 +19,8 @@ context = {
 # Message processor
 edmp = EventDrivenMessageProcessor("spm", context=context, default_hooks={"workflow": "extended", "handler": "query"})
 
+gpio_pins = {}
+
 # SPM connection is instantiated during start
 conn = None
 
@@ -129,63 +131,69 @@ def heartbeat_handler():
 @edmp.register_hook()
 def reset_handler():
     """
-    Reset/restart ATtiny. 
+    Reset/restart the MCU. 
     """
 
     ret = {}
 
+    hold_pwr_pin = gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR)
+    reset_pin = gpio_pins.get("reset", gpio_pin.SPM_RESET)
     try:
 
-        log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
+        log.info("Setting GPIO output pin {:} high".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.HIGH)
 
-        log.warn("Resetting ATtiny")
-        gpio.output(gpio_pin.SPM_RESET, gpio.LOW)
+        log.warn("Resetting the MCU")
+        gpio.output(reset_pin, gpio.LOW)
 
         # Keep pin low for a while
         time.sleep(.1)
 
-        gpio.output(gpio_pin.SPM_RESET, gpio.HIGH)
+        gpio.output(reset_pin, gpio.HIGH)
 
     finally:
 
-        log.info("Sleeping for 1 sec to give ATtiny time to recover")
-        time.sleep(1)
+        log.info("Sleeping for 3 secs to give the MCU time to recover")
+        time.sleep(3)
 
-        log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
+        log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.LOW)
 
     return ret
 
 
 @edmp.register_hook()
-def flash_firmware_handler(hex_file, part_id, no_write=True):
+def flash_firmware_handler(file, part_id):
     """
-    Flashes new SPM firmware to the ATtiny.
+    Flashes new SPM firmware to the MCU.
     """
 
     ret = {}
 
-    if not os.path.exists(hex_file):
-        raise ValueError("Hex file does not exist")
+    if not os.path.exists(file):
+        raise ValueError("Firmware file does not exist")
 
+    hold_pwr_pin = gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR)
     try:
 
-        log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
+        log.info("Setting GPIO output pin {:} high".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.HIGH)
 
-        ret = __salt__["avrdude.flash"](hex_file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=no_write)
+        log.info("Flashing firmware release '{:}'".format(file))
+        if part_id == "rp2040":
+            start_address = "0x10000000" if file.endswith(".bin") else None
 
-        if not no_write:
-            log.info("Flashed firmware release '{:}'".format(hex_file))
+            ret = __salt__["openocd.program"](file, "interface/raspberrypi-swd.cfg", "target/rp2040.cfg", raise_on_error=False, start_address=start_address)
+        else:
+            ret = __salt__["avrdude.flash"](file, part_id=part_id, prog_id="autopi", raise_on_error=False, no_write=False)
 
     finally:
 
-        log.info("Sleeping for 5 secs to give ATtiny time to recover")
+        log.info("Sleeping for 5 secs to give the MCU time to recover")
         time.sleep(5)
 
-        log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
+        log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.LOW)
 
     return ret
 
@@ -193,25 +201,29 @@ def flash_firmware_handler(hex_file, part_id, no_write=True):
 @edmp.register_hook()
 def fuse_handler(name, part_id, value=None):
     """
-    Manage fuse of the ATtiny.
+    Manage fuse of the MCU.
     """
+
+    if __opts__.get("spm.version", 1.0) >= 4.0:
+        raise Exception("Not supported by SPM version 4.0 and above")
 
     ret = {}
 
+    hold_pwr_pin = gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR)
     try:
 
-        log.info("Setting GPIO output pin {:} high".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.HIGH)
+        log.info("Setting GPIO output pin {:} high".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.HIGH)
 
         ret = __salt__["avrdude.fuse"](name, part_id=part_id, prog_id="autopi", value=value)
 
     finally:
 
-        log.info("Sleeping for 2 secs to give ATtiny time to recover")
+        log.info("Sleeping for 2 secs to give the MCU time to recover")
         time.sleep(2)
 
-        log.info("Setting GPIO output pin {:} low".format(gpio_pin.HOLD_PWR))
-        gpio.output(gpio_pin.HOLD_PWR, gpio.LOW)
+        log.info("Setting GPIO output pin {:} low".format(hold_pwr_pin))
+        gpio.output(hold_pwr_pin, gpio.LOW)
 
     return ret
 
@@ -248,16 +260,25 @@ def start(**settings):
 
         # Initialize GPIO
         gpio.setwarnings(False)
-        gpio.setmode(gpio.BOARD)
+        gpio.setmode(settings.get("gpio", {}).get("mode", gpio_pin.MODE))
 
-        gpio.setup(gpio_pin.HOLD_PWR, gpio.OUT, initial=gpio.LOW)
-        gpio.setup(gpio_pin.SPM_RESET, gpio.OUT, initial=gpio.HIGH)
+        global gpio_pins
+        gpio_pins = settings.get("gpio", {}).get("pins", {})
+
+        gpio.setup(gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR), gpio.OUT, initial=gpio.LOW)        
+        gpio.setup(gpio_pins.get("reset", gpio_pin.SPM_RESET), gpio.OUT, initial=gpio.HIGH)
 
         has_led = True
 
         # Initialize SPM connection
         global conn
-        if "spm3_conn" in settings:  # Version 3.X
+        if "spm4_conn" in settings:  # Version 4.X
+            from spm4_conn import SPM4Conn
+
+            conn = SPM4Conn()
+            conn.init(settings["spm4_conn"])
+
+        elif "spm3_conn" in settings:  # Version 3.X
             from spm3_conn import SPM3Conn
 
             conn = SPM3Conn()
@@ -279,10 +300,11 @@ def start(**settings):
 
         # Initialize LED GPIO, if available
         if has_led:
-            gpio.setup(gpio_pin.LED, gpio.OUT)
+            led_pin = gpio_pins.get("led", gpio_pin.LED)
+            gpio.setup(led_pin, gpio.OUT)
 
             global led_pwm
-            led_pwm = gpio.PWM(gpio_pin.LED, settings.get("led_pwm", {}).get("frequency", 2))
+            led_pwm = gpio.PWM(led_pin, settings.get("led_pwm", {}).get("frequency", 2))
             led_pwm.start(settings.get("led_pwm", {}).get("duty_cycle", 50))
 
         # Initialize and run message processor

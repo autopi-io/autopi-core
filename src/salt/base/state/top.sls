@@ -9,6 +9,9 @@ base:
     {%- else %}
     - network.wwan.qmi.uninstall
     {%- endif %}
+    {%- if salt["pillar.get"]("minion:hw.version", salt["config.get"]("hw.version")) == 7.0 %}
+    - network.eth.config
+    {%- endif %}
     - network.wlan.client.config
     - network.wlan.hotspot.install
     - network.firewall.config
@@ -23,6 +26,8 @@ base:
     {%- endif %}
     {%- if salt["pillar.get"]("setup:mpcie:module", default="ec2x") in ["ec2x", "bg96"] %}
     - ec2x.config
+    {%- elif salt["pillar.get"]("setup:mpcie:module", default="ec2x") == "le910cx" %}
+    - le910cx.config
     {%- endif %}
     {%- if salt["pillar.get"]("ble:enabled", default=False) %}
     - ble.install

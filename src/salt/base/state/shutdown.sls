@@ -7,7 +7,7 @@ include:
 demand-update-release:
   module.run:
     - name: minionutil.update_release
-    - force: true
+    - demand: true
 {%- elif salt["pillar.get"]("update_release:automatic", default=False) %}
 auto-update-release:
   module.run:

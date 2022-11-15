@@ -238,6 +238,21 @@ def kernel_error_event_trigger(result):
         ctx["last_reported"] = entry
 
 
+def getOrCreateGeofenceInContext(ctx):
+    if not ctx.get("geofence"):
+        if DEBUG:
+            log.debug("Creating Geofence context")
+
+        ctx["geofence"] = {   
+            "error": None,
+            "repeat_count_to_trigger_change": 3,
+            "fences": [],
+            "loaded": False
+        }
+
+    return ctx["geofence"]
+
+
 def geofence_event_trigger(result):
     """
     Listens for position results and triggers geofence inside/outside and enter/exit events
@@ -251,22 +266,9 @@ def geofence_event_trigger(result):
             log.debug("No data from GPS, can not determine geofence status. Exception: {}".format(result))
         return
     
-    # Set up the geofence part of the context
-    if not __context__.get("geofence"):
-        if DEBUG:
-            log.debug("Creating Geofence context")
-
-        __context__["geofence"] = {   
-            "error": None,
-            "repeat_count_to_trigger_change": 3,
-            "fences": [],
-            "loaded": False
-        }
-    ctx = __context__.get("geofence")
-
+    ctx = getOrCreateGeofenceInContext(__context__)
     if not ctx["loaded"]:
         load_geofences_handler()
-        ctx["loaded"] = True
 
     # Check if the vehicle has entered/exited of any of the geofences
     current_location = result["loc"]
@@ -316,7 +318,10 @@ def load_geofences_handler(path="/opt/autopi/geofence/settings.yaml"):
     """
     log.info("Loading geofence settings from {}".format(path))
 
-    __context__["geofence"]["fences"] = read_geofence_file(path)
-    __context__["geofence"]["error"] = None 
+    ctx = getOrCreateGeofenceInContext(__context__)
+
+    ctx["fences"] = read_geofence_file(path)
+    ctx["error"] = None 
+    ctx["loaded"] = True
 
     return {}

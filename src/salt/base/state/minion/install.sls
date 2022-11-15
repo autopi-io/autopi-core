@@ -7,7 +7,11 @@ include:
 minion-id-cron-configured:
   cron.present:
     - identifier: minion-id-setup
+    {%- if salt['config.get']('hw.version') >= 7.0 %}
+    - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' | tee /etc/salt/minion_id | sed 's/^/autopi-/g' > /etc/hostname"
+    {%- else %}
     - name: "grep Serial /proc/cpuinfo | awk '{print $3}' | md5sum | awk '{print $1}' | tee /etc/salt/minion_id | cut -c21- | sed 's/^/autopi-/g' > /etc/hostname"
+    {%- endif %}
     - special: "@reboot"
 
 #minion-start-before-network:
