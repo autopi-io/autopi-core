@@ -63,23 +63,23 @@ def _ensure_amplifier():
         return
 
     try:
-        log.info("Turning on amplifier")
+        log.info("Ensures the amplifier is powered on")
 
         if __opts__.get("spm.version", 1.0) >= 4.0:
             res = __salt__["spm.query"]("sys_pins", high="sw_amp")
-            assert res["output"]["sw_amp"] == True, "Amplifier was not switched on in the SPM"
+            assert res["output"]["sw_amp"] == True, "The amplifier was not switched on in the SPM"
         else:
             gpio.setwarnings(False)
             gpio.setmode(gpio.BOARD)
             gpio.setup(gpio_pin.AMP_ON, gpio.OUT, initial=gpio.HIGH)
 
             if DEBUG:
-                log.debug("Powered on amplifier by setting GPIO pin #%d high", gpio_pin.AMP_ON)
+                log.debug("Powered on the amplifier by setting GPIO pin #%d high", gpio_pin.AMP_ON)
 
         ctx["enabled"] = True
 
     except Exception:
-        log.exception("Failed to enable amplifier")
+        log.exception("Failed to power on the amplifier")
         raise
 
 
