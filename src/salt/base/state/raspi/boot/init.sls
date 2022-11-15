@@ -32,13 +32,6 @@ gpio-shutdown-enabled:
       - module: reboot-requested-after-boot-config-changed
 
 {%- if salt["pillar.get"]("minion:hw.version", default=0.0) >= 7.0 %}
-usb-enabled:
-  file.replace:
-    - name: /boot/config.txt
-    - pattern: "^#?dtoverlay=dwc2.*$"
-    - repl: "dtoverlay=dwc2,dr_mode=host"
-    - append_if_not_found: true
-
 usb-xhci-controller-enabled:
   file.replace:
     - name: /boot/config.txt
