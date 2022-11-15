@@ -569,14 +569,14 @@ def dump_handler(duration=2, monitor_mode=0, filtering=False, auto_format=False,
         _ensure_filtering(filtering)
 
     # Play sound to indicate recording has begun
-    __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/bleep.wav")
+    __salt__["audio.aplay"]("/opt/autopi/audio/sound/bleep.wav")
 
     try:
         res = conn.monitor(duration=duration, mode=monitor_mode, filtering=filtering, auto_format=auto_format, raw_response=raw_response, format_response=format_response)
     finally:
 
         # Play sound to indicate recording has ended
-        __salt__["cmd.run"]("aplay /opt/autopi/audio/sound/beep.wav")
+        __salt__["audio.aplay"]("/opt/autopi/audio/sound/beep.wav")
 
     # Write result to file if specified
     if file != None:

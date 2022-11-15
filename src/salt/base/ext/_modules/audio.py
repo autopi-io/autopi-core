@@ -104,7 +104,7 @@ def aplay(audio_file, **kwargs):
         - audio_file (str): Local path of the audio file to play.
 
     Optional arguments:
-      - timeout (int): Timeout in seconds of the command to finish. Default value is '10'.
+      - duration (int): Interrupt playback after amount of seconds.
     """
 
     return client.send_sync(_msg_pack(audio_file, _handler="aplay", **kwargs))

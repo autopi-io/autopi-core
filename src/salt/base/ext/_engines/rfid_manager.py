@@ -77,7 +77,7 @@ def authenticate_rfid_handler(rfid):
     if len(authorized_tokens) == 0:
         log.info("No RFID tokens configured, skipping handler execution")
         __salt__["minionutil.trigger_event"]("system/rfid/{}/rejected".format(rfid))
-        __salt__["audio.play"]("/opt/autopi/audio/sound/beep.wav")
+        __salt__["audio.aplay"]("/opt/autopi/audio/sound/beep.wav")
         return
 
     if log.isEnabledFor(logging.DEBUG):
@@ -101,7 +101,7 @@ def authenticate_rfid_handler(rfid):
     # REJECT token
     if valid_token == None:
         __salt__["minionutil.trigger_event"]("system/rfid/{}/rejected".format(rfid))
-        __salt__["audio.play"]("/opt/autopi/audio/sound/beep.wav")
+        __salt__["audio.aplay"]("/opt/autopi/audio/sound/beep.wav")
         return
 
     # AUTHENTICATE token
