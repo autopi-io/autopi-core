@@ -69,11 +69,19 @@ class SoftHSMCryptoConnection():
         if hashalgo != "KECCAK256":
             raise Exception("Unsupported hashalgo")
 
+        log.info(data)
+        log.info(type(data))
+        if type(data) == str:
+            if data[:2] != "0x":
+                data = "0x{}".format(data)
+        else:
+            data = hex(data)
+
         command = ['edge-identity', 'sign', 
             '--lib', self.library_path, 
             '--token', self.default_token_label, 
             '--label', label, 
-            '--message', data, 
+            '--hash', "'{}'".format(data), 
             '--pin', self.default_pin]
         
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
