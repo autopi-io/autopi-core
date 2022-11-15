@@ -21,10 +21,10 @@ class SoftHSMCryptoConnection():
 
     def __init__(self, settings):
         self.settings = settings
-        self.default_key_label = str(settings["keyid"] if settings.get("keyid") else "default")
-        self.default_token_label = "autopi"
-        self.default_pin = "1234"
-        self.library_path = '/usr/lib/softhsm/libsofthsm2.so'
+        self.default_key_label = str(settings.get("keyid", "default"))
+        self.default_token_label = str(settings.get("tokenid", "autopi"))
+        self.default_pin = str(settings.get("pin", "1234"))
+        self.library_path = str(settings.get("libpath", '/usr/lib/softhsm/libsofthsm2.so'))
 
     def _serial_number(self):
         return "No serialnumber for softHSM"
@@ -60,7 +60,7 @@ class SoftHSMCryptoConnection():
 
         return std.strip()
 
-    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="RS_HEX"):
+    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="RS_HEX", expected_address=None):
         label = self.default_key_label if keyid == None else str(keyid)
 
         if encoding != "RS_HEX":

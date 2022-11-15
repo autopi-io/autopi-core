@@ -27,7 +27,7 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
         log.info("Generating key")
 
         # existing_key = conn._public_key(keyid)
-        key_exists = conn._key_exists(keyid)
+        key_exists = conn.key_exists(keyid)
 
         if key_exists:
             if not force:
@@ -35,7 +35,7 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
 
         conn.generate_key(keyid, confirm=confirm, policy_name=policy_name)
 
-        key_exists = conn._key_exists(keyid=keyid)
+        key_exists = conn.key_exists(keyid=keyid)
 
         return { "value": key_exists }
 
@@ -117,6 +117,7 @@ def start(**settings):
             try:
                 from softhsm_conn import SoftHSMCryptoConnection
                 conn = SoftHSMCryptoConnection(settings['softhsm_conn'])
+                context["ethereum_address"] = conn._ethereum_address()
             except Exception as err:
                 log.error(err)
                 raise Exception('Error importing or creating SoftHSMCryptoConnection')
