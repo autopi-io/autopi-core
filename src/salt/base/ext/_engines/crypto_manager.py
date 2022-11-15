@@ -40,11 +40,11 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
         return { "value": key_exists }
 
 @edmp.register_hook()
-def sign_string_handler(data, keyid=None, encoding="PEM"):
+def sign_string_handler(data, keyid=None):
     with conn:
         log.info("Executing sign string on data: {}".format(data))
 
-        signature = conn.sign_string(data, keyid, encoding=encoding)
+        signature = conn.sign_string(data=data, keyid=keyid, expected_address=context["ethereum_address"])
 
         return { "value": signature }
 
@@ -109,6 +109,7 @@ def start(**settings):
             try:
                 from se05x_conn import Se05xCryptoConnection
                 conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
+                context["ethereum_address"] = conn._ethereum_address()
             except Exception as err:
                 log.error(err)
                 raise Exception('Error importing or creating SE05x connection class')

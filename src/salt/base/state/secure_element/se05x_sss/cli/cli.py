@@ -41,6 +41,7 @@ class Context:
     """
     Logs a message to stdout
     """
+
     def __init__(self):
         self.verbose = False
         self.logger = logging.getLogger(__name__)
@@ -62,14 +63,16 @@ class Context:
         self.logger.error(msg)
 
 
-pass_context = click.make_pass_decorator(Context, ensure=True)  # pylint: disable=invalid-name
+pass_context = click.make_pass_decorator(
+    Context, ensure=True)  # pylint: disable=invalid-name
 
 
 def log_traceback(cli_ctx, ex):
     """ Logs the call hierarchy. Called in case of error
     """
     cli_ctx.error(ex)
-    output_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..", "..", "output")
+    output_dir = os.path.join(os.path.abspath(
+        os.path.dirname(__file__)), "..", "..", "output")
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -96,7 +99,8 @@ def session_close(cli_ctx):
     :return: status
     """
     try:
-        func_timeout.func_timeout(TIME_OUT, cli_ctx.session.session_close, None)
+        func_timeout.func_timeout(
+            TIME_OUT, cli_ctx.session.session_close, None)
         status = apis.kStatus_SSS_Success
     except func_timeout.FunctionTimedOut as timeout_exc:
         log_traceback(cli_ctx, timeout_exc.getMsg())
@@ -145,7 +149,8 @@ def erase(cli_ctx, keyid):
         cli_ctx.log("Erasing Key entry from KeyID = 0x%08x" % keyid)
         session_open(cli_ctx)
         erase_obj = Erase(cli_ctx.session)
-        status = func_timeout.func_timeout(TIME_OUT, erase_obj.erase_key, (keyid, ))
+        status = func_timeout.func_timeout(
+            TIME_OUT, erase_obj.erase_key, (keyid, ))
     except func_timeout.FunctionTimedOut as timeout_exc:
         log_traceback(cli_ctx, timeout_exc.getMsg())
         status = apis.kStatus_SSS_Fail
@@ -157,7 +162,8 @@ def erase(cli_ctx, keyid):
         cli_ctx.log("Erased Key entry from KeyID = 0x%08X" % keyid)
         ret_value = 0
     else:
-        cli_ctx.log("ERROR! Could not Erase Key Entry from KeyID 0x%08X " % keyid)
+        cli_ctx.log(
+            "ERROR! Could not Erase Key Entry from KeyID 0x%08X " % keyid)
         ret_value = 1
     sys.exit(ret_value)
 
@@ -204,7 +210,8 @@ def connect(cli_ctx, subsystem, method, port_name, auth_type, scpkey):
     for port name = "None".
     """
     if subsystem == "se050":
-        cli_ctx.log("Warning: subsystem 'se050' has been depreciated. Use 'se05x' instead")
+        cli_ctx.log(
+            "Warning: subsystem 'se050' has been depreciated. Use 'se05x' instead")
     if auth_type in ["PlatformSCP", "UserID_PlatformSCP", "ECKey_PlatformSCP",
                      "AESKey_PlatformSCP"]:
         if scpkey == '':
@@ -249,23 +256,10 @@ def a71ch(cli_ctx):
 
 @cli.command('sign', short_help='Sign Operation')
 @click.argument('keyid', type=str, metavar='keyid')
-@click.argument('input_file', type=str, metavar='input_file')
-@click.argument('signature_file', type=str, metavar='signature_file')
-@click.option('--informat', default='',
-              help="Input format. TEXT can be \"DER\" or \"PEM\".")
-@click.option('--outformat', default='',
-              help="Output file format. TEXT can be \"DER\" or \"PEM\"")
-# pylint: disable=too-many-arguments
-@click.option('--hashalgo', default='',
-              help='Hash algorithm. TEXT can be one of \"SHA1, SHA224, SHA256, SHA384, '
-                   'SHA512, \nRSASSA_PKCS1_V1_5_SHA1, RSASSA_PKCS1_V1_5_SHA224, \n'
-                   'RSASSA_PKCS1_V1_5_SHA256, \nRSASSA_PKCS1_V1_5_SHA384, \n'
-                   'RSASSA_PKCS1_V1_5_SHA512, \nRSASSA_PKCS1_PSS_MGF1_SHA1, \n'
-                   'RSASSA_PKCS1_PSS_MGF1_SHA224, RSASSA_PKCS1_PSS_MGF1_SHA256, '
-                   'RSASSA_PKCS1_PSS_MGF1_SHA384, RSASSA_PKCS1_PSS_MGF1_SHA512\"')
+@click.argument('hex_digest', type=str, metavar='hex_digest')
 # pylint: enable=too-many-arguments
 @pass_context
-def sign(cli_ctx, keyid, input_file, signature_file, informat, outformat, hashalgo):
+def sign(cli_ctx, keyid, hex_digest):
     """ Sign Operation \n
         keyid = 32bit Key ID. Should be in hex format. Example: 20E8A001 \n
 
@@ -280,9 +274,8 @@ def sign(cli_ctx, keyid, input_file, signature_file, informat, outformat, hashal
         keyid = int(keyid, 16)
         session_open(cli_ctx)
         sign_obj = Sign(cli_ctx.session)
-        status = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature,
-                                           (keyid, input_file, signature_file,
-                                            informat, outformat, hashalgo))
+        status = func_timeout.func_timeout(TIME_OUT, sign_obj.sign_hash_and_return,
+                                           (keyid, hex_digest))
     except func_timeout.FunctionTimedOut as timeout_exc:
         log_traceback(cli_ctx, timeout_exc.getMsg())
         status = apis.kStatus_SSS_Fail
