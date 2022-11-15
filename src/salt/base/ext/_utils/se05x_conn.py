@@ -177,8 +177,8 @@ class Se05xCryptoConnection():
         if(not pub_address):
             raise Exception("Cannot find valid v")
 
-        signature = "0x{}{}{}".format('{:x}'.format(
-            r), '{:x}'.format(s), '{:x}'.format(V))
+        signature = "0x{}{}{}".format('{:064x}'.format(
+            r), '{:064x}'.format(s), '{:02x}'.format(V))
 
         if DEBUG:
             log.debug("Final signature: {}".format(signature))
