@@ -58,6 +58,19 @@ i2c1-module-enabled:
     - pattern: "^#?(dtparam=i2c_arm|dtoverlay=i2c1).*$"
     - repl: "dtoverlay=i2c1"
     - append_if_not_found: true
+
+disable-pcie-overlay-distributed:
+  file.managed:
+    - name: /boot/overlays/disable-pcie.dtbo
+    - source: salt://raspi/boot/overlays/disable-pcie.dtbo
+    - source_hash: salt://raspi/boot/overlays/disable-pcie.dtbo.sha1
+
+disable-pcie-overlay-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=disable-pcie$"
+    - repl: "dtoverlay=disable-pcie"
+    - append_if_not_found: true
 {%- else %}
 i2c-module-enabled:
   file.replace:
