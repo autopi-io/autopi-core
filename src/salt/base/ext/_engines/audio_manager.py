@@ -11,10 +11,15 @@ from threading_more import intercept_exit_signal
 
 log = logging.getLogger(__name__)
 
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 context = {
     "mixer": {
         "settings": None,
         "initialized": False
+    },
+    "amplifier": {
+        "enabled": False
     }
 }
 
@@ -35,18 +40,46 @@ def _ensure_mixer():
         globals()["pygame"] = importlib.import_module("pygame")
 
         log.info("Initializing mixer using settings: {:}".format(settings))
-
         pygame.mixer.init(frequency=settings["frequency"],
                           size=settings["bit_size"],
                           channels=settings["channels"],
                           buffer=settings["buffer_size"])
 
-        log.debug("Successfully initialized mixer")
-
+        if DEBUG:
+            log.debug("Successfully initialized mixer")
+        
         ctx["initialized"] = True
 
     except Exception:
         log.exception("Failed to initialize mixer")
+        raise
+
+
+@retry(stop_max_attempt_number=3, wait_fixed=1000)
+def _ensure_amplifier():
+    ctx = context["amplifier"]
+
+    if ctx.get("enabled", False):
+        return
+
+    try:
+        log.info("Turning on amplifier")
+
+        if __opts__.get("spm.version", 1.0) >= 4.0:
+            res = __salt__["spm.query"]("sys_pins", high="sw_amp")
+            assert res["output"]["sw_amp"] == True, "Amplifier was not switched on in the SPM"
+        else:
+            gpio.setwarnings(False)
+            gpio.setmode(gpio.BOARD)
+            gpio.setup(gpio_pin.AMP_ON, gpio.OUT, initial=gpio.HIGH)
+
+            if DEBUG:
+                log.debug("Powered on amplifier by setting GPIO pin #%d high", gpio_pin.AMP_ON)
+
+        ctx["enabled"] = True
+
+    except Exception:
+        log.exception("Failed to enable amplifier")
         raise
 
 
@@ -56,15 +89,16 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
     Plays a specific audio file. 
 
     Arguments:
-      - audio_file (str): Local path of audio file to play.
+      - audio_file (str): Local path of the audio file to play.
 
     Optional arguments:
-      - force (bool): Default is 'False'.
-      - loops (int): Default is '0'.
-      - volume (int):
+      - force (bool): Force even though another playback is in progress? Default is 'False'.
+      - loops (int): How many repetitions of playback? Default is '0'.
+      - volume (int): Set volumen of the playback.
     """
 
     _ensure_mixer()
+    _ensure_amplifier()
 
     if pygame.mixer.music.get_busy():
         if not force:
@@ -77,10 +111,12 @@ def play_handler(audio_file, force=False, loops=0, volume=None):
         pygame.mixer.music.fadeout(100)
 
     if volume != None:
-        log.debug("Setting volume to: %d%%", volume*100)
+        if DEBUG:
+            log.debug("Setting volume to: %d%%", volume*100)
         pygame.mixer.music.set_volume(volume)
 
-    log.debug("Loading audio file: %s", audio_file)
+    if DEBUG:
+        log.debug("Loading audio file: %s", audio_file)
     pygame.mixer.music.load(audio_file)
 
     log.info("Playback of audio file: %s", audio_file)
@@ -97,10 +133,11 @@ def queue_handler(audio_file):
     Queues an audio file.
 
     Arguments:
-      - audio_file (str): Local path of audio file to play.
+      - audio_file (str): Local path of the audio file to play.
     """
 
     _ensure_mixer()
+    _ensure_amplifier()
 
     #if not pygame.mixer.music.get_busy():
     #    return _play_handler(audio_file)
@@ -121,6 +158,7 @@ def stop_handler():
     """
 
     _ensure_mixer()
+    _ensure_amplifier()
 
     busy = pygame.mixer.music.get_busy()
     if busy:
@@ -138,10 +176,11 @@ def volume_handler(value=None):
     Set volumen of the playback.
 
     Optional arguments:
-      - value (int):
+      - value (int): The volume to set.
     """
 
     _ensure_mixer()
+    _ensure_amplifier()
 
     if value != None:
         log.info("Setting volume to: %d%%", value*100)
@@ -153,15 +192,25 @@ def volume_handler(value=None):
 
 
 @edmp.register_hook()
-def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10, timeout=10):
+def espeak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_gap=10, timeout=10):
     """
-    Speak given text.
+    Speak a given text using the 'espeak' command.
 
     NOTE: Unfortunately 'espeak' command is not always reliable - sometimes it fails for uncertain reasons.
 
     Arguments:
       - text (str): Text to speak out.
+
+    Optional arguments:
+      - volume (int): Set volumen of the playback. Default value is '100'.
+      - language (str): The language to speak in. Default value is 'en-gb'.
+      - pitch (int): The pitch of the voice. Default value is '50'.
+      - speed (int): Rate of speech. Default value is '175'.
+      - word_gap (int): Time gap between words spoken. Default value is '10'.
+      - timeout (int): Timeout in seconds of the command to finish. Default value is '10'.
     """
+
+    _ensure_amplifier()
 
     ret = {}
 
@@ -175,23 +224,43 @@ def speak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word_
     return ret
 
 
+@edmp.register_hook()
+def aplay_handler(audio_file, timeout=10):
+    """
+    Play a given audio file using the 'aplay' command.
+
+    Arguments:
+        - audio_file (str): Local path of the audio file to play.
+
+    Optional arguments:
+      - timeout (int): Timeout in seconds of the command to finish. Default value is '10'.
+    """
+
+    _ensure_amplifier()
+
+    ret = {}
+
+    res = __salt__["cmd.run_all"]("aplay '{:s}'".format(audio_file), timeout=timeout)
+    if res["retcode"] != 0:
+        raise salt.exceptions.CommandExecutionError(res["stderr"])
+
+    ret["result"] = res["stdout"]
+
+    return ret
+
+
 @intercept_exit_signal
 def start(**settings):
     try:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Starting audio manager with settings: {:}".format(settings))
 
         context["mixer"]["settings"] = settings["mixer"]
 
         if __opts__.get("spm.version", 1.0) < 4.0:
-            gpio.setwarnings(False)
-            gpio.setmode(gpio.BOARD)
-            gpio.setup(gpio_pin.AMP_ON, gpio.OUT)
 
-            # Ensure amplifier is powered on
-            gpio.output(gpio_pin.AMP_ON, gpio.HIGH)
-            if log.isEnabledFor(logging.DEBUG):
-                log.debug("Initially powered on amplifier chip by setting GPIO pin #%d high", gpio_pin.AMP_ON)
+            # Ensure that amplifier is enabled immediately for backwards compatibility
+            _ensure_amplifier()
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
