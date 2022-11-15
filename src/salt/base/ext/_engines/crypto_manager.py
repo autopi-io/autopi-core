@@ -27,22 +27,15 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
         log.info("Generating key")
 
         # existing_key = conn._public_key(keyid)
-        key_exists = conn.key_exists(keyid)
+        key_exists = conn._key_exists(keyid)
 
         if key_exists:
-            # log.info('Existing public key: {}'.format(existing_key))
-            # key_exists = conn.key_exists(keyid)
             if not force:
                 raise Exception('Key already exists. - must force=true')
 
         conn.generate_key(keyid, confirm=confirm, policy_name=policy_name)
-        # key_string = conn._public_key(keyid)
-        # log.info('New public key: {}'.format(key_string))
 
-        # if existing_key == key_string:
-        #     raise Exception('Command returned but key DID NOT CHANGE. Maybe the keyid is a reserved range or the security policy does not allow regenerating the key?')
-
-        key_exists = conn.key_exists(keyid=keyid)
+        key_exists = conn._key_exists(keyid=keyid)
 
         return { "value": key_exists }
 

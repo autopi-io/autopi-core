@@ -17,63 +17,72 @@ TIME_OUT = 15  # Time out in seconds
 log = logging.getLogger(__name__)
 DEBUG = log.isEnabledFor(logging.DEBUG)
 
-DEFAULT_TOKEN_LABEL = "autopipi"
-DEFAULT_PIN = "1234"
-LIBRARY_PATH = '/usr/lib/softhsm/libsofthsm2.so'
-
 class SoftHSMCryptoConnection():
 
     def __init__(self, settings):
         self.settings = settings
-        self.default_key_label = str(settings["keyid"])
+        self.default_key_label = str(settings["keyid"] if settings.get("keyid") else "default")
+        self.default_token_label = "autopi"
+        self.default_pin = "1234"
+        self.library_path = '/usr/lib/softhsm/libsofthsm2.so'
 
     def _serial_number(self):
-        return "No serialnumer for softHSM"
+        return "No serialnumber for softHSM"
 
     def get_key_count(self, keys):
         return len(re.findall(r"\[Object [0-9]*\]", keys))
 
+    def get_command_string(self, cmd):
+        cmd_string = ""
+        for word in cmd:
+            cmd_string = "{} {}".format(cmd_string, word)
+
+        return cmd_string
+
+    def log_raw_output(self, cmd, stdout, stderr):
+        if DEBUG:
+            log.debug("cmd: {}\nstdout: {}\nstderr: {}".format(self.get_command_string(cmd), stdout, stderr))
+
     def keys_by_label(self, label):
         command = ['edge-identity', 'list', 
-            '--lib', LIBRARY_PATH, 
-            '--token', DEFAULT_TOKEN_LABEL, 
+            '--lib', self.library_path, 
+            '--token', self.default_token_label, 
             '--label', label, 
-            '--pin', DEFAULT_PIN]
-        self.print_command(command)
+            '--pin', self.default_pin]
 
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
+
+        self.log_raw_output(command, std, err)
 
         if (err):
             log.info("[WARNING] Has error: {}".format(err.strip()))
 
         return std.strip()
 
-    def print_command(self, cmd):
-        cmd_string = ""
-        for word in cmd:
-            cmd_string = "{} {}".format(cmd_string, word)
-
-        log.info(cmd_string)
-
-    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="PEM"):
+    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="RS_HEX"):
         label = self.default_key_label if keyid == None else str(keyid)
 
+        if encoding != "RS_HEX":
+            raise Exception("Unsupported encoding")
+
+        if hashalgo != "KECCAK256":
+            raise Exception("Unsupported hashalgo")
+
         command = ['edge-identity', 'sign', 
-            '--lib', LIBRARY_PATH, 
-            '--token', DEFAULT_TOKEN_LABEL, 
+            '--lib', self.library_path, 
+            '--token', self.default_token_label, 
             '--label', label, 
             '--message', data, 
-            '--pin', DEFAULT_PIN]
+            '--pin', self.default_pin]
         
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
+        self.log_raw_output(command, std, err)
+
         val = err.strip()
 
         sig = re.findall(r"Signature (?P<signature>0x[0-9a-fA-F]*)[*]*$", val)
-
-        log.info("Val: {}".format(val))
-        log.info("Sig: {}".format(sig))
 
         if len(sig) == 1:
             return sig[0]
@@ -97,30 +106,30 @@ class SoftHSMCryptoConnection():
             raise Exception("Key with token/label combination has too many matches (key already exists)")
 
         command = ['edge-identity', 'generateKeyPair', 
-            '--lib', LIBRARY_PATH, 
+            '--lib', self.library_path, 
             '--algorithm', 'S256', 
             '--keytype', 'EC', 
             '--keysize', '256', 
             '--label', label, 
-            '--token', DEFAULT_TOKEN_LABEL, 
-            '--pin', DEFAULT_PIN]
-        self.print_command(command)
+            '--token', self.default_token_label, 
+            '--pin', self.default_pin]
 
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
+        self.log_raw_output(command, std, err)
 
         return std.strip()
 
 
     def _keys(self):
         command = ['edge-identity', 'list', 
-            '--lib', LIBRARY_PATH, 
-            '--token', DEFAULT_TOKEN_LABEL, 
-            '--pin', DEFAULT_PIN]
-        self.print_command(command)
+            '--lib', self.library_path, 
+            '--token', self.default_token_label, 
+            '--pin', self.default_pin]
 
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
+        self.log_raw_output(command, std, err)
 
         log.info("Std: {}".format(std))
 
@@ -147,16 +156,15 @@ class SoftHSMCryptoConnection():
         label = self.default_key_label if keyid == None else str(keyid)
 
         command = ['edge-identity', 'getEthereumAddress',
-            '--lib', LIBRARY_PATH,  
-            '--token', DEFAULT_TOKEN_LABEL, 
+            '--lib', self.library_path,  
+            '--token', self.default_token_label, 
             '--label', label, 
-            '--pin', DEFAULT_PIN]
-        self.print_command(command)
+            '--pin', self.default_pin]
 
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
+        self.log_raw_output(command, std, err)
 
-        # Issue with the getEthereumAddress command. Outputs to stderr
         val = err.strip()
         
         matches = re.findall(r"0x[0-9A-Fa-f]{40}", val)
@@ -172,12 +180,16 @@ class SoftHSMCryptoConnection():
         raise AttributeError("SoftHSM does not support retrieving public keys")
 
     def get_slots(self):
+        """
+        Get dictionary of all key slots
+        """
         command = ["softhsm2-util", "--show-slots"]
-        self.print_command(command)
 
         proc = subprocess.Popen(command, stdout=subprocess.PIPE)
-        out, err = proc.communicate(input=None)
-        val = out.strip()
+        std, err = proc.communicate(input=None)
+        self.log_raw_output(command, std, err)
+
+        val = std.strip()
 
         slots = re.split(r"(Slot [0-9]+\n)", val)[1:]
         slots = zip(slots[::2], slots[1::2])
@@ -205,7 +217,7 @@ class SoftHSMCryptoConnection():
         return slot_dict_list
 
     def _token_exists(self, label=None):
-        label = label if label else DEFAULT_TOKEN_LABEL
+        label = str(label) if label else self.default_token_label
 
         slots = self.get_slots()
 
@@ -215,26 +227,24 @@ class SoftHSMCryptoConnection():
         
         return False
 
-
     def _generate_token(self, label=None):
 
-        label = label if label else DEFAULT_TOKEN_LABEL
+        label = str(label) if label else self.default_token_label
 
         log.info("Generating new token with label {}".format(label))
 
-        child = pexpect.spawn("softhsm2-util --init-token --free --label {} --pin {}".format(label, DEFAULT_PIN), timeout=5)
+        child = pexpect.spawn("softhsm2-util --init-token --free --label {} --pin {}".format(label, self.default_pin), timeout=5)
 
         child.expect(".*enter SO PIN: .*")
-        child.sendline(DEFAULT_PIN)
+        child.sendline(self.default_pin)
         child.expect(".*reenter SO PIN: .*")
-        child.sendline(DEFAULT_PIN)
+        child.sendline(self.default_pin)
         child.wait()
 
         log.info("Token generated")
 
-        # TODO EP: Proper return
+        # TODO EP: More info on return
         return True
-
 
     def _device(self):
         return 'SoftHSM'
@@ -248,54 +258,31 @@ class SoftHSMCryptoConnection():
 if __name__ == "__main__":
     logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
 
-    AUTOPI_KEY_ID = "3dc5861"
-    RAINDOM_KEY_ID = randrange(1, 0xFFFFFFFF)
+    RANDOM_KEY_ID = randrange(1, 0xFFFFFFFF)
+    RANDOM_TOKEN_ID = randrange(1, 0xFFFFFFFF)
 
     settings = {
-        "keyid": "auf"
+        "keyid": RANDOM_KEY_ID
     }
     conn = SoftHSMCryptoConnection(settings)
-    
-    # conn._create_token("auf")
-    exists = conn._token_exists("auf")
-    log.info(exists)
 
-    exists = conn._token_exists("autopi")
-    log.info(exists)
+    token_exists = conn._token_exists()
+    if not token_exists:
+        conn._generate_token()
 
-    exists = conn._token_exists("BingyBongo")
-    log.info(exists)
-    
-    # keys = conn._keys()
+    token_exists = conn._token_exists()
+    assert(token_exists)
 
-    # log.info("Geting public key")
-    # p_key = conn._public_key()
-    # print(p_key)
+    key_exists = conn.key_exists()
+    assert(not key_exists)
 
-    # log.info("Generating key with id {}".format(settings["keyid"]))
-    # conn.generate_key(confirm=True)
+    conn.generate_key(confirm=True)
 
-    # log.info("Retrieving ethereum address")
-    # eth_addr = conn._ethereum_address(keyid=keyid)
-    # log.info("Eth addr: {}".format(eth_addr))
+    key_exists = conn.key_exists()
+    assert(key_exists)
 
-    # sig_data = "Red Apples"
-    # log.info("Signing string {}".format(sig_data))
-    # signature = conn.sign_string(sig_data, keyid=keyid)
-    # log.info("Signature: {}".format(signature))
+    eth_addr = conn._ethereum_address()
+    assert(eth_addr.startswith("0x"))
 
-    # sig_data = "Red Apples"
-    # log.info("Signing string {}".format(sig_data))
-    # signature = conn.sign_string(sig_data, keyid=settings["keyid"])
-    # log.info("Signature: {}".format(signature))
-
-    # log.info("-- Generating key")
-    # conn.generate_key(settings["keyid"], confirm=True)
-
-    # log.info("-- Getting keys by label")
-    # log.info(conn.keys_by_label(settings["keyid"]))
-
-    # log.info("-- Checking if key exists")
-    # log.info(conn.key_exists(settings["keyid"]))
-
-    # log.info(conn._public_key("default"))
+    signature = conn.sign_string("Test String", encoding="RS_HEX")
+    assert(signature.startswith("0x"))
