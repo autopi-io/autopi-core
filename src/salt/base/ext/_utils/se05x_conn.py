@@ -18,11 +18,14 @@ from sha3 import keccak_256
 import asn1
 import struct
 import ecdsa
+import ecc
 from ecc import ecdsa_raw_recover, encode_int32
 import time
 
 
 TIME_OUT = 15  # Time out in seconds
+
+SECP256K1_HALF = ecc.N // 2
 
 log = logging.getLogger(__name__)
 DEBUG = log.isEnabledFor(logging.DEBUG)
@@ -153,6 +156,10 @@ class Se05xCryptoConnection():
 
         r = decoder.read()[1]
         s = decoder.read()[1]
+
+        if s > SECP256K1_HALF:
+            s = ecc.N - s
+
         v_ = 27
         pub_address = None
         V = None
