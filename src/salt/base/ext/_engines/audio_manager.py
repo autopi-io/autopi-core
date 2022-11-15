@@ -225,7 +225,7 @@ def espeak_handler(text, volume=100, language="en-gb", pitch=50, speed=175, word
 
 
 @edmp.register_hook()
-def aplay_handler(audio_file, timeout=10):
+def aplay_handler(audio_file, duration=0, **kwargs):
     """
     Play a given audio file using the 'aplay' command.
 
@@ -233,14 +233,14 @@ def aplay_handler(audio_file, timeout=10):
         - audio_file (str): Local path of the audio file to play.
 
     Optional arguments:
-      - timeout (int): Timeout in seconds of the command to finish. Default value is '10'.
+      - duration (int): Interrupt playback after amount of seconds.
     """
 
     _ensure_amplifier()
 
     ret = {}
 
-    res = __salt__["cmd.run_all"]("aplay '{:s}'".format(audio_file), timeout=timeout)
+    res = __salt__["cmd.run_all"]("aplay -d {:d} '{:s}'".format(duration, audio_file), **kwargs)
     if res["retcode"] != 0:
         raise salt.exceptions.CommandExecutionError(res["stderr"])
 
