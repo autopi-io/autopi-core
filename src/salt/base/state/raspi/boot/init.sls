@@ -64,6 +64,7 @@ disable-pcie-overlay-distributed:
     - name: /boot/overlays/disable-pcie.dtbo
     - source: salt://raspi/boot/overlays/disable-pcie.dtbo
     - source_hash: salt://raspi/boot/overlays/disable-pcie.dtbo.sha1
+    - mode: 755
 
 disable-pcie-overlay-configured:
   file.replace:
@@ -71,6 +72,8 @@ disable-pcie-overlay-configured:
     - pattern: "^#?dtoverlay=disable-pcie$"
     - repl: "dtoverlay=disable-pcie"
     - append_if_not_found: true
+    - require:
+      - file: disable-pcie-overlay-distributed
 {%- else %}
 i2c-module-enabled:
   file.replace:
