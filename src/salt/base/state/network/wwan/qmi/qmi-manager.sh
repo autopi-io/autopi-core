@@ -163,9 +163,6 @@ gather_info()
         echo "Using Quectel modem"
         autopi ec2x.query "AT+COPS?"
         autopi ec2x.query "AT+CREG?;+CEREG?;+CGREG?"
-
-    else
-        echo "Not using a known modem, skipping AT+COPS and AT+CREG commands"
     fi
 }
 
