@@ -81,7 +81,7 @@ class SoftHSMCryptoConnection():
             '--lib', self.library_path, 
             '--token', self.default_token_label, 
             '--label', label, 
-            '--hash', "'{}'".format(data), 
+            '--hash', data, 
             '--pin', self.default_pin]
         
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
