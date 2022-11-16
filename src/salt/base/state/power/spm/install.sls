@@ -15,11 +15,13 @@ openocd-interface-raspberrypi-swd-configured:
   file.managed:
     - name: /usr/local/share/openocd/scripts/interface/raspberrypi-swd.cfg
     - source: salt://power/spm/openocd/raspberrypi-swd.cfg
+    - makedirs: True
 
 openocd-target-rp2040-configured:
   file.managed:
     - name: /usr/local/share/openocd/scripts/target/rp2040.cfg
     - source: salt://power/spm/openocd/rp2040.cfg
+    - makedirs: True
 {%- else %}
 avrdude-configured:
   file.managed:
