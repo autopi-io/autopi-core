@@ -93,7 +93,16 @@ class SoftHSMCryptoConnection():
         sig = re.findall(r"Signature (?P<signature>0x[0-9a-fA-F]*)[*]*$", val)
 
         if len(sig) == 1:
-            return sig[0]
+            hex_sig = sig[0]
+
+            # Fix for incorrect recovery byte
+            last_byte = hex_sig[len(hex_sig) - 1:]
+            if last_byte in ("00", "01"):
+                last_byte_int = int(last_byte, 16)
+                rec = last_byte_int + 27
+                hex_sig = "{}{}".format(hex_sig[len(hex_sig) - 1:], hex(rec)[2:])
+                
+            return hex_sig
         else:
             raise Exception('Unable to find eth signature in response. \nStdout: {} \nStderr: {}'.format(std.strip(), err.strip()))
 
