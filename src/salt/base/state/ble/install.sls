@@ -30,9 +30,19 @@ ble-firmware-flashed:
     - confirm: true
 {%- endif %}
 
+ble-interface-reset:
+  test.module:
+    - name: ble.interface
+    - args:
+      - reset
+    - validate:
+      - ret["state"] == "started"
+
 ble-mac-address-queried:
   module.run:
     - name: ble.interface
     - args:
       - mac_address
     - returner: cloud.returner
+    - require:
+      - test: ble-interface-reset
