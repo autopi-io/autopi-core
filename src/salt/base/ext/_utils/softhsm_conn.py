@@ -52,11 +52,7 @@ class SoftHSMCryptoConnection():
 
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
-
         self.log_raw_output(command, std, err)
-
-        if (err):
-            log.info("[WARNING] Has error: {}".format(err.strip()))
 
         return std.strip()
 
@@ -138,11 +134,6 @@ class SoftHSMCryptoConnection():
         result = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         std, err = result.communicate(input=None)
         self.log_raw_output(command, std, err)
-
-        log.info("Std: {}".format(std))
-
-        if (err):
-            log.warning("Has error: {}".format(err.strip()))
 
         val = std.strip()
 
@@ -249,9 +240,8 @@ class SoftHSMCryptoConnection():
         child.sendline(self.default_pin)
         child.wait()
 
-        log.info("Token generated")
+        log.info("Token generation steps done")
 
-        # TODO EP: More info on return
         return True
 
     def _device(self):
