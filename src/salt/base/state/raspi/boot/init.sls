@@ -9,6 +9,33 @@ kernel-arguments-configured:
     - source: salt://raspi/boot/cmdline.txt.jinja
     - template: jinja
 
+audio-default-disabled:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^dtparam=audio=on.*$"
+    - repl: "#dtparam=audio=on"
+    - append_if_not_found: true
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+audio-i2c-mmap-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=i2s-mmap.*$"
+    - repl: "dtoverlay=i2s-mmap"
+    - append_if_not_found: true
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+audio-hifiberry-dac-configured:
+  file.replace:
+    - name: /boot/config.txt
+    - pattern: "^#?dtoverlay=hifiberry-dac.*$"
+    - repl: "dtoverlay=hifiberry-dac"
+    - append_if_not_found: true
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
 gpio-poweroff-enabled:
   file.replace:
     - name: /boot/config.txt
@@ -52,6 +79,7 @@ i2c1-module-enabled:
     - repl: "dtoverlay=i2c1"
     - append_if_not_found: true
 
+# Generated with: dtc -@ -I dts -O dtb -o disable-pcie.dtbo disable-pcie-overlay.dts
 disable-pcie-overlay-distributed:
   file.managed:
     - name: /boot/overlays/disable-pcie.dtbo
