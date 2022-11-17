@@ -1,16 +1,9 @@
 import logging
-import binascii
-import base64
 from random import randrange
 import subprocess
 import re
-from cryptography.hazmat.primitives.serialization import load_der_public_key, PublicFormat, Encoding
-from cryptography.hazmat.backends import default_backend
-from Cryptodome.Hash import keccak
 
 import pexpect
-import asn1
-import ecdsa
 
 TIME_OUT = 15  # Time out in seconds
 
