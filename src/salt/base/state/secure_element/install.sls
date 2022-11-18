@@ -42,8 +42,8 @@ sss_050_build_loaded:
 edge-identity-extracted:
   archive.extracted:
     - name: /opt/autopi/bin/edge-identity
-    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-arm.tar.gz
-    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-arm.tar.gz.md5
+    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.3/edge-identity-v0.1.3-linux-arm.tar.gz
+    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.3/edge-identity-v0.1.3-linux-arm.tar.gz.md5
     - keep_source: true
     - clean: true
     - enforce_toplevel: False
