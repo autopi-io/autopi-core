@@ -18,6 +18,18 @@ class SoftHSMCryptoConnection():
         self.default_token_label = str(settings.get("tokenid", "autopi"))
         self.default_pin = str(settings.get("pin", "1234"))
         self.library_path = str(settings.get("libpath", '/usr/lib/softhsm/libsofthsm2.so'))
+        
+        # Ensure provisioned.
+        token_exists = self._token_exists()
+        if not token_exists:
+            log.info("Generating a SoftHSM token")
+            self._generate_token()
+
+        key_exists = self.key_exists()
+        if not key_exists:
+            log.info("Generating a SoftHSM key")
+            self.generate_key(confirm=True)
+
 
     def _serial_number(self):
         return "No serialnumber for softHSM"

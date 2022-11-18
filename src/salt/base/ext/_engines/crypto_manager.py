@@ -44,7 +44,7 @@ def sign_string_handler(data, keyid=None):
     with conn:
         log.info("Executing sign string on data: {}".format(data))
 
-        signature = conn.sign_string(data=data, keyid=keyid, expected_address=context["ethereum_address"])
+        signature = conn.sign_string(data=data, keyid=keyid, expected_address=context.get("ethereum_address", None))
 
         return { "value": signature }
 
@@ -117,7 +117,6 @@ def start(**settings):
             try:
                 from softhsm_conn import SoftHSMCryptoConnection
                 conn = SoftHSMCryptoConnection(settings['softhsm_conn'])
-                context["ethereum_address"] = conn._ethereum_address()
             except Exception as err:
                 log.error(err)
                 raise Exception('Error importing or creating SoftHSMCryptoConnection')
