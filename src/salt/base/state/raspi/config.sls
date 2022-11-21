@@ -20,3 +20,9 @@ rc-local-configured:
 timezone-configured:
   timezone.system:
     - name: UTC
+
+bluetooth-sap-disable-override-configured:
+  file.managed:
+    - name: /etc/systemd/system/bluetooth.service.d/01-disable-sap-plugin.conf
+    - source: salt://raspi/bluetooth-service-override-sap.conf
+    - makedirs: true
