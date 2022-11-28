@@ -251,7 +251,7 @@ class Se05xCryptoConnection():
             Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
         return key_pem.decode("UTF-8")
 
-    def _key_exists(self, keyid=None):
+    def key_exists(self, keyid=None):
         key = self._public_key(keyid=keyid)
         return bool(key)
 
