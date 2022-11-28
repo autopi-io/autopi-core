@@ -64,4 +64,9 @@ edge-identity-linked:
     - require:
       - archive: edge-identity-extracted
 
+softhsm-tokens-directory-created:
+  file.directory:
+    - name: /var/lib/softhsm/tokens
+    - makedirs: true
+
 {%- endif %}
