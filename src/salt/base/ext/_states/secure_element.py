@@ -38,7 +38,7 @@ def provisioned(name):
         pass
 
     try:
-       generated_public_key = __salt__["crypto.generate_key"](confirm=True, force=False, policy_name="NoMod")
+        generated_public_key = __salt__["crypto.generate_key"](confirm=True, force=False, policy_name="NoMod")
     except Exception as ex:
         if "Key already exists" in str(ex):
             ret["result"] = True

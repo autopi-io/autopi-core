@@ -1,4 +1,4 @@
-{%- if salt["pillar.get"]("minion:hw.version") > 6.1 %}
+{%- if salt["pillar.get"]("minion:secure_element") in ["nxp05x"] %}
 secure-element-provisioned:
   secure_element.provisioned
 {%- endif %}
