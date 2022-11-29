@@ -44,8 +44,28 @@ def program(elf_file, *cfg_files, **kwargs):
     res = __salt__["cmd.run_all"](" ".join(params))
 
     if res["retcode"] == 0:
-        ret["output"] = res["stderr"]
+        out = res["stderr"]
+
+        err = ""
+        if out.find("** Programming Finished **") < 0:
+            err = "Programming did not finish"
+        elif out.find("** Verified OK **") < 0:
+            err = "Verification failed"
+
+        if err:
+            log.error("Failed to program due to error: {:}".format(err))
+            log.error("Output:\n{:}".format(out))
+
+            if kwargs.get("raise_on_error", True):
+                raise salt.exceptions.CommandExecutionError(err)
+
+            ret["error"] = err
+
+        ret["output"] = out
     else:
+        log.error("Failed to program due to error code: {:}".format(res["retcode"]))
+        log.error("Output:\n{:}".format(res["stderr"]))
+
         if kwargs.get("raise_on_error", True):
             raise salt.exceptions.CommandExecutionError(res["stderr"])
 
