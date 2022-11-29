@@ -1,3 +1,4 @@
+{% set _timestamp = None|strftime("%Y%m%d%H%M%S") %}
 
 reboot-requested-after-boot-config-changed:
   module.wait:
@@ -15,6 +16,15 @@ temporary-config-prepared:
     - source: /boot/config.txt
     - mode: 755
 
+temporary-config-restored:
+  file.managed:
+    - name: /boot/config.txt.tmp
+    - source: salt://raspi/boot/config.txt
+    - mode: 755
+    - unless: "grep '# http://rpf.io/configtxt' /boot/config.txt"
+    - require:
+      - file: temporary-config-prepared
+
 audio-default-disabled:
   file.replace:
     - name: /boot/config.txt.tmp
@@ -22,20 +32,21 @@ audio-default-disabled:
     - repl: "#dtparam=audio=on"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
-audio-i2c-mmap-configured:
+audio-i2s-mmap-configured:
   file.replace:
     - name: /boot/config.txt.tmp
     - pattern: "^#?dtoverlay=i2s-mmap.*$"
     - repl: "dtoverlay=i2s-mmap"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
+      - file: audio-default-disabled
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -48,7 +59,8 @@ audio-hifiberry-dac-configured:
     - repl: "dtoverlay=hifiberry-dac"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
+      - file: audio-i2s-mmap-configured
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -61,7 +73,7 @@ gpio-poweroff-enabled:
     - repl: "dtoverlay=gpio-poweroff,gpiopin=4,active_low=y"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -78,7 +90,7 @@ gpio-shutdown-enabled:
     {%- endif %}
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -92,7 +104,7 @@ usb-xhci-controller-enabled:
     - repl: "otg_mode=1"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -105,9 +117,10 @@ i2c0-module-enabled:
     - repl: "dtoverlay=i2c0,pins_44_45=on"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
@@ -118,9 +131,10 @@ i2c1-module-enabled:
     - repl: "dtoverlay=i2c1"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
+      - file: rtc-configured  # # I2C must be setup before RTC in the config file
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
@@ -140,7 +154,7 @@ disable-pcie-overlay-configured:
     - append_if_not_found: true
     - require:
       - file: disable-pcie-overlay-distributed
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -152,9 +166,10 @@ i2c-module-enabled:
     - repl: "dtparam=i2c_arm=on"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
 i2c-module-reloaded:
   cmd.run:
     - name: modprobe i2c-bcm2708
@@ -181,7 +196,7 @@ splash-disabled:
     - repl: "disable_splash=1"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -192,7 +207,7 @@ warnings-disabled:
     - repl: "avoid_warnings=1"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -203,7 +218,7 @@ gpu-memory-configured:
     - repl: "gpu_mem={{ salt['pillar.get']('rpi:boot:gpu_mem', default='16') }}"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -218,7 +233,7 @@ bluetooth-configured:
     - append_if_not_found: true
     {%- endif %}
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -233,7 +248,7 @@ core-frequency-configured:
     - repl: ""
     {%- endif %}
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
 
@@ -258,7 +273,7 @@ rtc-configured:
     - repl: "#dtoverlay=i2c-rtc,"
     {%- endif %}
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -272,7 +287,7 @@ gpio-{{ key }}-configured:
     - repl: "gpio={{ key }}={{ val }}"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -287,7 +302,7 @@ spi-module-enabled:
     - repl: "dtparam=spi=on"
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -306,7 +321,8 @@ can1-configured:
     {%- endif %}
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
+      - file: spi-module-enabled
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -325,7 +341,8 @@ can0-configured:
     {%- endif %}
     - append_if_not_found: true
     - require:
-      - file: temporary-config-prepared
+      - file: temporary-config-restored
+      - file: spi-module-enabled
     - require_in:
       - file: temporary-config-applied
     - watch_in:
@@ -333,10 +350,20 @@ can0-configured:
 
 {%- endif %}
 
+config-backed-up:
+  file.copy:
+    - name: /boot/config.txt.{{ _timestamp }}
+    - source: /boot/config.txt
+    - force: true
+    - onchanges:
+      - file: temporary-config-restored  # Only backup before a complete restore
+
 temporary-config-applied:
   cmd.run:
     - name: mv -f /boot/config.txt.tmp /boot/config.txt
     - onlyif: "diff -q /boot/config.txt /boot/config.txt.tmp | fgrep 'Files /boot/config.txt and /boot/config.txt.tmp differ'"
+    - require:
+      - file: config-backed-up
 
 reboot-upon-changes-required:
   module.wait:
