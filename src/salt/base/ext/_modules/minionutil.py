@@ -205,10 +205,11 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
 
     # TODO: Check how the update procedure is done during chekckout - we don't want the devices to stop updating even if they are far over the allowed attempts - force=True?
 
-    old = __salt__["grains.get"]("release", default={"id": None, "state": None})
+    old = __salt__["grains.get"]("release", default={ "id": None, "state": None, "version": None })
     if not "state" in old:  # Added for backwards compatibility
         old["state"] = None
-    new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None}
+
+    new = {"id": __salt__["pillar.get"]("latest_release_id"), "state": None, "version": __salt__["pillar.get"]("minion:latest_release_version", None)}
 
     # TODO: Maybe make this into a one-liner?
     # Be sure to keep track of retry attempts
@@ -343,6 +344,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
 
             # Pillar data has been refreshed during highstate so latest release ID might have changed
             new["id"] = __salt__["pillar.get"]("latest_release_id")
+            new["version"] = __salt__["pillar.get"]("minion:latest_release_version", None)
 
             # TODO: If above highstate chooses to restart below code will not run
             # (another update/highstate will run afterwards that will set release id)
@@ -376,7 +378,7 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
             # Register 'updated' or 'failed' release in grains
             res = __salt__["grains.setval"]("release", new, destructive=True)
             if not res:
-                log.error("Failed to store {:} release '{:}' in grains data".format(new["state"], new["id"]))
+                log.error("Failed to store {:} release '{:}' and {:} in grains data".format(new["state"], new["id"], new.get("version", None)))
 
             # Trigger a release event with final state
             trigger_event("system/release/{:}".format(new["state"]), data={"id": new["id"], "attempts": grains_attempts, "limit": MAX_ATTEMPTS})
