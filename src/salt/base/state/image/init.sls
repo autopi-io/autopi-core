@@ -7,6 +7,9 @@ include:
 exclude:
   - id: hciuart
   - id: iptables-ipv4-rules-loaded
+  - id: timezone-configured
+  - id: i2c-module-reloaded
+  - id: rc-local-configured # Disabel this to prevent the build process from removing the existing content in the rc.local which is doing the filesystem expand after it has been shrinked...
 
 {%- if salt['pillar.get']('image:clear-wifi') %}
 
