@@ -9,3 +9,5 @@ ONLINE_CALLBACK='autopi event.fire "{}" "system/network/$INTERFACE/online"'
 OFFLINE_CALLBACK='autopi event.fire "{\"reason\": \"$REASON\"}" "system/network/$INTERFACE/offline"'
 MODEM={{ salt['pillar.get']('setup:mpcie:module', None) }}
 DELETE_SECOND_PDP_CONTEXT={{ salt['pillar.get']('qmi_manager:delete_second_pdp_context', 'false')|lower }}
+RUN_INTERVAL_ONLINE={{ salt['pillar.get']('qmi_manager:run_interval_online', 300) }}
+RUN_INTERVAL_OFFLINE={{ salt['pillar.get']('qmi_manager:run_interval_offline', 30) }}
