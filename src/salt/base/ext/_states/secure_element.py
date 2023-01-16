@@ -2,10 +2,9 @@ import logging
 import salt_more
 import time
 import os
-
+import subprocess
 
 log = logging.getLogger(__name__)
-
 
 def provisioned(name):
     """
@@ -31,7 +30,7 @@ def provisioned(name):
                 ret["result"] = True
                 ret["comment"] = "Key already exists"
                 return ret
-            
+
         # Todo catch specific exception that key does not exist, not all exceptions!
         # no connection or something should not make it try to regenerate key!
     except Exception:
@@ -55,7 +54,7 @@ def provisioned(name):
         ret["comment"] = "New key generated"
         ret["changes"]["new"] = generated_public_key_value
         return ret
-    
+
     ret["result"] = False
     ret["comment"] = "Returned key does not start with '-----BEGIN PUBLIC KEY-----'"
     return ret

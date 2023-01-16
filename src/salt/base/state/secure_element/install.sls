@@ -40,29 +40,44 @@ sss_050_build_loaded:
 
 {%- elif salt["pillar.get"]("minion:secure_element") == 'softhsm' %}
 
-edge-identity-extracted:
-  archive.extracted:
-    - name: /opt/autopi/bin/edge-identity/
-    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-amd64.tar.gz
-    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.2/edge-identity-v0.1.2-linux-amd64.tar.gz.md5
-    - keep_source: true
-    - clean: true
-
-edge-identity-made-executable:
+dimo-edge-identity-downloaded:
   file.managed:
-    - name: /user/bin/edge-identity
+    - name: /opt/autopi/edge-identity_release.tar.gz
+    - source: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.3/edge-identity-v0.1.3-linux-arm.tar.gz
+    - source_hash: https://github.com/DIMO-Network/edge-identity/releases/download/v0.1.3/edge-identity-v0.1.3-linux-arm.tar.gz.md5
+
+dimo-edge-identity-extracted:
+  archive.extracted:
+    - name: /opt/autopi/bin/edge-identity
+    - source: /opt/autopi/edge-identity_release.tar.gz
+    - keep_source: false
+    - clean: true
+    - enforce_toplevel: false
+    - overwrite: true
+    - require:
+      - file: dimo-edge-identity-downloaded
+    - onchanges:
+      - file: dimo-edge-identity-downloaded
+
+dimo-identity-made-executable:
+  file.managed:
+    - name: /opt/autopi/bin/edge-identity/edge-identity
     - replace: true
     - user: root
     - group: root
     - mode: 555
+    - onchanges:
+      - archive: dimo-edge-identity-extracted
 
-edge-identity-linked:
+dimo-identity-linked:
   file.symlink:
-    - name: /user/bin/edge-identity
+    - name: /usr/local/bin/edge-identity
     - target: /opt/autopi/bin/edge-identity/edge-identity
     - force: true
     - require:
-      - archive: edge-identity-extracted
+      - archive: dimo-edge-identity-extracted
+    - onchanges:
+      - archive: dimo-edge-identity-extracted
 
 softhsm-tokens-directory-created:
   file.directory:

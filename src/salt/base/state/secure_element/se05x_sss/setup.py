@@ -55,9 +55,9 @@ setup(
                 'click',
                 'cryptography',
                 'func_timeout',
-                'pycryptodomex',
                 'asn1',
                 'future',
+                'pysha3'
             ],
         }
     },
@@ -66,9 +66,9 @@ setup(
         'click',
         'cryptography',
         'func_timeout',
-        'pycryptodomex',
         'asn1',
         'future',
+        'pysha3'
     ],
     entry_points='''
         [console_scripts]

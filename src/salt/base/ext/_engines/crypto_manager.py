@@ -26,29 +26,36 @@ def generate_key_handler(keyid=None, confirm=False, force=False, policy_name=Non
     with conn:
         log.info("Generating key")
 
-        existing_key = conn._public_key(keyid)
-        if existing_key:
-            log.info('Existing public key: {}'.format(existing_key))
+        # existing_key = conn._public_key(keyid)
+        key_exists = conn.key_exists(keyid)
+
+        if key_exists:
             if not force:
                 raise Exception('Key already exists. - must force=true')
 
         conn.generate_key(keyid, confirm=confirm, policy_name=policy_name)
-        key_string = conn._public_key(keyid)
-        log.info('New public key: {}'.format(key_string))
 
-        if existing_key == key_string:
-            raise Exception('Command returned but key DID NOT CHANGE. Maybe the keyid is a reserved range or the security policy does not allow regenerating the key?')
+        key_exists = conn.key_exists(keyid=keyid)
 
-        return { "value": key_string }
+        return { "value": key_exists }
 
 @edmp.register_hook()
-def sign_string_handler(data, keyid=None, encoding="PEM"):
+def sign_string_handler(data, keyid=None):
     with conn:
         log.info("Executing sign string on data: {}".format(data))
 
-        signature = conn.sign_string(data, keyid, encoding=encoding)
+        signature = conn.sign_string(data=data, keyid=keyid, expected_address=context.get("ethereum_address", None))
 
         return { "value": signature }
+
+@edmp.register_hook()
+def key_exists_handler(keyid=None):
+    with conn:
+        log.info("Checking if key {} exists".format(str(keyid) if keyid else "default"))
+
+        key_exists = conn.key_exists(keyid)
+
+        return { "value": key_exists }
 
 @edmp.register_hook()
 def query_handler(cmd, *args, **kwargs):
@@ -102,6 +109,7 @@ def start(**settings):
             try:
                 from se05x_conn import Se05xCryptoConnection
                 conn = Se05xCryptoConnection(settings['nxpse05x_conn'])
+                context["ethereum_address"] = conn._ethereum_address()
             except Exception as err:
                 log.error(err)
                 raise Exception('Error importing or creating SE05x connection class')

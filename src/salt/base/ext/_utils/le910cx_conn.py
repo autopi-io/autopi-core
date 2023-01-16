@@ -143,6 +143,7 @@ SUPPORTED_DATATYPES = (bool, int, str)
 PARAM_TYPES = {'rdInline_wrInline': 1, 'inline_readonly': 2, 'rdInline_wrIndexed': 3}
 MULTILINE_TYPES = {'dictionary': 1, 'array': 2}
 
+
 class LE910CXConn(SerialConn):
     """
     Connection class that implements the communication with a LE910CX modem.
