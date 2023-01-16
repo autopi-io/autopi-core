@@ -77,5 +77,5 @@ secure-element-provisioned:
 
 audio-checkout-done:
   module.run:
-    - name: audio.play
+    - name: audio.aplay
     - audio_file: /opt/autopi/audio/sound/notification.wav

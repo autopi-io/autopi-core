@@ -10,7 +10,7 @@ finalize-spm-amp-enabled:
 
 finalize-audio-test:
   module.run:
-    - name: audio.play
+    - name: audio.aplay
     - audio_file: /opt/autopi/audio/sound/beep.wav
     - require:
       - test: finalize-spm-amp-enabled

@@ -4,11 +4,6 @@ import binascii
 import base64
 from cryptography.hazmat.primitives.serialization import load_der_public_key, PublicFormat, Encoding
 from cryptography.hazmat.backends import default_backend
-from Cryptodome.Hash import keccak
-
-import asn1
-import ecdsa
-
 from cli.cli import Context, do_open_session
 from sss import const
 from sss.const import AUTH_TYPE_MAP, ECC_CURVE_TYPE
@@ -19,14 +14,40 @@ from sss.session import Session
 from sss.sign import Sign
 from sss.policy import Policy
 
+from sha3 import keccak_256
+import asn1
+import struct
+import ecdsa
+import ecc
+from ecc import ecdsa_raw_recover, encode_int32
+import time
+
+
 TIME_OUT = 15  # Time out in seconds
+
+SECP256K1_HALF = ecc.N // 2
 
 log = logging.getLogger(__name__)
 DEBUG = log.isEnabledFor(logging.DEBUG)
 
+
+def hex_string_to_number(string):
+    return int(binascii.hexlify(string), 16)
+
+
+def int_to_big_endian(value):
+    return value.to_bytes((value.bit_length() + 7) // 8 or 1, "big")
+
+
+def pub_key_to_eth_address(pub_key):
+    return binascii.hexlify(binascii.unhexlify(
+        keccak_256(pub_key).hexdigest())[-20:])
+
+
 class CryptoKey(object):
     def __init__(self):
         None
+
 
 class Se05xCryptoConnection():
 
@@ -53,21 +74,22 @@ class Se05xCryptoConnection():
             except Exception as err:
                 connect_retry += 1
 
-                # If first time, create the configuration file 
+                # If first time, create the configuration file
                 log.error("Could not open the SSS session. Trying to configure")
                 do_open_session(subsystem=const.SUBSYSTEM_TYPE["se05x"],
-                        connection_method=const.CONNECTION_TYPE["t1oi2c"],
-                        port_name="none", 
-                        host_session=False, 
-                        auth_type=AUTH_TYPE_MAP["None"][0], 
-                        scpkey="",
-                        tunnel=AUTH_TYPE_MAP["None"][2],
-                        is_auth=False)
-        
+                                connection_method=const.CONNECTION_TYPE["t1oi2c"],
+                                port_name="none",
+                                host_session=False,
+                                auth_type=AUTH_TYPE_MAP["None"][0],
+                                scpkey="",
+                                tunnel=AUTH_TYPE_MAP["None"][2],
+                                is_auth=False)
+
         if not hasattr(self.sss_context, "session"):
             raise Exception("Could not create connection with Secure Element")
 
-        func_timeout.func_timeout(TIME_OUT, self.sss_context.session.session_open, None)
+        func_timeout.func_timeout(
+            TIME_OUT, self.sss_context.session.session_open, None)
 
     def close(self):
         return self.sss_context.session.session_close()
@@ -81,7 +103,8 @@ class Se05xCryptoConnection():
 
     def _serial_number(self):
         se05x_obj = Se05x(self.sss_context.session)
-        unique_id = func_timeout.func_timeout(TIME_OUT, se05x_obj.get_unique_id, None)
+        unique_id = func_timeout.func_timeout(
+            TIME_OUT, se05x_obj.get_unique_id, None)
         return unique_id
 
     def get_key_object(self, keyid):
@@ -104,63 +127,79 @@ class Se05xCryptoConnection():
         log.info('Using key: {}'.format(key))
         return int(key, 16)
 
-    def sign_string(self, data, keyid=None, hashalgo="KECCAK256", encoding="PEM"):
-
+    def sign_string(self, data, expected_address, keyid=None):
+        start_time = time.time()
         keyid_int = self.get_key_id_or_default(keyid)
-
-        log.info("Signing {} with key {}".format(data, keyid_int))
+        log.info("Signing {} with key {}".format(keyid_int, data))
 
         sign_obj = Sign(self.sss_context.session)
 
-        # When getting the RS values, get the DER format and decode that
-        if encoding == "RS_HEX":
-            sig_encoding = "DER"
-        else:
-            sig_encoding = encoding
-
         # Execute signing
-        signature = func_timeout.func_timeout(TIME_OUT, sign_obj.do_signature_and_return, (keyid_int, data, sig_encoding, hashalgo))
+        hex_signature = func_timeout.func_timeout(
+            TIME_OUT, sign_obj.sign_hash_and_return, (keyid_int, data))
+        signature_bytes = binascii.unhexlify(hex_signature)
+        if not isinstance(hex_signature, str):
+            raise Exception(
+                "do_signature_and_return returned a non-string value: {}".format(hex_signature))
 
-        if not isinstance(signature, str):
-            raise Exception("do_signature_and_return returned a non-string value: {}".format(signature))
-        
-        if encoding == "RS_HEX":
-            try:
-                decoder = asn1.Decoder()
+        # Remove 0x from the address if exists
+        if expected_address[:2] == "0x":
+            expected_address = expected_address[2:]
 
-                # .read() gets the next element in the sequence in a tuple (tag, value)
-                # Structure of the encoded signature is [[{r}{s}]]
-                decoder.start(signature)
-                value = decoder.read()[1]
+        decoder = asn1.Decoder()
+        digest = hex_string_to_number(data)
+        decoder.start(signature_bytes)
+        value = decoder.read()[1]
 
-                # Decode nested r and s values
-                decoder.start(value)
-                r = hex(decoder.read()[1]).lstrip("0x").rstrip("L")
-                s = hex(decoder.read()[1]).lstrip("0x").rstrip("L")
+        # Decode nested r and s values
+        decoder.start(value)
 
-                # Convert to HEX
-                signature = "0x{}{}".format(r, s)
+        r = decoder.read()[1]
+        s = decoder.read()[1]
 
-            except Exception as ex:
-                log.error(ex)
-                raise Exception("Could not convert signature to RS_HEX format. Does the cypher support it?")
+        if s > SECP256K1_HALF:
+            s = ecc.N - s
+
+        v_ = 27
+        pub_address = None
+        V = None
+        for i in range(2):
+            v = v_ + i
+            digest_bytes = binascii.unhexlify(data)
+            x, y = ecdsa_raw_recover(digest_bytes, (v, r, s))
+            public_key = int_to_big_endian(x) + int_to_big_endian(y)
+            pub_address_test = pub_key_to_eth_address(public_key)
+            if(pub_address_test == expected_address):
+                pub_address = pub_address_test
+                V = v
+                break
+
+        if(not pub_address):
+            raise Exception("Cannot find valid v")
+
+        signature = "0x{}{}{}".format('{:064x}'.format(
+            r), '{:064x}'.format(s), '{:02x}'.format(V))
 
         if DEBUG:
             log.debug("Final signature: {}".format(signature))
-
+            log.debug("Address: {}".format("0x"+pub_address))
+        log.info("Duration: %2f seconds" % (time.time() - start_time))
         return signature
 
     def generate_key(self, keyid=None, confirm=False, key_type="ecc", ecc_curve="Secp256k1", policy_name=None):
         if not confirm == True:
-            raise Exception("This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to continue the operation")
-        
+            raise Exception(
+                "This action will generate a new key on the secure element. This could overwrite an existing key. Add 'confirm=true' to continue the operation")
+
         supported_types = ["ecc"]
         if not key_type in supported_types:
-            raise Exception("This key type is not supported. Supported: {}".format(supported_types))
+            raise Exception(
+                "This key type is not supported. Supported: {}".format(supported_types))
 
         supported_curves = ["Secp256k1"]
         if key_type == "ecc" and not ecc_curve in supported_curves:
-            raise Exception("This curve is not supported. Supported: {}".format(supported_curves))
+            raise Exception(
+                "This curve is not supported. Supported: {}".format(supported_curves))
 
         # Apply find security policy if one is specified
         if policy_name != None:
@@ -173,7 +212,8 @@ class Se05xCryptoConnection():
         keyid_int = self.get_key_id_or_default(keyid)
 
         gen_obj = Generate(self.sss_context.session)
-        func_timeout.func_timeout(TIME_OUT, gen_obj.gen_ecc_pair, (keyid_int, ECC_CURVE_TYPE[ecc_curve], policy))
+        func_timeout.func_timeout(
+            TIME_OUT, gen_obj.gen_ecc_pair, (keyid_int, ECC_CURVE_TYPE[ecc_curve], policy))
 
         keyObj = CryptoKey()
         keyObj.keyid = keyid_int
@@ -187,7 +227,8 @@ class Se05xCryptoConnection():
         keyid_int = self.get_key_id_or_default(keyid)
 
         get_object = Get(self.sss_context.session)
-        func_timeout.func_timeout(TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))        
+        func_timeout.func_timeout(
+            TIME_OUT, get_object.get_key, (keyid_int, None, "PEM"))
         keylist = get_object.key
 
         if not keylist:
@@ -206,9 +247,13 @@ class Se05xCryptoConnection():
         key_der_str = binascii.unhexlify(key_hex_str)
         # log.info(key_der_str)
         key_crypto = load_der_public_key(key_der_str, default_backend())
-        key_pem = key_crypto.public_bytes(Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
-
+        key_pem = key_crypto.public_bytes(
+            Encoding.PEM, PublicFormat.SubjectPublicKeyInfo)
         return key_pem.decode("UTF-8")
+
+    def key_exists(self, keyid=None):
+        key = self._public_key(keyid=keyid)
+        return bool(key)
 
     def _ethereum_address(self, keyid=None):
         """
@@ -242,16 +287,24 @@ class Se05xCryptoConnection():
             PEM_KEY = key_pem.decode("UTF-8")
             if DEBUG:
                 log.debug("PEM public key: {}".format(PEM_KEY))
-            
-            vk = ecdsa.VerifyingKey.from_pem(PEM_KEY)
-            pub_address1 = binascii.unhexlify(
-                keccak.new(digest_bits=256).update(vk.to_string()).hexdigest())[-20:]
 
-            address = "0x"+binascii.hexlify(pub_address1).decode("utf-8")
+            vk = ecdsa.VerifyingKey.from_pem(PEM_KEY)
+            eth_address = pub_key_to_eth_address(vk.to_string())
+
+            address = "0x"+eth_address
             if DEBUG:
                 log.debug("Address: {}".format(address))
-
             return address
 
     def _device(self):
         return 'NXPS05X'
+
+
+if __name__ == "__main__":
+    print("Hello")
+    con = Se05xCryptoConnection({"keyid": "3dc586a1"})
+    con.open()
+    # print(con._ethereum_address())
+    sig = con.sign_string(
+        "3013fe9c3167130f8fd9fdac026b7b2e6ddd3662aa6f275f88d66072033e73b3", "bd4c64b2ee316ba81799b6b294a8c082d99f3871")
+    print(sig)

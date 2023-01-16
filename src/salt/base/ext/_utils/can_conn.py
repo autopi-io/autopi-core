@@ -593,6 +593,20 @@ class CANConn(object):
             self._monitor_listener = BufferedReader(capacity=buffer_size)
             self._notifier.add_listener(self._monitor_listener)
         else:
+            # First make sure that the listener is actually added to the notifier
+            if self._monitor_listener not in self._notifier.listeners:
+                """
+                NOTE NV: Sometimes, it can happen that the connection class needs to get reconfigured. This causes
+                the notifier to also get recreated, which in turn causes the _monitor_listener entity to disappear
+                from the notifier causing workers such as the can_logger (in this debugging case) to not receive any
+                of the messages that are actually being pushed to the bus. This is the reasoning behind this code.
+                This shouldn't occur that often, usually caused by the autodetect mechanism or any other reconfiguring
+                or switching of protocol/channel/can interface.
+                """
+
+                self._notifier.add_listener(self._monitor_listener)
+
+            # Then proceed to make any other changes we might need to make to the listner
             if self._monitor_listener.capacity != buffer_size:
                 if self._monitor_listener.is_empty():
                     log.info("Changing buffer size of monitor listener from {:} to {:}".format(self._monitor_listener.capacity, buffer_size))

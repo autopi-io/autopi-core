@@ -18,6 +18,9 @@ pending-packages-configured:
 
 packages-installed:
   pkg.installed:
+    {%- if salt["pillar.get"]("state", default="REGISTERED") == "NEW" %}
+    - refresh: true
+    {%- endif %}
     - pkgs:
       - python-pip
       - python-smbus

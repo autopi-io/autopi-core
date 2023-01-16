@@ -1,7 +1,7 @@
 
 audio-test:
   module.run:
-    - name: audio.play
+    - name: audio.aplay
     - audio_file: /opt/autopi/audio/sound/coin.wav
 
 no-kernel-usb-errors-test:

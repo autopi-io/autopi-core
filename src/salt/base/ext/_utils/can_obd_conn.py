@@ -522,6 +522,10 @@ class SocketCANInterface(STN11XX):
 
         This is also the reasoning for the mask added below -> 0x00FFFF00, we care only for the PGN.
         This might need to be changed depending on what other behaviour we see from J1939 enabled vehicles.
+
+        NOTE NV: After investigating J1939 further, it looks like the mask might need to be 0x03FFFF00, because
+        of the extended data page and data page bits that are located in those bit locations. Will leave the code
+        bellow as is for right now, but we might need to change it later
         """
 
         if isinstance(add, string_types):

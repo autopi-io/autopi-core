@@ -245,6 +245,10 @@ def returner_data(data, *args, **kwargs):
         # Append type to namespace if present and not already added
         if "_type" in data and not options["topic"] and not data["_type"] in namespace:
             namespace.append(data["_type"])
+
+        if not "_stamp" in data:
+            data["_stamp"] = datetime.datetime.utcnow().isoformat()
+
     elif isinstance(data, (list, set, tuple)):
         payload = {
             "_stamp": datetime.datetime.utcnow().isoformat(),

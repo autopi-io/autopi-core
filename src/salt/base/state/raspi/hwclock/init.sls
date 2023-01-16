@@ -32,7 +32,7 @@ timesyncd-service-reloaded:
     - onchanges:
       - file: /lib/systemd/system/systemd-timesyncd.service
 
-{%- if salt['pillar.get']('rpi:boot:rtc', default='') == 'pcf85063a' %}
+{%- if salt['pillar.get']('rpi:boot:rtc', default='').startswith('pcf85063a') %}
 rtc-retry-script-installed:
   file.managed:
     - name: /usr/bin/rtc-retry

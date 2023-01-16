@@ -170,6 +170,66 @@ def battery_event_trigger(result):
             ctx["data"] = data
 
 
+def temperature_event_trigger(result):
+    """
+    Looks for temperature results and triggers 'system/temperature/*' event when temperature changes.
+    """
+
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+        log.error("Temperature event trigger got error result: {:}".format(result))
+
+        state = "unknown"
+    else:
+        if log.isEnabledFor(logging.DEBUG):
+            log.debug("Temperature event trigger got temperature result: {:}".format(result))
+
+        if "value" in result:
+            if result["value"] < 0:
+                state = "freezing"
+            elif result["value"] <= 25:
+                state = "cold"
+            elif result["value"] <= 65:
+                state = "warm"
+            elif result["value"] <= 90:
+                state = "hot"
+            else:
+                state = "overheating"
+        else:
+            log.warning("Temperature event trigger did not find any temperature value in result: {:}".format(result))
+
+            state = "unknown"
+
+    # Check if state has chaged since last time
+    ctx = __context__.setdefault("hooklib.temperature_event_trigger", {})
+    if not ctx or state != ctx.get("state", None):
+        ctx["state"] = state
+        ctx["is_sent"] = False
+        ctx["timer"] = timer()
+        ctx["count"] = 1
+    else:
+        ctx["count"] += 1
+
+    if not ctx["is_sent"]:
+        event_thresholds = ctx.setdefault("event_thresholds", {})
+        if not event_thresholds:
+            event_thresholds["*"] = 10  # Default is ten seconds
+            event_thresholds["unknown"] = 0
+
+        # Proceed only when the temperature state is repeated at least once and the timer threshold is reached
+        if ctx["count"] > 1 and timer() - ctx["timer"] >= event_thresholds.get(state, event_thresholds["*"]):
+
+            # Prepare event data
+            data = {}
+            if state == "unknown" and error:
+                data["reason"] = str(error)
+
+            __salt__["minionutil.trigger_event"]("system/temperature/{:s}".format(state), data)
+            
+            ctx["is_sent"] = True
+
+
 def kernel_error_blacklist_filter(result):
     """
     Filters out blacklisted kernel errors.

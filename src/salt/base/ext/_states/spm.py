@@ -46,10 +46,14 @@ def firmware_flashed(name, part_id, version, force=False):
     if "error" in res:
         ret["result"] = False
         ret["comment"] = "Failed to flash firmware: {:}".format(res["error"])
+        if "output" in res:
+            ret["comment"] += "\nOutput: {:}".format(res["output"])
         return ret
 
     ret["result"] = True
     ret["comment"] = "Sucessfully updated firmware"
+    if "output" in res:
+        ret["comment"] += "\nOutput: {:}".format(res["output"])
     ret["changes"]["old"] = old
     ret["changes"]["new"] = new
 
