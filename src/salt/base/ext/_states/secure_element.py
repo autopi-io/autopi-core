@@ -49,12 +49,12 @@ def provisioned(name):
             return ret
 
     generated_public_key_value = generated_public_key.get('value', "")
-    if generated_public_key_value.startswith("-----BEGIN PUBLIC KEY-----"):
+    if generated_public_key_value:
         ret["result"] = True
         ret["comment"] = "New key generated"
         ret["changes"]["new"] = generated_public_key_value
         return ret
 
     ret["result"] = False
-    ret["comment"] = "Returned key does not start with '-----BEGIN PUBLIC KEY-----'"
+    ret["comment"] = "Returned key was empty'"
     return ret
