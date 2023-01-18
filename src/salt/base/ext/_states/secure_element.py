@@ -56,5 +56,5 @@ def provisioned(name):
         return ret
 
     ret["result"] = False
-    ret["comment"] = "Returned key was empty'"
+    ret["comment"] = "Returned key was empty"
     return ret
