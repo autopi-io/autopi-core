@@ -511,8 +511,15 @@ class SocketCANInterface(STN11XX):
             raise NotImplementedError("Not supported by SocketCAN interface - only pass filters are supported")
 
     def can_flow_control_filters(self, clear=False, add=None):
-        if add:
-            raise NotImplementedError("Not supported by SocketCAN interface - add pass filters instead")
+        """
+        From the little research that could be done for this task, it looks like the can flow control filters are just
+        standard pass filters. The can_flow_control_id_pairs is what actually does the matching and communication on
+        the CAN bus, the filters just allow those headers to show up.
+
+        For now, this function just passes the arguments `clear` and `add` down to can_pass_filters function.
+        """
+
+        self.can_pass_filters(clear=clear, add=add)
 
     def j1939_pgn_filters(self, clear=False, add=None):
         """
