@@ -27,10 +27,6 @@ minion-client-certificate-created:
     - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
     - token: {{ salt['pillar.get']('ca:client_certificate_token', None) }}
     - force: false
-
-minion-client-certificate-valid-has-content:
-  cmd.run:
-    - name: test -s /opt/autopi/client.crt
 {%- endif %}
 
 minion-private-key-copied:
