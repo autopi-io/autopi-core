@@ -9,23 +9,6 @@ from threading_more import intercept_exit_signal
 
 PERSISTENCE_ACTION_HISTORY_OBJECT_NAME = "keyfob_action_history"
 
-USER_EXT1_PIN_WIRES = {
-    "green":   7,
-    "white":   8,
-    "grey":    9,
-    "red":    10,
-    "black":  11
-}
-
-USER_EXT2_PIN_WIRES = {
-    "green":  23,  # RPi default low
-    "white":  24,  # RPi default low
-    "grey":   27,  # RPi default low
-    "red":     1,  # RPi default high
-    "black":   0   # RPi default high
-}
-
-
 log = logging.getLogger(__name__)
 
 context = {
@@ -154,7 +137,7 @@ def power_handler(value=None):
 
     ret = {}
 
-    if context["pin_wires"] != USER_EXT2_PIN_WIRES: 
+    if not context["power_managed"]:
         raise Exception("Only supported for port ext port 2")
 
     kwargs = {}
@@ -324,14 +307,11 @@ def start(**settings):
         # Also store settings in context
         context["settings"] = settings
 
-        # Determine which ext port to use 
-        ext_port = settings.get("ext_port", 2)
-        if ext_port == 1:
-            context["pin_wires"] = USER_EXT1_PIN_WIRES
-        elif ext_port == 2:
-            context["pin_wires"] = USER_EXT2_PIN_WIRES
-        else:
-            raise Exception("Unsupported user ext port {:}".format(ext_port))
+        if not settings.get("pin_wires", None):
+            raise Exception("Unsupported pin_wires passed in settings. Settings: {}".format(settings))
+
+        context["pin_wires"] = settings["pin_wires"]
+        context["power_managed"] = settings.get("power_managed", False)
 
         for action in settings.get("actions", []):
             if not action["pin"]["wire"] in context["pin_wires"]:
