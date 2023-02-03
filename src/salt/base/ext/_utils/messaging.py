@@ -184,8 +184,9 @@ class MessageProcessor(object):
 
                     # Go ahead and log the warning
                     if context["distinct_warnings"][msg] > 1:
-                        log.info("Recurring warning ({:} times) in worker thread '{:}': {:}".format(context["distinct_warnings"][msg], thread.name, wa))
+                        log.warning("Recurring warning ({:} times) in worker thread '{:}': {:}".format(context["distinct_warnings"][msg], thread.name, wa))
                     else:
+                        # No need to show all recurring warnings on warning level
                         log.info("Warning in worker thread '{:}': {:}".format(thread.name, wa))
 
                 except Exception as ex:
