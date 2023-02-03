@@ -19,10 +19,19 @@ class LE910CXException(Exception):
     pass
 
 
-class NoFixException(LE910CXException):
+class LE910CXWarning(Warning):
+    pass
+
+
+class NoFixWarning(LE910CXWarning):
+    """
+    NoFixWarning is only a warning because it's an expected behavior from the modem. It can very often be the
+    case that the modem doesn't have a fix. Warnings are handled differently than Exceptions in Core.
+    """
+
     def __init__(self, message="No fix"):
         self.message = message
-        super(NoFixException, self).__init__(message)
+        super(NoFixWarning, self).__init__(message)
 
 
 class InvalidResponseException(LE910CXException):
@@ -33,10 +42,15 @@ class CommandExecutionException(LE910CXException):
     pass
 
 
-class NoSimPresentException(LE910CXException):
+class NoSimPresentWarning(LE910CXWarning):
+    """
+    NoSimPresentWarning is only a warning because it's an expected behavior from the modem. Customers can decide if
+    they are going to have SIMs inserted.
+    """
+
     def __init__(self, message="No SIM present"):
         self.message = message
-        super(NoSimPresentException, self).__init__(message)
+        super(NoSimPresentWarning, self).__init__(message)
 
 
 SMS_FORMAT_MODE_PUD = 0
@@ -444,7 +458,7 @@ class LE910CXConn(SerialConn):
         # First check if the SIM is present
         sim = self.query_sim_status()
         if sim["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
-            raise NoSimPresentException()
+            raise NoSimPresentWarning()
 
         ret = {"values": []}
 
@@ -617,7 +631,7 @@ class LE910CXConn(SerialConn):
             raise InvalidResponseException("Didn't receive expected response")
 
         if int(match.group("fix")) in [ GNSS_LOCATION_FIX_INVALID_FIX, GNSS_LOCATION_FIX_NO_FIX ]:
-            raise NoFixException()
+            raise NoFixWarning()
 
         # Parse response
         time_utc = match.group("utc")
@@ -962,7 +976,7 @@ class LE910CXConn(SerialConn):
         # First check if the SIM is present
         sim_status = self.query_sim_status()
         if sim_status["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
-            raise NoSimPresentException()
+            raise NoSimPresentWarning()
 
         ret = []
         res = self.execute("AT+CGDCONT?")

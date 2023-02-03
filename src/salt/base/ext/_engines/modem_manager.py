@@ -1,7 +1,7 @@
 import logging
 import re
 
-from le910cx_conn import LE910CXConn, NoSimPresentException
+from le910cx_conn import LE910CXConn
 from messaging import EventDrivenMessageProcessor, extract_error_from
 from threading_more import intercept_exit_signal
 
@@ -97,11 +97,7 @@ def read_sms_handler(*args, **kwargs):
     trigger_events = kwargs.pop("trigger_events", False)
 
     # Get messages and clear them
-    try:
-        res = conn.sms_list(*args, **kwargs)
-    except NoSimPresentException as e:
-        log.warning("No SIM present, breaking workflow")
-        return
+    res = conn.sms_list(*args, **kwargs)
 
     # Some validation
     if "values" not in res:
