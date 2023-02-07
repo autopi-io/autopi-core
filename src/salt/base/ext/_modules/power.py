@@ -525,6 +525,7 @@ def restart_3v3(confirm=False, reason="unknown"):
         raise salt.exceptions.CommandExecutionError(
             "This command should be used with caution and only if the description in the documentation is understood - add parameter 'confirm=true' to continue anyway")
 
+    log.error("Performing restart of the 3V3 power supply because of reason '{:}'".format(reason))  # NOTE: Error logs propagates to syslog
     ret = __salt__["spm.query"]("restart_3v3")
 
     # Trigger a 3V3 restarted event

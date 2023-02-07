@@ -63,6 +63,7 @@ def reset_handler(*args, **kwargs):
 
     reason = kwargs.pop("reason", "unspecified")
 
+    log.error("Performing reset of the LE910CX modem because of reason '{:}'".format(reason))  # NOTE: Error logs propagates to syslog
     res = conn.reset(*args, **kwargs)
 
     tag = "system/device/le910cx/reset"
