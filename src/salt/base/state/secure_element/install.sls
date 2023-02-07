@@ -22,6 +22,11 @@ sss_base_files_loaded:
     - require:
       - cmd: sss_base_files_copied
 
+ssscli_egg_link_remove_if_empty:
+  file.absent:
+    - name: /usr/local/lib/python2.7/dist-packages/ssscli.egg-link
+    - unless: test -s /usr/local/lib/python2.7/dist-packages/ssscli.egg-link
+
 pip_requirements_installed:
   pip.installed:
     - editable: /opt/autopi/se05x_sss
