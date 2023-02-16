@@ -1,5 +1,5 @@
 
-filebeat-scrubber-service-disabled:
+filebeat-scrubber-service-disabled-before-uninstalled:
   service.dead:
     - name: filebeat-scrubber
     - enable: false

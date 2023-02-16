@@ -4,10 +4,13 @@ filebeat-installed:
     - name: filebeat
     - sources:
       - filebeat: http://autopi.io/media/rpi/elastic/filebeat-7.11_armhf.deb
+    - unless: test -x /usr/share/filebeat/bin/filebeat && /usr/share/filebeat/bin/filebeat version | grep "filebeat version 7.11.0"
 
+{%- if salt["pillar.get"]("filebeat_scrubber") %}
 filebeat-scrubber-pip3-requirement-installed:
   pkg.installed:
     - name: python3-pip
+    - unless: which pip3
 
 filebeat-scrubber-installed:
   cmd.run:
@@ -15,3 +18,4 @@ filebeat-scrubber-installed:
     - unless: "pip3 show filebeat_scrubber | grep 'Version: 1.3.1'"
     - require:
       - pkg: python3-pip
+{%- endif %}

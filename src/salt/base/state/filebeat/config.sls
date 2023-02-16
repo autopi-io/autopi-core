@@ -1,4 +1,5 @@
 
+{%- if salt["pillar.get"]("filebeat") %}
 filebeat-configured:
   file.serialize:
     - name: /etc/filebeat/filebeat.yml
@@ -12,7 +13,14 @@ filebeat-service-running:
     - enable: true
     - watch:
       - file: /etc/filebeat/filebeat.yml
+{%- else %}
+filebeat-service-disabled:
+  service.dead:
+    - name: filebeat
+    - enable: false
+{%- endif %}
 
+{%- if salt["pillar.get"]("filebeat_scrubber") %}
 filebeat-scrubber-service-configured:
   file.managed:
     - name: /lib/systemd/system/filebeat-scrubber.service
@@ -25,3 +33,9 @@ filebeat-scrubber-service-running:
     - enable: true
     - watch:
       - file: /lib/systemd/system/filebeat-scrubber.service
+{%- else %}
+filebeat-scrubber-service-disabled:
+  service.dead:
+    - name: filebeat-scrubber
+    - enable: false
+{%- endif %}
