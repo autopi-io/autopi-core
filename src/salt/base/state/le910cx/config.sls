@@ -43,3 +43,12 @@ le910cx-evmoni-gpio-configured:
         watch_status: True
         confirm: True
         delay: 5
+
+le910cx-ensure-evmoni-enabled:
+  module_extra.configured:
+    - name: modem.connection
+    - args:
+      - evmoni_enabled
+    - kwargs:
+        enabled: True
+        confirm: True

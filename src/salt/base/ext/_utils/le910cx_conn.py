@@ -1301,7 +1301,7 @@ class LE910CXConn(SerialConn):
             self.update_modem_config(at_command, params, current_data, multiline_identifier=multiline_identifier, force=force)
 
             if post_update_task:
-                pre_update_task()
+                post_update_task()
 
             ret = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
         else:
