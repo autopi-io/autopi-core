@@ -15,10 +15,16 @@ minion-root-cert-bundle-created:
 {%- endif %}
 
 {%- if salt['pillar.get']('ca:client_certificate_token', None) %}
-minion-client-certificate-remove-if-empty:
+{%- set dashed_minion_id = salt['config.get']('id') | regex_replace('(\S{8})(\S{4})(\S{4})(\S{4})(.*)', '\\1-\\2-\\3-\\4-\\5', ignorecase=True) %}
+minion-client-certificate-removed-if-empty:
   file.absent:
     - name: /opt/autopi/client.crt
     - unless: test -s /opt/autopi/client.crt
+
+minion-client-certificate-removed-if-corrupt-or-wrong-unit_id:
+  file.absent:
+    - name: /opt/autopi/client.crt
+    - unless: openssl x509 -in /opt/autopi/client.crt -text | grep {{ dashed_minion_id }}
 
 minion-client-certificate-created:
   cert_auth.client_certificate_signed:
@@ -27,6 +33,10 @@ minion-client-certificate-created:
     - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
     - token: {{ salt['pillar.get']('ca:client_certificate_token', None) }}
     - force: false
+
+minion-client-certificate-verified:
+  cmd.run:
+    - name: openssl x509 -in /opt/autopi/client.crt -text | grep {{ dashed_minion_id }}
 {%- endif %}
 
 minion-private-key-copied:
