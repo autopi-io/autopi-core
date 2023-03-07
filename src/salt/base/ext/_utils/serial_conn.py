@@ -1,8 +1,11 @@
 import binascii
 import logging
+import time
 
 from retrying import retry
 from serial import *
+from timeit import default_timer as timer
+
 
 log = logging.getLogger(__name__)
 
@@ -39,6 +42,10 @@ class SerialConn(object):
             return decorator
 
     def __init__(self):
+        self._serial = None
+        self._open_timer = 0.0
+        self._settings = {}
+
         self.on_open = None
 
     def init(self, settings):
@@ -91,6 +98,14 @@ class SerialConn(object):
 
     def ensure_open(self):
         if not self.is_open():
+
+            if self._open_timer:
+                reopen_delay = self._settings.get("reopen_delay", 5) - (timer() - self._open_timer)
+                if reopen_delay > 0:
+                    log.warning("Enforcing re-open delay of {:} second(s)...".format(reopen_delay))
+                    time.sleep(reopen_delay)
+
+            self._open_timer = timer()
             self.open()
 
     def close(self):

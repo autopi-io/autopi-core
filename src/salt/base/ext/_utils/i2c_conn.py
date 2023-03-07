@@ -1,7 +1,9 @@
 import logging
 import smbus
+import time
 
 from retrying import retry
+from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
@@ -29,9 +31,11 @@ class I2CConn(object):
     def __init__(self):
         self._port = None
         self._address = None
+        self._reopen_delay = 0
 
         self._bus = None
         self._is_open = False
+        self._open_timer = 0.0
 
         self.on_written = None
 
@@ -46,6 +50,8 @@ class I2CConn(object):
         if not "address" in settings:
             raise ValueError("I2C 'address' must be specified in settings")
         self._address = settings["address"]
+
+        self._reopen_delay = settings.get("reopen_delay", 5)
 
         self._bus = smbus.SMBus()
 
@@ -71,6 +77,14 @@ class I2CConn(object):
 
     def ensure_open(self):
         if not self.is_open():
+
+            if self._open_timer:
+                reopen_delay = self._reopen_delay - (timer() - self._open_timer)
+                if reopen_delay > 0:
+                    log.warning("Enforcing re-open delay of {:} second(s)...".format(reopen_delay))
+                    time.sleep(reopen_delay)
+
+            self._open_timer = timer()
             self.open()
 
     def close(self):
