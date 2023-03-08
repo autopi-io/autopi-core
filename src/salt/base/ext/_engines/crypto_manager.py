@@ -93,7 +93,7 @@ def query_handler(cmd, *args, **kwargs):
 def start(**settings):
     try:
         if log.isEnabledFor(logging.DEBUG):
-            log.debug("Starting CRYPTO manager with settings: {:}".format(settings))
+            log.debug("Starting crypto manager with settings: {:}".format(settings))
 
         # Give process higher priority
         psutil.Process(os.getpid()).nice(-1)
@@ -101,7 +101,7 @@ def start(**settings):
         # Initialize connection
         global conn
 
-        log.info("Importing CRYPTO connection")
+        log.info("Importing crypto connection")
         if 'atecc108A_conn' in settings:
             from atecc108a_conn import ATECC108AConn
             conn = ATECC108AConn(settings['atecc108A_conn'])
@@ -138,21 +138,27 @@ def start(**settings):
         #     log.info('USING *NEW* NXPS050 SECURE ELEMENT')
 
         # Initialize and run message processor
-        log.info("INITIALIZING Crypto Manager")
+        log.info("Initializing crypto manager")
         edmp.init(__salt__, __opts__,
             hooks=settings.get("hooks", []),
             workers=settings.get("workers", []),
             reactors=settings.get("reactors", []))
 
-        log.info("STARTING Crypto Manager")
+        log.info("Starting crypto manager")
         edmp.run()
 
-    except Exception:
-        log.exception("Failed to start CRYPTO manager")
+    except Exception as ex:
+        log.exception("Failed to start crypto manager")
+
+        if settings.get("trigger_events", True):
+            edmp.trigger_event({
+                "reason": str(ex),
+            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
         
         raise
+
     finally:
-        log.info("Stopping CRYPTO manager")
+        log.info("Stopping crypto manager")
 
         if getattr(conn, "is_open", False) and conn.is_open():
             try:
