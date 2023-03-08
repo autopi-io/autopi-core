@@ -18,21 +18,29 @@ class SerialConn(object):
         def ensure_open(func):
 
             def decorator(self, *args, **kwargs):
-
-                # Ensure connection is open
-                self.ensure_open()
-
                 try:
-                    return func(self, *args, **kwargs)
-                except SerialException as se:
 
-                    if self._settings.get("close_on_error", True):
-                        log.warning("Closing serial connection due to error: {:}".format(se))
+                    # Ensure connection is open
+                    self.ensure_open()
 
+                    try:
+                        return func(self, *args, **kwargs)
+                    except SerialException as se:
+                        if self._settings.get("close_on_error", True):
+                            log.warning("Closing serial connection due to error: {:}".format(se))
+
+                            try:
+                                self.close()
+                            except:
+                                log.exception("Failed to close serial connection after error occurred: {:}".format(se))
+
+                        raise
+                except Exception as ex:
+                    if self.on_error:
                         try:
-                            self.close()
+                            self.on_error(ex)
                         except:
-                            log.exception("Failed to close serial connection after error occurred: {:}".format(se))
+                            log.exception("Error in 'on_error' event handler")
 
                     raise
 
@@ -47,6 +55,7 @@ class SerialConn(object):
         self._settings = {}
 
         self.on_open = None
+        self.on_error = None
 
     def init(self, settings):
         if "device" in settings:

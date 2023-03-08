@@ -17,11 +17,20 @@ class I2CConn(object):
         def ensure_open(func):
 
             def decorator(self, *args, **kwargs):
+                try:
 
-                # Ensure connection is open
-                self.ensure_open()
+                    # Ensure connection is open
+                    self.ensure_open()
 
-                return func(self, *args, **kwargs)
+                    return func(self, *args, **kwargs)
+                except Exception as ex:
+                    if self.on_error:
+                        try:
+                            self.on_error(ex)
+                        except:
+                            log.exception("Error in 'on_error' event handler")
+
+                    raise
 
             # Add reference to the original undecorated function
             decorator.undecorated = func
@@ -38,6 +47,7 @@ class I2CConn(object):
         self._open_timer = 0.0
 
         self.on_written = None
+        self.on_error = None
 
     def init(self, settings):
         if log.isEnabledFor(logging.DEBUG):
