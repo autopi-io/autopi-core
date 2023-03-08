@@ -424,6 +424,11 @@ class SocketCANInterface(STN11XX):
             else:
                 formatter = can_message_formatter
 
+        format_response = kwargs.pop("format_response", False)
+
+        # if F_R
+            # Add Hashtag using the monitor_until arg 0
+
         # Setup mode
         current_mode = self._runtime_settings.get("can_monitor_mode", 0)
         if current_mode == 0:
@@ -774,3 +779,7 @@ class SocketCAN_OBDConn(OBDConn):
             "_stamp": datetime.datetime.fromtimestamp(msg.timestamp).isoformat(),
             "value": can_message_formatter(msg)
         }
+
+    # @Decorators.ensure_open
+    def monitor(self, **kwargs):
+        return self._obd.interface.monitor(**kwargs)
