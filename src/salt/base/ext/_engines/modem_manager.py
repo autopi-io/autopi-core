@@ -128,12 +128,9 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting modem manager with settings: {}".format(settings))
 
-        # TODO HN
-        conn.init({
-            "device": "/dev/ttyTLT01",
-            "baudrate": 115200,
-            "timeout": 30,
-        })
+        conn.init(settings["serial_conn"])
+        if settings.get("trigger_events", True):
+            conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex), "path": settings["serial_conn"].get("device", None)}, "system/device/le910cx/error")
 
         # Init and start message processor
         edmp.init(__salt__, __opts__,
@@ -143,8 +140,14 @@ def start(**settings):
 
         edmp.run()
 
-    except Exception as e:
+    except Exception as ex:
         log.exception("Failed to start modem manager")
+
+        if settings.get("trigger_events", True):
+            edmp.trigger_event({
+                "reason": str(ex),
+            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+
         raise
 
     finally:
