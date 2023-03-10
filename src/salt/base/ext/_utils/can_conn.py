@@ -674,7 +674,7 @@ class CANConn(object):
         elif file.endswith(".log"):
             writer = can.io.CanutilsLogWriter(file, **kwargs)
         else:
-            raise ValueError("Unsupported file extension")
+            ValueError("Unsupported file extension")
 
         try:
             return self.monitor_until.undecorated(self, writer,  # No need to call the 'ensure_open' decorator again
