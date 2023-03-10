@@ -793,7 +793,7 @@ def msg_to_str(src, separator="#"):
 
     format_string = "{:02x}{:}{:}"
 
-    if msg.is_extended_id:
+    if src.is_extended_id:
         format_string = "{:08x}{:}{:}"
 
     return format_string.format(
