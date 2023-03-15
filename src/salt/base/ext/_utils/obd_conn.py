@@ -403,7 +403,8 @@ class OBDConn(object):
 
         # Format response frames if requested
         if format_response:
-            lines = [format_frame(l, 11 if l.index(" ") == 3 else 29) for l in lines]
+            header_bits = getattr(self.cached_protocol, "HEADER_BITS", None)
+            lines = [format_frame(l, header_bits) for l in lines]
 
         return lines
 

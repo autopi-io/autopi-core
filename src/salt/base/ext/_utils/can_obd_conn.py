@@ -370,12 +370,14 @@ class SocketCANInterface(STN11XX):
             # Response timing
             timeout = 0.2  # 200ms
             if self._runtime_settings.get("adaptive_timing", 1) == 0:  # Adaptive timing off (fixed timeout)
-                 timeout = self._runtime_settings.get("response_timeout", 50) * 4 / 1000
+                timeout = self._runtime_settings.get("response_timeout", 50) * 4 / 1000
 
-            # Print spaces
-            msg_formatter = can_message_formatter
-            if self._runtime_settings.get("print_spaces", True):
-                msg_formatter = can_message_with_spaces_formatter
+            # Configure formatter
+            msg_formatter = lambda msg : can_message_formatter (
+                msg, 
+                include_spaces=self._runtime_settings.get("print_spaces", True),
+                include_hashtag=False
+            )
 
             kwargs = {}
 
@@ -418,16 +420,9 @@ class SocketCANInterface(STN11XX):
         if not filtering:
             self.clear_filters()
 
-        if not formatter:
-            if self._runtime_settings.get("print_spaces", True):
-                formatter = can_message_with_spaces_formatter
-            else:
-                formatter = can_message_formatter
-
         format_response = kwargs.pop("format_response", False)
-
-        # if F_R
-            # Add Hashtag using the monitor_until arg 0
+        if not formatter:
+            formatter = lambda msg : can_message_formatter(msg, include_spaces=self._runtime_settings.get("print_spaces", True), include_hashtag=format_response)
 
         # Setup mode
         current_mode = self._runtime_settings.get("can_monitor_mode", 0)
@@ -675,30 +670,28 @@ class SocketCANInterface(STN11XX):
             self._port.ensure_filter(id=0x7E8, is_ext_id=False, mask=0x7F8, clear=True)
 
 
-def can_message_formatter(msg):
+def can_message_formatter(msg, include_hashtag=False, include_spaces=False):
     """
     Formats a raw python-can Message object to a string.
     """
 
-    format_string = "{:02x}{:}"
-    if msg.is_extended_id:
-        format_string = "{:08x}{:}"
+    # Data
+    data_hex = binascii.hexlify(msg.data)
+    if include_spaces:
+        data_string = " ".join(data_hex[i:i+2] for i in range(0, len(data_hex), 2))
+    else:
+        data_string = data_hex
 
-    return format_string.format(msg.arbitration_id, binascii.hexlify(msg.data))
+    # Seperator
+    seperator_string = "#" if include_hashtag else ""
+    if include_spaces:
+        seperator_string = " " + seperator_string + (" " if include_hashtag else "")
 
+    # Header
+    header_string = ("{:08x}" if msg.is_extended_id else "{:02x}").format(msg.arbitration_id)
 
-def can_message_with_spaces_formatter(msg):
-    """
-    Formats a raw python-can Message object to a string with spaces between the header and every byte of data.
-    """
-
-    data = binascii.hexlify(msg.data)
-    format_string = "{:02x} {:}"
-
-    if msg.is_extended_id:
-        format_string = "{:08x} {:}"
-
-    return format_string.format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
+    # Return value
+    return header_string + seperator_string + data_string
 
 
 class SocketCAN_OBD(OBD):
