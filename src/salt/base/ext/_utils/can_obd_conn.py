@@ -678,6 +678,10 @@ def can_message_formatter(msg, include_hashtag=False, include_spaces=False):
     Formats a raw python-can Message object to a string.
     """
 
+    # This is how obd_conn would handle the formatting. Remove the following 2 lines to allow both spaces and hashtags
+    if include_hashtag:
+        include_spaces=False
+
     # Data
     data_hex = binascii.hexlify(msg.data)
     if include_spaces:
