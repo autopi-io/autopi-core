@@ -193,9 +193,13 @@ def start(**settings):
 
         app.run(**flask_settings)
 
-    except Exception:
+    except Exception as ex:
         log.exception("Failed to start API service")
 
+        if settings.get("trigger_events", True):
+            __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+
         raise
+
     finally:
         log.info("Stopping API service")

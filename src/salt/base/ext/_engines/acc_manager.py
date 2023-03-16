@@ -9,6 +9,7 @@ import psutil
 import RPi.GPIO as gpio
 import salt.loader
 import threading
+import time
 import math
 
 from common_util import abs_file_path, factory_rendering, min_max
@@ -444,6 +445,8 @@ def orientation_enricher(result):
 @factory_rendering
 @intercept_exit_signal
 def start(**settings):
+    start_time = timer()
+
     try:
         if DEBUG:
             log.debug("Starting accelerometer manager with settings: {:}".format(settings))
@@ -467,11 +470,17 @@ def start(**settings):
             from lsm6dsl_conn import LSM6DSLConn
 
             conn = LSM6DSLConn(settings["lsm6dsl_conn"])
+
+            if settings.get("trigger_events", True):
+                conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex)}, "system/device/lsm6dsl/error")
         elif "mma8x5x_conn" in settings:
             from mma8x5x_conn import MMA8X5XConn
 
             conn = MMA8X5XConn(stats=context)
             conn.init(settings["mma8x5x_conn"])
+
+            if settings.get("trigger_events", True):
+                conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex)}, "system/device/mma8x5x/error")
         else:
             log.error("No supported connection found in settings")
 
@@ -484,15 +493,27 @@ def start(**settings):
             reactors=settings.get("reactors", []))
         edmp.run()
 
-    except Exception:
+    except Exception as ex:
         log.exception("Failed to start accelerometer manager")
 
+        if settings.get("trigger_events", True):
+            edmp.trigger_event({
+                "reason": str(ex),
+            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+
         raise
+
     finally:
         log.info("Stopping accelerometer manager")
+        run_time = timer() - start_time
 
         if conn.is_open():
             try:
                 conn.close()
             except:
                 log.exception("Failed to close connection")
+
+        stop_delay = settings.get("stop_delay", 1) - run_time
+        if stop_delay > 0:
+            log.info("Enforcing stop delay of {:} second(s)...".format(stop_delay))
+            time.sleep(stop_delay)

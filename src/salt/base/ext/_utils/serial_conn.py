@@ -1,8 +1,11 @@
 import binascii
 import logging
+import time
 
 from retrying import retry
 from serial import *
+from timeit import default_timer as timer
+
 
 log = logging.getLogger(__name__)
 
@@ -15,21 +18,29 @@ class SerialConn(object):
         def ensure_open(func):
 
             def decorator(self, *args, **kwargs):
-
-                # Ensure connection is open
-                self.ensure_open()
-
                 try:
-                    return func(self, *args, **kwargs)
-                except SerialException as se:
 
-                    if self._settings.get("close_on_error", True):
-                        log.warning("Closing serial connection due to error: {:}".format(se))
+                    # Ensure connection is open
+                    self.ensure_open()
 
+                    try:
+                        return func(self, *args, **kwargs)
+                    except SerialException as se:
+                        if self._settings.get("close_on_error", True):
+                            log.warning("Closing serial connection due to error: {:}".format(se))
+
+                            try:
+                                self.close()
+                            except:
+                                log.exception("Failed to close serial connection after error occurred: {:}".format(se))
+
+                        raise
+                except Exception as ex:
+                    if self.on_error:
                         try:
-                            self.close()
+                            self.on_error(ex)
                         except:
-                            log.exception("Failed to close serial connection after error occurred: {:}".format(se))
+                            log.exception("Error in 'on_error' event handler")
 
                     raise
 
@@ -39,7 +50,12 @@ class SerialConn(object):
             return decorator
 
     def __init__(self):
+        self._serial = None
+        self._open_timer = 0.0
+        self._settings = {}
+
         self.on_open = None
+        self.on_error = None
 
     def init(self, settings):
         if "device" in settings:
@@ -91,6 +107,14 @@ class SerialConn(object):
 
     def ensure_open(self):
         if not self.is_open():
+
+            if self._open_timer:
+                reopen_delay = self._settings.get("reopen_delay", 5) - (timer() - self._open_timer)
+                if reopen_delay > 0:
+                    log.warning("Enforcing re-open delay of {:} second(s)...".format(reopen_delay))
+                    time.sleep(reopen_delay)
+
+            self._open_timer = timer()
             self.open()
 
     def close(self):

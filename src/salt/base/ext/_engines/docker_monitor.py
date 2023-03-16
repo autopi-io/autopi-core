@@ -58,9 +58,13 @@ def start(**settings):
             else:
                 log.warning("event['time']: {:} was less than the newest_event_timestamp {:} - Event has likely already been handled.".format(event['time'], context['newest_event_timestamp']))
 
-    except Exception:
+    except Exception as ex:
         log.exception("Failed to start docker monitor")
 
+        if settings.get("trigger_events", True):
+            __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+
         raise
+
     finally:
         log.info("Stopping docker monitor")

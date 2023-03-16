@@ -674,7 +674,7 @@ class CANConn(object):
         elif file.endswith(".log"):
             writer = can.io.CanutilsLogWriter(file, **kwargs)
         else:
-            raise ValueError("Unsupported file extension")
+            ValueError("Unsupported file extension")
 
         try:
             return self.monitor_until.undecorated(self, writer,  # No need to call the 'ensure_open' decorator again
@@ -793,7 +793,7 @@ def msg_to_str(src, separator="#"):
 
     format_string = "{:02x}{:}{:}"
 
-    if msg.is_extended_id:
+    if src.is_extended_id:
         format_string = "{:08x}{:}{:}"
 
     return format_string.format(

@@ -237,8 +237,13 @@ def start(**settings):
             reactors=settings.get("reactors", []))
         edmp.run()
 
-    except Exception:
+    except Exception as ex:
         log.exception("Failed to start tracking manager")
+        
+        if settings.get("trigger_events", True):
+            edmp.trigger_event({
+                "reason": str(ex),
+            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
         
         raise
 
