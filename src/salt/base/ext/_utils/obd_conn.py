@@ -365,6 +365,7 @@ class OBDConn(object):
                     self._obd.interface.set_can_priority(msg[:hash_pos - 6])
                     kwargs["header"] = msg[hash_pos - 6:hash_pos]
                 else:
+                    self._obd.interface.set_can_priority(None)
                     kwargs["header"] = msg[:hash_pos]
 
                 msg = msg[hash_pos + 1:]

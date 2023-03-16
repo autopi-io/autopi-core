@@ -641,6 +641,7 @@ class SocketCANInterface(STN11XX):
         if header == None:
             header = "18DB33F1" if self._protocol.HEADER_BITS > 11 else "7DF"
         else:
+            header = header.strip()
 
             # CAN priority
             prio = self._runtime_settings.get("can_priority", None)
@@ -659,9 +660,11 @@ class SocketCANInterface(STN11XX):
         if extended_address != None:
             data = bytearray([int(str(extended_address), 16)]) + data
 
+        is_extended_id=len(header) > 3
+
         return can.Message(arbitration_id=int(header, 16),
             data=data.ljust(8, "\0") if can_auto_format else data,
-            is_extended_id=self._protocol.HEADER_BITS > 11)
+            is_extended_id=is_extended_id)
 
     def _ensure_auto_filtering(self):
         if self._protocol.HEADER_BITS > 11:
