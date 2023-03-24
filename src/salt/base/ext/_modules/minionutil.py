@@ -423,7 +423,7 @@ def change_master(host, confirm=False, show_changes=False):
 
     Optional arguments:
       - confirm (bool): Acknowledge the execution of this command. Default is 'False'.
-      - show_changes (bool): Show the changes made in the files '/etc/salt/minion' and '/boot/host.aliases'. Default is 'False'.
+      - show_changes (bool): Show the changes made in the file '/etc/salt/minion'. Default is 'False'.
 
     NOTE: When the master (hub) is changed, the API endpoint URL won't be updated automatically
     unless there is a pending sync (for example coming from an update) that will execute the
@@ -441,18 +441,15 @@ def change_master(host, confirm=False, show_changes=False):
 
     ret = {}
 
-    # remove master keys
+    # Remove master keys
     # NOTE: The removal of the pki keys will make it lose connection to the master, i.e. it's
     # not possible to reach the minion after the command is executed
     ret["master_key_removed"] = __salt__["file.remove"]("/etc/salt/pki/minion/minion_master.pub")
 
-    # change master in minion config to "hub"
-    ret["config_changed"] = __salt__["file.replace"]("/etc/salt/minion", "^master:.*$", "master: hub", show_changes=show_changes)
+    # Change master (can be multiple) in the minion config
+    ret["config_changed"] = __salt__["file.replace"]("/etc/salt/minion", "^master:.*(\\s+-.*)*", "master: {}".format(host), show_changes=show_changes)
 
-    # set host.aliases to the actual host
-    ret["host_aliases_changed"] = __salt__["file.replace"]("/boot/host.aliases", "^hub .*$", "hub {}".format(host), show_changes=show_changes)
-
-    # restart minion to read the boot/host.aliases file again
+    # Restart minion to effect changes
     ret["restart"] = request_restart(expiration=1, reason="Master host changed")
 
     return ret
