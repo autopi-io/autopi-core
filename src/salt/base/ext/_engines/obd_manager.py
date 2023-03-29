@@ -163,6 +163,13 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
         "_type": name.lower()
     }
 
+    # Ensure protocol
+    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
+        pass
+    else:
+        conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
+
+    # Get or construct the command
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
 
@@ -177,12 +184,6 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
     cmd.frames = frames
     cmd.strict = strict
-
-    # Ensure protocol
-    if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
-        pass
-    else:
-        conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:

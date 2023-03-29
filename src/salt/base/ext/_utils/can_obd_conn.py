@@ -4,7 +4,7 @@ import collections
 import datetime
 import logging
 
-from obd import OBD, OBDStatus, commands
+from obd import OBD, OBDStatus, commands, OBDCommand, ECU, decoders
 from obd.protocols import UnknownProtocol, CANProtocol
 from obd.interfaces.stn11xx import STN11XX, STN11XXError
 from six import string_types
@@ -699,8 +699,34 @@ def can_message_with_spaces_formatter(msg):
 class SocketCAN_OBD(OBD):
 
     def __init__(self, channel=None, protocol=None, load_commands=True, status_callback=None, reset_callback=None):
+
+        # vin_command = OBDCommand("VIN" , "Get Vehicle Identification Number" , b"0902", 20, decoders.raw_string, ECU.ENGINE, True)
+
+        def vin_decoder(messages):
+            log.warning("CURRENT VIN: {}".format(messages[0].data))
+            
+            ret_val = messages[0].data[3:].decode("ascii")
+
+            log.warning("CURRENT VIN: {}".format(ret_val))
+            return ret_val
+
+        __mode9__ = [
+            #                      name                             description                    cmd  bytes       decoder           ECU        fast
+            OBDCommand("PIDS_9A"                    , "Supported PIDs [01-20]"                  , b"0900", 4,   decoders.pid,                   ECU.ENGINE,  True),
+            OBDCommand("VIN_MESSAGE_COUNT"          , "VIN Message Count"                       , b"0901", 1,   decoders.uas(0x01),             ECU.ENGINE,  True),
+            OBDCommand("VIN"                        , "Get Vehicle Identification Number"       , b"0902", 20,  vin_decoder,            ECU.ENGINE,  True),
+        ]
+
+        commands.modes[9] = __mode9__
+
+        supported_commands = commands.base_commands()
+        supported_commands.append(__mode9__[0])
+
+        for cmd in __mode9__:
+            commands.__dict__[cmd.name] = cmd
+
         self.interface = SocketCANInterface(status_callback=status_callback)
-        self.supported_commands = set(commands.base_commands())
+        self.supported_commands = set(supported_commands)
         self.reset_callback = reset_callback
         self.fast = False
         self._last_command = b""
