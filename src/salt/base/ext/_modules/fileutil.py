@@ -119,3 +119,27 @@ def load_yaml(file, default={}):
     with open(file, "r") as f:
         return yaml.load(f, Loader=yaml.CLoader) or default
 
+
+def grep(pattern, file, tail_lines=10):
+    """
+    Match lines in a text file.
+
+    Arguments:
+      - pattern (str): Regex pattern to match.
+      - file (str): File to search in.
+
+    Optional arguments:
+      - tail_lines (int): How many of the last matched lines should be included? Set to '0' to include all lines. Default is '10'.
+    """
+
+    ret = {}
+
+    cmd = ["grep", pattern, file]
+    if tail_lines > 0:
+        cmd.extend(["|", "tail", "-n", str(tail_lines)])
+
+    res = __salt__["cmd.shell"](" ".join(cmd))
+
+    ret["values"] = res.splitlines()
+
+    return ret

@@ -365,6 +365,8 @@ class OBDConn(object):
                     self._obd.interface.set_can_priority(msg[:hash_pos - 6])
                     kwargs["header"] = msg[hash_pos - 6:hash_pos]
                 else:
+                    self._obd.interface.set_can_priority(None)  # Remove priority so it doesn't get prepended to 11-bit headers 
+                                                                # Scenario: Playing dump file with both 11 and 29 bit messages 
                     kwargs["header"] = msg[:hash_pos]
 
                 msg = msg[hash_pos + 1:]

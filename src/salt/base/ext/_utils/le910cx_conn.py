@@ -5,6 +5,7 @@ import time
 import pynmea2
 import salt.exceptions
 
+
 from serial_conn import SerialConn
 from retrying import retry
 from common_util import dict_key_by_value
@@ -473,11 +474,14 @@ class LE910CXConn(SerialConn):
                 return ret
 
             # Structure (per SMS) as per AT commands reference:
-            # +CMGL:<index>,<stat>,<oa/da>,<alpha>,<scts>[,<tooa/toda>,<length>]<CR><LF>
+            # +CMGL: <index>,<stat>,<oa/da>,<alpha>,<scts>[,<tooa/toda>,<length>]<CR><LF>
             # <data>
+
+            # Examples:
+            # +CMGL: 1,"REC READ","Vodafone","","23/03/16,08:13:50+00"
             meta_regex = re.compile("^\+CMGL: (?P<index>[0-9]+)," + \
                     "\"(?P<status>[A-Z\s]+)\"," + \
-                    "\"(?P<sender>\+?[0-9]+)\"," + \
+                    "\"(?P<sender>\+?[a-zA-Z0-9]+)\"," + \
                     "\"(?P<alpha>[a-zA-Z0-9]*)\"," + \
                     "\"(?P<scts>.+)\"" + \
                     ".*") # have to cover for some extra stuff that could occur here, look at structure above

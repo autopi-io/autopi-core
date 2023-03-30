@@ -9,6 +9,12 @@ from flask_api import FlaskAPI
 from functools import wraps
 from threading_more import intercept_exit_signal
 
+
+"""
+Serves the local REST API for running AutoPi commands.
+"""
+
+
 log = logging.getLogger(__name__)
 
 app = FlaskAPI(__name__)

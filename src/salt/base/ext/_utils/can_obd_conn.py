@@ -371,12 +371,14 @@ class SocketCANInterface(STN11XX):
             # Response timing
             timeout = 0.2  # 200ms
             if self._runtime_settings.get("adaptive_timing", 1) == 0:  # Adaptive timing off (fixed timeout)
-                 timeout = self._runtime_settings.get("response_timeout", 50) * 4 / 1000
+                timeout = self._runtime_settings.get("response_timeout", 50) * 4 / 1000
 
-            # Print spaces
-            msg_formatter = can_message_formatter
-            if self._runtime_settings.get("print_spaces", True):
-                msg_formatter = can_message_with_spaces_formatter
+            # Configure formatter
+            msg_formatter = lambda msg : can_message_formatter (
+                msg, 
+                include_spaces=self._runtime_settings.get("print_spaces", True),
+                include_hashtag=False
+            )
 
             kwargs = {}
 
@@ -419,11 +421,9 @@ class SocketCANInterface(STN11XX):
         if not filtering:
             self.clear_filters()
 
+        format_response = kwargs.pop("format_response", False)
         if not formatter:
-            if self._runtime_settings.get("print_spaces", True):
-                formatter = can_message_with_spaces_formatter
-            else:
-                formatter = can_message_formatter
+            formatter = lambda msg : can_message_formatter(msg, include_spaces=self._runtime_settings.get("print_spaces", True), include_hashtag=format_response)
 
         # Setup mode
         current_mode = self._runtime_settings.get("can_monitor_mode", 0)
@@ -642,6 +642,7 @@ class SocketCANInterface(STN11XX):
         if header == None:
             header = "18DB33F1" if self._protocol.HEADER_BITS > 11 else "7DF"
         else:
+            header = header.strip()
 
             # CAN priority
             prio = self._runtime_settings.get("can_priority", None)
@@ -660,9 +661,11 @@ class SocketCANInterface(STN11XX):
         if extended_address != None:
             data = bytearray([int(str(extended_address), 16)]) + data
 
+        is_extended_id=len(header) > 3
+
         return can.Message(arbitration_id=int(header, 16),
             data=data.ljust(8, "\0") if can_auto_format else data,
-            is_extended_id=self._protocol.HEADER_BITS > 11)
+            is_extended_id=is_extended_id)
 
     def _ensure_auto_filtering(self):
         if self._protocol.HEADER_BITS > 11:
@@ -671,30 +674,32 @@ class SocketCANInterface(STN11XX):
             self._port.ensure_filter(id=0x7E8, is_ext_id=False, mask=0x7F8, clear=True)
 
 
-def can_message_formatter(msg):
+def can_message_formatter(msg, include_hashtag=False, include_spaces=False):
     """
     Formats a raw python-can Message object to a string.
     """
 
-    format_string = "{:02x}{:}"
-    if msg.is_extended_id:
-        format_string = "{:08x}{:}"
+    # This is how obd_conn would handle the formatting. Remove the following 2 lines to allow both spaces and hashtags
+    if include_hashtag:
+        include_spaces=False
 
-    return format_string.format(msg.arbitration_id, binascii.hexlify(msg.data))
+    # Data
+    data_hex = binascii.hexlify(msg.data)
+    if include_spaces:
+        data_string = " ".join(data_hex[i:i+2] for i in range(0, len(data_hex), 2))
+    else:
+        data_string = data_hex
 
+    # Seperator
+    seperator_string = "#" if include_hashtag else ""
+    if include_spaces:
+        seperator_string = " " + seperator_string + (" " if include_hashtag else "")
 
-def can_message_with_spaces_formatter(msg):
-    """
-    Formats a raw python-can Message object to a string with spaces between the header and every byte of data.
-    """
+    # Header
+    header_string = ("{:08x}" if msg.is_extended_id else "{:02x}").format(msg.arbitration_id)
 
-    data = binascii.hexlify(msg.data)
-    format_string = "{:02x} {:}"
-
-    if msg.is_extended_id:
-        format_string = "{:08x} {:}"
-
-    return format_string.format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
+    # Return value
+    return header_string + seperator_string + data_string
 
 def vin_decoder(messages):
     return messages[0].data[3:].decode("ascii")
@@ -807,3 +812,7 @@ class SocketCAN_OBDConn(OBDConn):
             "_stamp": datetime.datetime.fromtimestamp(msg.timestamp).isoformat(),
             "value": can_message_formatter(msg)
         }
+
+    # @Decorators.ensure_open
+    def monitor(self, **kwargs):
+        return self._obd.interface.monitor(**kwargs)
