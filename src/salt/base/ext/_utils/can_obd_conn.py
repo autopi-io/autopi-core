@@ -5,6 +5,7 @@ import datetime
 import logging
 
 from obd import OBD, OBDStatus, commands, OBDCommand, ECU, decoders
+from obd.utils import bytes_to_int
 from obd.protocols import UnknownProtocol, CANProtocol
 from obd.interfaces.stn11xx import STN11XX, STN11XXError
 from six import string_types
@@ -696,32 +697,40 @@ def can_message_with_spaces_formatter(msg):
     return format_string.format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
 
 def vin_decoder(messages):
-    log.warning("CURRENT VIN: {}".format(messages[0].data))
-    ret_val = messages[0].data[3:].decode("ascii")
+    return messages[0].data[3:].decode("ascii")
 
-    log.warning("CURRENT VIN: {}".format(ret_val))
-    return ret_val
+def odometer_decoder(messages):
+    return bytes_to_int(messages[0].data[2:6])/10
+
+def add_commands_if_not_there(mode_number, pids):
+    mode_list = commands.modes[mode_number]
+    existing_names = [p.name for p in mode_list]
+    for pid in pids:
+        if not (pid.name in existing_names):
+            mode_list.append(pid)
+
+        if not pid.name in commands.__dict__.keys():
+            commands.__dict__[pid.name] = pid
 
 class SocketCAN_OBD(OBD):
 
     def __init__(self, channel=None, protocol=None, load_commands=True, status_callback=None, reset_callback=None):
-
-        # vin_command = OBDCommand("VIN" , "Get Vehicle Identification Number" , b"0902", 20, decoders.raw_string, ECU.ENGINE, True)
-
+        #                      name                             description                         cmd  bytes       decoder                    ECU          fast
+        __mode1__ = [
+            OBDCommand("ODOMETER"                   , "Current odometer value"                  , b"01A6", 8,   odometer_decoder,               ECU.ENGINE,  True),
+        ]
         __mode9__ = [
-            #                      name                             description                    cmd  bytes       decoder           ECU        fast
             OBDCommand("PIDS_9A"                    , "Supported PIDs [01-20]"                  , b"0900", 4,   decoders.pid,                   ECU.ENGINE,  True),
             OBDCommand("VIN_MESSAGE_COUNT"          , "VIN Message Count"                       , b"0901", 1,   decoders.uas(0x01),             ECU.ENGINE,  True),
             OBDCommand("VIN"                        , "Get Vehicle Identification Number"       , b"0902", 20,  vin_decoder,                    ECU.ENGINE,  True),
         ]
 
-        commands.modes[9] = __mode9__
+        add_commands_if_not_there(1, __mode1__)
+        add_commands_if_not_there(9, __mode9__)
 
+        # Add the 0900 to default supported commands, so it can be queried during discovery
         supported_commands = commands.base_commands()
         supported_commands.append(__mode9__[0])
-
-        for cmd in __mode9__:
-            commands.__dict__[cmd.name] = cmd
 
         self.interface = SocketCANInterface(status_callback=status_callback)
         self.supported_commands = set(supported_commands)
