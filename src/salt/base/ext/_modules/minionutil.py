@@ -15,10 +15,8 @@ from salt.utils.network import remote_port_tcp as _remote_port_tcp
 log = logging.getLogger(__name__)
 
 
-"""
-CAUTION: Before considering making changes to this file be aware that backwards incompatible changes can break update release functionality and block retries:
-  - 3rd party import missing: Ensure to incapsulate in try/except block or do it inside function.
-"""
+# CAUTION: Before considering making changes to this file be aware that backwards incompatible changes can break update release functionality and block retries:
+#  - 3rd party import missing: Ensure to incapsulate in try/except block or do it inside function.
 
 
 def help():

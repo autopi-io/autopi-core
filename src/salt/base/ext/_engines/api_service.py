@@ -9,6 +9,12 @@ from flask_api import FlaskAPI
 from functools import wraps
 from threading_more import intercept_exit_signal
 
+
+"""
+Serves the local REST API for running AutoPi commands.
+"""
+
+
 log = logging.getLogger(__name__)
 
 app = FlaskAPI(__name__)
@@ -182,10 +188,6 @@ def apn_settings(unit_id):
 
 @intercept_exit_signal
 def start(**settings):
-    """
-    Starts the local REST API for running AutoPi commands.
-    """
-
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting API service with settings: {:}".format(settings))
