@@ -695,6 +695,12 @@ def can_message_with_spaces_formatter(msg):
 
     return format_string.format(msg.arbitration_id, " ".join(data[i:i+2] for i in range(0, len(data), 2)))
 
+def vin_decoder(messages):
+    log.warning("CURRENT VIN: {}".format(messages[0].data))
+    ret_val = messages[0].data[3:].decode("ascii")
+
+    log.warning("CURRENT VIN: {}".format(ret_val))
+    return ret_val
 
 class SocketCAN_OBD(OBD):
 
@@ -702,19 +708,11 @@ class SocketCAN_OBD(OBD):
 
         # vin_command = OBDCommand("VIN" , "Get Vehicle Identification Number" , b"0902", 20, decoders.raw_string, ECU.ENGINE, True)
 
-        def vin_decoder(messages):
-            log.warning("CURRENT VIN: {}".format(messages[0].data))
-            
-            ret_val = messages[0].data[3:].decode("ascii")
-
-            log.warning("CURRENT VIN: {}".format(ret_val))
-            return ret_val
-
         __mode9__ = [
             #                      name                             description                    cmd  bytes       decoder           ECU        fast
             OBDCommand("PIDS_9A"                    , "Supported PIDs [01-20]"                  , b"0900", 4,   decoders.pid,                   ECU.ENGINE,  True),
             OBDCommand("VIN_MESSAGE_COUNT"          , "VIN Message Count"                       , b"0901", 1,   decoders.uas(0x01),             ECU.ENGINE,  True),
-            OBDCommand("VIN"                        , "Get Vehicle Identification Number"       , b"0902", 20,  vin_decoder,            ECU.ENGINE,  True),
+            OBDCommand("VIN"                        , "Get Vehicle Identification Number"       , b"0902", 20,  vin_decoder,                    ECU.ENGINE,  True),
         ]
 
         commands.modes[9] = __mode9__

@@ -163,6 +163,9 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
         "_type": name.lower()
     }
 
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug("Querying: %s", name)
+
     # Ensure protocol
     if protocol in [str(None), "null"]:  # Allow explicit skip - exception made for 'ELM_VOLTAGE' command which requires no active protocol
         pass
@@ -170,9 +173,6 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
         conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
 
     # Get or construct the command
-    if log.isEnabledFor(logging.DEBUG):
-        log.debug("Querying: %s", name)
-
     if pid != None:
         mode = "{:02X}".format(int(str(mode), 16)) if mode != None else "01"
         pid = "{:02X}".format(int(str(pid), 16))
