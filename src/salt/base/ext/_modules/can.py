@@ -28,7 +28,7 @@ def help():
 
 def connection(**kwargs):
     """
-    Manages current connection.
+    Manages the current CAN connection.
     """
 
     return client.send_sync(_msg_pack(_handler="connection", **kwargs))
@@ -36,7 +36,7 @@ def connection(**kwargs):
 
 def filter(*args, **kwargs):
     """
-    Manages filters.
+    Manages the CAN filters.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="filter", **kwargs))
@@ -44,6 +44,7 @@ def filter(*args, **kwargs):
 
 def send(*args, **kwargs):
     """
+    Sends one or more messages on the CAN bus.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="send", **kwargs))
@@ -51,6 +52,7 @@ def send(*args, **kwargs):
 
 def query(*args, **kwargs):
     """
+    Queries by sending one or more request messages on the CAN bus and then waits for one or more response messages.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="query", **kwargs))
@@ -58,6 +60,7 @@ def query(*args, **kwargs):
 
 def monitor(**kwargs):
     """
+    Monitors messages on the CAN bus until a limit or duration is reached.
     """
 
     return client.send_sync(_msg_pack(_handler="monitor", **kwargs))
@@ -65,6 +68,7 @@ def monitor(**kwargs):
 
 def dump(*args, **kwargs):
     """
+    Stores messages from the CAN bus to a file until a limit or duration is reached.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="dump", **kwargs))
@@ -72,6 +76,7 @@ def dump(*args, **kwargs):
 
 def play(*args, **kwargs):
     """
+    Sends all messages from one or more dump files on the CAN bus.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="play", **kwargs))
@@ -79,6 +84,7 @@ def play(*args, **kwargs):
 
 def obd_query(*args, **kwargs):
     """
+    Queries an OBD-II PID on the CAN bus.
     """
 
     return client.send_sync(_msg_pack(*args, _handler="obd_query", **kwargs))
@@ -86,6 +92,7 @@ def obd_query(*args, **kwargs):
 
 def manage(*args, **kwargs):
     """
+    Facilitates runtime management of the underlying service instance.
     """
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))

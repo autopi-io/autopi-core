@@ -19,6 +19,7 @@ conn = None
 @edmp.register_hook()
 def connection_handler(autodetect=None, **kwargs):
     """
+    Manages the current CAN connection.
     """
 
     if autodetect != None:
@@ -45,6 +46,7 @@ def connection_handler(autodetect=None, **kwargs):
 @edmp.register_hook()
 def filter_handler():
     """
+    Manages the CAN filters.
     """
 
     ret = {
@@ -65,7 +67,7 @@ def filter_handler():
 @edmp.register_hook()
 def send_handler(*messages, **kwargs):
     """
-    Sends one or more CAN frames on the CAN bus.
+    Sends one or more messages on the CAN bus.
     """
 
     ret = {}
@@ -78,6 +80,7 @@ def send_handler(*messages, **kwargs):
 @edmp.register_hook()
 def query_handler(*messages, **kwargs):
     """
+    Queries by sending one or more request messages on the CAN bus and then waits for one or more response messages.
     """
 
     ret = {}
@@ -93,6 +96,7 @@ def query_handler(*messages, **kwargs):
 @edmp.register_hook()
 def monitor_handler(**kwargs):
     """
+    Monitors messages on the CAN bus until a limit or duration is reached.
     """
 
     ret = {}
@@ -109,6 +113,7 @@ def monitor_handler(**kwargs):
 @edmp.register_hook()
 def dump_handler(file, **kwargs):
     """
+    Stores messages from the CAN bus to a file until a limit or duration is reached.
     """
 
     ret = {}
@@ -121,6 +126,7 @@ def dump_handler(file, **kwargs):
 @edmp.register_hook()
 def play_handler(*files, **kwargs):
     """
+    Sends all messages from one or more dump files on the CAN bus.
     """
 
     ret = {}
@@ -135,6 +141,7 @@ def play_handler(*files, **kwargs):
 @edmp.register_hook()
 def obd_query_handler(name, mode=None, pid=None, bytes=0, frames=None, strict=False, decoder=None, unit=None, **kwargs):
     """
+    Queries an OBD-II PID on the CAN bus.
     """
 
     ret = {
@@ -187,6 +194,7 @@ def obd_query_handler(name, mode=None, pid=None, bytes=0, frames=None, strict=Fa
                 ret["unit"] = unit
 
     return ret
+
 
 #@intercept_exit_signal
 def start(**settings):

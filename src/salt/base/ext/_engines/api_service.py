@@ -182,6 +182,10 @@ def apn_settings(unit_id):
 
 @intercept_exit_signal
 def start(**settings):
+    """
+    Starts the local REST API for running AutoPi commands.
+    """
+
     try:
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting API service with settings: {:}".format(settings))
