@@ -2,6 +2,7 @@ Changelog
 
 ## Unreleased
 + Added ability for obd.play to play both 11 and 29 bit messages from the same dump file.
++ Added VIN and ODOMETER to supported commands on SocketCAN devices 
 
 - Fixed an issue where SMS messages sent by non-numerical senders weren't getting parsed correctly and ignored.
 - Fixed obd.dump putting hashes in the wrong places when recording messages that don't match selected protocol. (Previously would cause 'fromhex' error on obd.play)
