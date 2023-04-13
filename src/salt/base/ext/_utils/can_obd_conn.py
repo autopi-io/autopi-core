@@ -833,7 +833,4 @@ class SocketCAN_OBDConn(OBDConn):
 
     # @Decorators.ensure_open
     def monitor(self, **kwargs):
-        try:
-            return self._obd.interface.monitor(**kwargs)
-        finally:
-            self._obd.interface.reset_header()
+        return self._obd.interface.monitor(**kwargs)
