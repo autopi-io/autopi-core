@@ -332,6 +332,10 @@ class SocketCANInterface(STN11XX):
 
     #def set_header(self, value):
 
+    def reset_header(self):
+        self._runtime_settings.pop("header", None)
+        self._runtime_settings.pop("can_priority", None)
+
     #def set_can_auto_format(self, value):
 
     #def set_can_extended_address(self, value):
@@ -812,7 +816,24 @@ class SocketCAN_OBDConn(OBDConn):
             "_stamp": datetime.datetime.fromtimestamp(msg.timestamp).isoformat(),
             "value": can_message_formatter(msg)
         }
+    
+    # @Decorators.ensure_open
+    def query(self, *args, **kwargs):
+        try:
+            return super(SocketCAN_OBDConn, self).query(*args, **kwargs)
+        finally:
+            self._obd.interface.reset_header()
+
+    # @Decorators.ensure_open
+    def send(self, *args, **kwargs):
+        try:
+            return super(SocketCAN_OBDConn, self).send(*args, **kwargs)
+        finally:
+            self._obd.interface.reset_header()
 
     # @Decorators.ensure_open
     def monitor(self, **kwargs):
-        return self._obd.interface.monitor(**kwargs)
+        try:
+            return self._obd.interface.monitor(**kwargs)
+        finally:
+            self._obd.interface.reset_header()
