@@ -9,6 +9,7 @@ Changelog
 - Fixed issue where selecting adaptive timing causes indentation error
 - Fixed command 'minionutil.change_master' to only perform changes directly in the minion config file.
 - Fixed issue where sending a non-OBD2 command would interfere with further commands on SocketCAN devices. 
+- Fixed issue with protocol verification causing some can logger messages to be discarded
 
 ## v1.22
 

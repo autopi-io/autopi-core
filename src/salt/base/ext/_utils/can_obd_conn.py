@@ -3,6 +3,7 @@ import can
 import collections
 import datetime
 import logging
+import sys
 
 from obd import OBD, OBDStatus, commands, OBDCommand, ECU, decoders
 from obd.utils import bytes_to_int
@@ -806,7 +807,17 @@ class SocketCAN_OBDConn(OBDConn):
             raise
 
     def ensure_protocol(self, ident, baudrate=None, verify=True):
-        super(SocketCAN_OBDConn, self).ensure_protocol(ident, baudrate=baudrate, verify=self._protocol_verify or verify)
+
+        use_default_verify = True
+
+        # We do not want the monitor handler to verify as default on every invocation
+        try:
+            # NOTE: Not pretty, but should at least be fast
+            use_default_verify = not sys._getframe(1).f_code.co_name.startswith("monitor_")
+        except:
+            log.exception("Failed to identify the caller function")
+
+        super(SocketCAN_OBDConn, self).ensure_protocol(ident, baudrate=baudrate, verify=(self._protocol_verify or verify) if use_default_verify else verify)
 
     def supported_protocols(self):
         return SocketCANInterface.supported_protocols()
