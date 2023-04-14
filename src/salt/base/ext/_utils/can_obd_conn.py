@@ -813,7 +813,7 @@ class SocketCAN_OBDConn(OBDConn):
         # We do not want the monitor handler to verify as default on every invocation
         try:
             # NOTE: Not pretty, but should at least be fast
-            use_default_verify = sys._getframe(1).f_code.co_name.startswith("monitor_")
+            use_default_verify = not sys._getframe(1).f_code.co_name.startswith("monitor_")
         except:
             log.exception("Failed to identify the caller function")
 
