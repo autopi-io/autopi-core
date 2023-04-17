@@ -26,30 +26,20 @@ def get_oauth_token(oauth_url, eth_address):
         'Content-Type': 'application/json'
     }
 
-    # 1. Initiate oauth flow, get state
+    # Init/generate challenge
+    nonce = None
+
     init_params = {
-        "action": "subscribe",
-        "redirect_uri": "http://127.0.0.1:10000",
+        "domain": "http://127.0.0.1:10000",
         "client_id": "step-ca",
         "response_type": "code",
         "scope": "openid email",
-        "state": "S256"
+        "address": eth_address
     }
-    with requests.post(urljoin(oauth_url, "auth/web3/init"), params=init_params) as r:
+    with requests.post(urljoin(oauth_url, "auth/web3/generate_challenge"), params=init_params) as r:
         r.raise_for_status()
         state = r.json()['state']
-
-    assert state
-    
-    # 2. Get challenge
-    nonce = None
-    challenge_payload = {
-        "address": eth_address,
-        "state": str(state),
-    }
-    with requests.post(urljoin(oauth_url, "auth/web3/challenge"), headers=json_headers, json=challenge_payload) as r:
-        r.raise_for_status()
-        nonce = r.json()["nonce"]
+        nonce = r.json()['challenge']
 
     # 3. Hash and sign challenge
     challenge = "\x19Ethereum Signed Message:\n{}{}".format(len(nonce), nonce)
@@ -62,7 +52,7 @@ def get_oauth_token(oauth_url, eth_address):
         "signed": signed_challenge,
         "state": state
     }
-    with requests.post(urljoin(oauth_url, "auth/web3/verify_direct"), headers=json_headers, json=verify_payload) as r:
+    with requests.post(urljoin(oauth_url, "auth/web3/submit_challenge"), headers=json_headers, json=verify_payload) as r:
         r.raise_for_status()
         code = r.json()["code"]
         log.info('Verified signature, received code: {}'.format(code))
@@ -129,16 +119,18 @@ def sign_web3_certificate(oauth_url, ca_url, ca_fingerprint, certificate_path, k
 def expire_trigger(result):
     # check if certificate will expire, if yes, trigger event so we know it's happening.
     # then we catch that and execute the certificate sign function.
-    
-    # example {'path': '/opt/autopi/client.crt', 'check_days': 30, 'cn': '3b03b28b-b662-4fad-68e6-7e74f9ce658c', 'will_expire': False}
-
-    # Scenario invalid certificate: will not include a will_expire field
-    # X Scenario no certificate: will return empty response
-
     if not result:
         tag = "system/certificate/missing"
         __salt__["minionutil.trigger_event"](tag)
     else:
+        # if cert is empty: "Problem executing 'x509.will_expire': PEM does not contain a single entry of type CERTIFICATE:"
+        if isinstance(result, salt.exceptions.CommandExecutionError):
+            tag = "system/certificate/invalid"
+            __salt__["minionutil.trigger_event"](tag, data={
+                "issue": str(result)
+            })
+            return
+        
         will_expire = result.get('will_expire', None)
         if will_expire: # will_expire is true
             tag = "system/certificate/expiring"
