@@ -58,11 +58,17 @@ slaac private
 #fallback static_eth0
 
 interface wlan0
+{%- if salt['pillar.get']('dhcpcd:mtu') %}
+static interface_mtu={{ salt['pillar.get']('dhcpcd:mtu') }}
+{%- endif %}
 metric 200
 nohook wpa_supplicant
 
 interface uap0
 static ip_address=192.168.4.1/24
+{%- if salt['pillar.get']('dhcpcd:mtu') %}
+static interface_mtu={{ salt['pillar.get']('dhcpcd:mtu') }}
+{%- endif %}
 metric 100
 nohook wpa_supplicant
 {%- for name, settings in salt['pillar.get']('dhcpcd:interfaces', {}).iteritems() %}
