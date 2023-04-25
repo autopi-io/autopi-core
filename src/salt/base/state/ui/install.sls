@@ -1,5 +1,5 @@
-{%- set frontend_version = "develop" %}
-{%- set frontend_hash    = "645fe43b1a4fd84063a8a01b67a8e4d44f3aa219" %}
+{%- set frontend_version = "2021-09-21" %}
+{%- set frontend_hash    = "4e2a6833f2fdd3672441583e7cd956d174343c9d" %}
 
 frontend-release-extracted:
   archive.extracted:
