@@ -22,8 +22,8 @@ def get_oauth_token(oauth_url, eth_address):
     assert eth_address
     assert oauth_url
 
-    json_headers = {
-        'Content-Type': 'application/json'
+    form_urlencoded_headers = {
+        'Content-Type': 'application/x-www-form-urlencoded'
     }
 
     # Init/generate challenge
@@ -48,30 +48,19 @@ def get_oauth_token(oauth_url, eth_address):
     log.info('signed: {}'.format(signed_challenge))
 
     # 4. submit challenge
-    verify_payload = {
-        "signed": signed_challenge,
-        "state": state
-    }
-    with requests.post(urljoin(oauth_url, "auth/web3/submit_challenge"), headers=json_headers, json=verify_payload) as r:
-        r.raise_for_status()
-        code = r.json()["code"]
-        log.info('Verified signature, received code: {}'.format(code))
-
-    # 5. Exchange token for jwt
     access_token = None
-    token_exchange_params = {
-        "grant_type": "authorization_code",
-        "code": code,
+
+    challenge_submit_params = {
         "client_id": "step-ca",
-        "client_secret": "step-ca-secret",
-        "redirect_uri": init_params["redirect_uri"]
+        "domain": "http://127.0.0.1:10000",
+        "grant_type": "authorization_code",
+        "state": state,
+        "signature": signed_challenge,
+        "client_secret": "step-ca-secret"
     }
-    token_exchange_payload = '&'.join(["{}={}".format(k,v) for k,v in token_exchange_params.items()])
-    headers = {
-        'Content-Type': 'application/x-www-form-urlencoded'
-    }
-    with requests.post(urljoin(oauth_url, "token"), headers=headers, data=token_exchange_payload) as r:
-        log.info("Response: {}".format(r.text))
+    challenge_submit_params_payload = '&'.join(["{}={}".format(k,v) for k,v in challenge_submit_params.items()])
+
+    with requests.post(urljoin(oauth_url, "auth/web3/submit_challenge"), headers=form_urlencoded_headers, data=challenge_submit_params_payload) as r:
         r.raise_for_status()
         access_token = r.json()["access_token"]
 
