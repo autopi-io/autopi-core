@@ -20,8 +20,8 @@ The AutoPi Core is documentated here: [docs.autopi.io](http://docs.autopi.io)
 The main requirement is saltstack, as this is the platform on which this reposity is built.
 
 ## Built With
-
-* [Salt-Stack](https://www.saltstack.com) - Server provisioning system
+SaltStack was acquired by VMware, and it’s now developed under the name Salt Project as part of the open-source community
+* [Salt-Project](https://www.saltproject.com) - Server provisioning system
 
 ## Contributing
 
