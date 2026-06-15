@@ -1,6 +1,9 @@
 import logging
+import datetime
 import re
+import time
 
+import common_util
 from le910cx_conn import LE910CXConn
 from messaging import EventDrivenMessageProcessor, extract_error_from
 from threading_more import intercept_exit_signal
@@ -8,7 +11,12 @@ from threading_more import intercept_exit_signal
 
 log = logging.getLogger(__name__)
 
-context = {}
+context = {
+    "datetime": datetime,
+    "util": common_util,
+    "cache.get": lambda *args, **kwargs: common_util.dict_get(context.get("cache", None), *args, **kwargs),
+    "cache.find": lambda *args, **kwargs: common_util.dict_find(context.get("cache", {}).values(), *args, **kwargs)
+}
 
 # Message processor
 edmp = EventDrivenMessageProcessor("modem", context=context, default_hooks={"workflow": "extended", "handler": "connection"})
@@ -130,7 +138,17 @@ def start(**settings):
 
         conn.init(settings["serial_conn"])
         if settings.get("trigger_events", True):
-            conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex), "path": settings["serial_conn"].get("device", None)}, "system/device/le910cx/error")
+            tag_format = "system/device/le910cx/{:}/{{:}}".format(settings["serial_conn"].get("device", "unknown").split("/")[-1].lower())
+
+            def on_success(res):
+                if context.pop("serial_conn.error", None):
+                    edmp.trigger_event({}, tag_format.format("recover"))
+            conn.on_success = on_success
+
+            def on_error(ex):
+                context["serial_conn.error"] = str(ex)
+                edmp.trigger_event({"message": str(ex)}, tag_format.format("error"))
+            conn.on_error = on_error
 
         # Init and start message processor
         edmp.init(__salt__, __opts__,
@@ -144,9 +162,15 @@ def start(**settings):
         log.exception("Failed to start modem manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

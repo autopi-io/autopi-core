@@ -60,9 +60,11 @@ SYS_PIN_OUT_SW_AMP      = (1 << 0x03)
 SYS_PIN_OUT_RPI_SHUTDN  = (1 << 0x04)
 
 # Usr pins
-USR_PIN_OUT_CAN0_RESET  = (1 << 0x00)
+USR_PIN_OUT_CAN0_RESET  = (1 << 0x00)  # Only revision <= 4
+USR_PIN_OUT_CAN0_PWR    = (1 << 0x00)  # Only revision >= 5
 USR_PIN_OUT_CAN0_TERM   = (1 << 0x01)
-USR_PIN_OUT_CAN1_RESET  = (1 << 0x02)
+USR_PIN_OUT_CAN1_RESET  = (1 << 0x02)  # Only revision <= 4
+USR_PIN_OUT_CAN1_PWR    = (1 << 0x02)  # Only revision >= 5
 USR_PIN_OUT_CAN1_TERM   = (1 << 0x03)
 USR_PIN_OUT_DOIP_ACT    = (1 << 0x04)
 
@@ -174,10 +176,17 @@ SYS_PINS_OUT = {
 }
 
 USR_PINS_IN = {}
-USR_PINS_OUT = {
+USR_PINS_OUT_REV4 = {
     "can0_reset":  USR_PIN_OUT_CAN0_RESET,
-    "can0_term":  USR_PIN_OUT_CAN0_TERM,
+    "can0_term":   USR_PIN_OUT_CAN0_TERM,
     "can1_reset":  USR_PIN_OUT_CAN1_RESET,
+    "can1_term":   USR_PIN_OUT_CAN1_TERM,
+    "doip_act":    USR_PIN_OUT_DOIP_ACT
+}
+USR_PINS_OUT_REV5 = {
+    "can0_pwr":   USR_PIN_OUT_CAN0_PWR,
+    "can0_term":  USR_PIN_OUT_CAN0_TERM,
+    "can1_pwr":   USR_PIN_OUT_CAN1_PWR,
     "can1_term":  USR_PIN_OUT_CAN1_TERM,
     "doip_act":   USR_PIN_OUT_DOIP_ACT
 }
@@ -233,9 +242,42 @@ log = logging.getLogger(__name__)
 
 class SPM4Conn(I2CConn):
 
+    DEFAULT_WAKE_VOLT_CHANGE_DIFFERENCE     = 0.5
+    DEFAULT_WAKE_VOLT_CHANGE_PERIOD         = 1000
+
+    DEFAULT_WAKE_VOLT_LEVEL_THRESHOLD       = 12.2
+    DEFAULT_WAKE_VOLT_LEVEL_DURATION        = 240000
+
+    DEFAULT_HIBERNATE_VOLT_LEVEL_THRESHOLD  = 13.2
+    DEFAULT_HIBERNATE_VOLT_LEVEL_DURATION   = 3000
+
+    def __init__(self, *args, **kwargs):
+        super(SPM4Conn, self).__init__(*args, **kwargs)
+        self._revision = 4
+        self._defaults = {
+            self.wake_volt_change.func_name: {
+                "difference": self.DEFAULT_WAKE_VOLT_CHANGE_DIFFERENCE,
+                "period": self.DEFAULT_WAKE_VOLT_CHANGE_PERIOD
+            },
+            self.wake_volt_level.func_name: {
+                "threshold": self.DEFAULT_WAKE_VOLT_LEVEL_THRESHOLD,
+                "duration": self.DEFAULT_WAKE_VOLT_LEVEL_DURATION
+            },
+            self.hibernate_volt_level.func_name: {
+                "threshold": self.DEFAULT_HIBERNATE_VOLT_LEVEL_THRESHOLD,
+                "duration": self.DEFAULT_HIBERNATE_VOLT_LEVEL_DURATION
+            }
+        }
+
+    def init(self, settings):
+        self._revision = settings.get("revision", self._revision)
+        self._defaults.update(settings.get("defaults", self._defaults))
+
+        return super(SPM4Conn, self).init(settings)
+
     @property
     def revision(self):
-        return 3
+        return self._revision
 
     def read_block(self, register, length, check_crc=True):
         res = super(SPM4Conn, self).read_block(register, length)
@@ -453,7 +495,10 @@ class SPM4Conn(I2CConn):
         Get current user input/output pin states or toggle output pins.
         """
 
-        return self._pins(REG_USR_PINS, USR_PINS_IN, USR_PINS_OUT, **kwargs)
+        if self._revision >= 5:
+            return self._pins(REG_USR_PINS, USR_PINS_IN, USR_PINS_OUT_REV5, **kwargs)
+        else:
+            return self._pins(REG_USR_PINS, USR_PINS_IN, USR_PINS_OUT_REV4, **kwargs)
 
     def ext_pins(self, **kwargs):
         """
@@ -467,33 +512,33 @@ class SPM4Conn(I2CConn):
         Get or set trigger to wake up by voltage change.
         """
 
-        ret = {}
-
         if difference != None or period != None:
             if difference == None or period == None:
                 raise ValueError("Both difference and period must be specified")
 
             self.write_block(REG_WAKE_VOLT_CHANGE, list(bytearray(struct.pack("<hH", int(difference*100), period))))
 
-        res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_CHANGE, 7], limit=3, wait=0.1)
-        dif, per, crc16, crc8 = struct.unpack("<hHHB", bytearray(res))
+        def ensure_result(difference, period):
+            res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_CHANGE, 7], limit=3, wait=0.1)
+            dif, per, crc16, crc8 = struct.unpack("<hHHB", bytearray(res))
 
-        ret["difference"] = round(float(dif)/100, 2)
-        ret["period"] = per
+            ret = {}
+            ret["difference"] = round(float(dif)/100, 2)
+            ret["period"] = per
 
-        if difference != None:
-            assert difference == ret["difference"], "Difference value mismatch"
-        if period != None:
-            assert period == ret["period"], "Period value mismatch"
+            if difference != None:
+                assert difference == ret["difference"], "Difference value mismatch ({} != {})".format(repr(difference), repr(ret["difference"]))
+            if period != None:
+                assert period == ret["period"], "Period value mismatch ({} != {})".format(repr(period), repr(ret["period"]))
 
-        return ret
+            return ret
+
+        return call_retrying(ensure_result, args=[difference, period], limit=3, wait=0.2)
 
     def wake_volt_level(self, threshold=None, duration=None):
         """
         Get or set trigger to wake up when above voltage level.
         """
-
-        ret = {}
 
         if threshold != None or duration != None:
             if threshold == None or duration == None:
@@ -501,25 +546,27 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_WAKE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
-        res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_LEVEL, 9], limit=3, wait=0.1)
-        thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
+        def ensure_result(threshold, duration):
+            res = call_retrying(self.read_block, args=[REG_WAKE_VOLT_LEVEL, 9], limit=3, wait=0.1)
+            thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
-        ret["threshold"] = round(float(thr)/100, 2)
-        ret["duration"] = dur
+            ret = {}
+            ret["threshold"] = round(float(thr)/100, 2)
+            ret["duration"] = dur
 
-        if threshold != None:
-            assert threshold == ret["threshold"], "Threshold value mismatch"
-        if duration != None:
-            assert duration == ret["duration"], "Duration value mismatch"
+            if threshold != None:
+                assert threshold == ret["threshold"], "Threshold value mismatch ({} != {})".format(repr(threshold), repr(ret["threshold"]))
+            if duration != None:
+                assert duration == ret["duration"], "Duration value mismatch ({} != {})".format(repr(duration), repr(ret["duration"]))
 
-        return ret
+            return ret
+
+        return call_retrying(ensure_result, args=[threshold, duration], limit=3, wait=0.2)
 
     def hibernate_volt_level(self, threshold=None, duration=None):
         """
         Get or set trigger to hibernate when below voltage level.
         """
-
-        ret = {}
 
         if threshold != None or duration != None:
             if threshold == None or duration == None:
@@ -527,16 +574,84 @@ class SPM4Conn(I2CConn):
 
             self.write_block(REG_HIBERNATE_VOLT_LEVEL, list(bytearray(struct.pack("<HL", int(threshold*100), duration))))
 
-        res = call_retrying(self.read_block, args=[REG_HIBERNATE_VOLT_LEVEL, 9], limit=3, wait=0.1)
-        thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
+        def ensure_result(threshold, duration):
+            res = call_retrying(self.read_block, args=[REG_HIBERNATE_VOLT_LEVEL, 9], limit=3, wait=0.1)
+            thr, dur, crc16, crc8 = struct.unpack("<HLHB", bytearray(res))
 
-        ret["threshold"] = round(float(thr)/100, 2)
-        ret["duration"] = dur
+            ret = {}
+            ret["threshold"] = round(float(thr)/100, 2)
+            ret["duration"] = dur
 
-        if threshold != None:
-            assert threshold == ret["threshold"], "Threshold value mismatch"
-        if duration != None:
-            assert duration == ret["duration"], "Duration value mismatch"
+            if threshold != None:
+                assert threshold == ret["threshold"], "Threshold value mismatch ({} != {})".format(repr(threshold), repr(ret["threshold"]))
+            if duration != None:
+                assert duration == ret["duration"], "Duration value mismatch ({} != {})".format(repr(duration), repr(ret["duration"]))
+
+            return ret
+
+        return call_retrying(ensure_result, args=[threshold, duration], limit=3, wait=0.2)
+
+    def auto_reconfigure_volt_level_triggers(self, nominal_voltage=None, enforce_defaults=True, nominal_voltage_divider=20, reason="unknown"):
+        """
+        Auto reconfigure the volt level triggers based on the given nominal voltage.
+        """
+
+        if not nominal_voltage in [12, 24]:
+            raise ValueError("A nominal voltage value of 12 or 24 must be defined".format(nominal_voltage))
+
+        ret = {}
+
+        for trigger_func in [self.wake_volt_level, self.hibernate_volt_level]:
+            try:
+                func_name = trigger_func.func_name
+
+                old = trigger_func()
+                new = dict(old)
+
+                # Determine the source values to use
+                if enforce_defaults:
+                    src = self._defaults.get(func_name, {})
+                else:
+                    src = old
+
+                new["duration"] = src["duration"]
+                if nominal_voltage == 12:
+                    if src["threshold"] >= nominal_voltage_divider:  # Adjust the source threshold to fit 12V
+                        new["threshold"] = src["threshold"] / 2
+                    else:
+                        new["threshold"] = src["threshold"]
+                else:
+                    if src["threshold"] < nominal_voltage_divider:  # Adjust the soruce threshold to fit 24V
+                        new["threshold"] = src["threshold"] * 2
+                    else:
+                        new["threshold"] = src["threshold"] 
+
+                if old != new:
+                    if enforce_defaults:
+                        log.warning("Reconfiguring volt level trigger '{}' from {} to default values {} for nominal voltage of {} (divider is {}V)".format(func_name, old, new, nominal_voltage, nominal_voltage_divider))
+                    else:
+                        log.warning("Reconfiguring volt level trigger '{}' from {} to adjusted values {} for nominal voltage of {} (divider is {}V)".format(func_name, old, new, nominal_voltage, nominal_voltage_divider))
+
+                    res = trigger_func(**new)
+
+                    ret[func_name] = {
+                        "old": old,
+                        "new": res
+                    }
+
+                else:  # Unchanged
+
+                    if enforce_defaults:
+                        log.info("Volt level trigger '{}' is already configured with default values {} for nominal voltage of {} (divider is {}V)".format(func_name, old, nominal_voltage, nominal_voltage_divider))
+                    else:
+                        log.info("Volt level trigger '{}' is already configured with adjusted values {} for nominal voltage of {} (divider is {}V)".format(func_name, old, nominal_voltage, nominal_voltage_divider))
+
+                    ret[func_name] = old
+
+            except:
+                log.exception("Failed to reconfigure volt level trigger '{}' for nominal voltage of {} (divider is {}V)".format(func_name, nominal_voltage, nominal_voltage_divider))
+
+                raise
 
         return ret
 
@@ -582,8 +697,8 @@ class SPM4Conn(I2CConn):
 
             if not isinstance(value, int):
                 raise ValueError("Sleep interval must be an integer value")
-            elif value > 86400:
-                raise ValueError("Max sleep interval is 24 hours (86400 secs)")
+            elif value > 172800:  # NOTE: Allows increased sleep interval of up to 48 hours
+                raise ValueError("Max sleep interval is 48 hours (172800 secs)")
 
             log.info("Setting sleep interval to %d second(s)", value)
 

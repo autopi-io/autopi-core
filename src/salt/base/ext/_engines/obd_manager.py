@@ -27,6 +27,8 @@ from obd_conn import OBDConn, decode_can_frame_for, FILTER_TYPE_CAN_PASS, FILTER
 from messaging import EventDrivenMessageProcessor, extract_error_from, filter_out_unchanged
 from threading_more import intercept_exit_signal
 from timeit import default_timer as timer
+import command_util as cutil
+from command_util import validators as vald, normalizers as norm
 
 
 log = logging.getLogger(__name__)
@@ -126,7 +128,7 @@ def _ensure_filtering(ident):
 
 
 @edmp.register_hook()
-def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, strict=False, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False, **kwargs):
+def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, strict=False, decoder=None, formula=None, unit=None, protocol=None, baudrate=None, verify=False, force=False, type=None, **kwargs):
     """
     Queries an OBD command.
 
@@ -147,6 +149,7 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.
+      - type (str): Specify an alternative name of the type of the result. Default is the given name of the command.
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
@@ -160,8 +163,10 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
     """
 
     ret = {
-        "_type": name.lower()
+        "_type": type or name.lower()
     }
+
+    header = cutil.sanitize(header,    "header",    norm.hex_str, [vald.max_len(8)], default=None)
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Querying: %s", name)
@@ -174,22 +179,36 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
 
     # Get or construct the command
     if pid != None:
-        mode = "{:02X}".format(int(str(mode), 16)) if mode != None else "01"
-        pid = "{:02X}".format(int(str(pid), 16))
+        mode = cutil.sanitize(mode,   "mode",   norm.hex_str, [vald.max_len(4)], default="01")
+        pid  = cutil.sanitize(pid,    "pid",    norm.hex_str, [vald.max_len(4)])
 
-        cmd = obd.OBDCommand(name, None, "{:}{:}".format(mode, pid), bytes, getattr(obd.decoders, decoder or "raw_string"))
+        mode_pid = "{:}{:}".format(mode, pid)
+        if len(mode_pid) % 2 != 0:
+            raise Exception("mode and pid one after another must make a string of even length. Got: {} + {} => {}. Prepend \"x\" to explicitly define a hex value. E.g. arg=x01".format(mode, pid, mode_pid))
+
+        cmd = obd.OBDCommand(name, None, mode_pid, bytes, getattr(obd.decoders, decoder or "raw_string"))
     elif obd.commands.has_name(name.upper()):
         cmd = obd.commands[name.upper()]
     else:
         cmd = obd.OBDCommand(name, None, name, bytes, getattr(obd.decoders, decoder or "raw_string"))
-    cmd.frames = frames
+
+    cmd.frames = cutil.sanitize(frames,    "frames",    norm.hex_str, [vald.max_len(1)], default=None)
     cmd.strict = strict
 
     # Check if command is supported
     if not cmd in conn.supported_commands() and not force:
         raise Exception("Command may not be supported - add 'force=True' to run it anyway")
 
-    res = conn.query(cmd, header=header, formula=formula, force=force, **kwargs)
+    try:
+        cmd_ecu = cmd.ecu
+        if force:
+            cmd.ecu = 0xff
+
+        res = conn.query(cmd, header=header, formula=formula, force=force, **kwargs)
+
+    finally:
+        if force:
+            cmd.ecu = cmd_ecu
 
     if log.isEnabledFor(logging.DEBUG):
         log.debug("Got query result: %s", res)
@@ -211,6 +230,22 @@ def query_handler(name, mode=None, pid=None, header=None, bytes=0, frames=None, 
 def query_many_handler(*cmds):
     """
     Queries many OBD commands in one call.
+
+    The function should receive an array of dictionaries. Each dict should have an 'args' key which value is an array,
+    and a 'kwargs' key which value is another dictionary. Inside the 'args' and 'kwargs' fields, the respective arguments
+    and keyword arguments from the 'query_handler' should be passed.
+
+    Example as command:
+    ```
+    $ obd.query_many \
+            '{"args": ["SPEED"], "kwargs": {"header": "7DF", "mode": "01", "pid": "0D"}}' \
+            '{"args": ["RPM"], "kwargs": {"header": "7DF", "mode": "01", "pid": "0C"}}'
+    ```
+
+    Note: The dictionaries need to be surrounded by a single quote character, not a backtick.
+
+    To set this up as a handler inside a worker, the format is the same. You will need to pass the parameters in the
+    "args" field in the respective workflow.
     """
 
     ret = {"values": []}
@@ -387,7 +422,7 @@ def connection_handler(baudrate=None, reset=None):
 
     Optional arguments:
       - baudrate (int): Changes baudrate used to communicate with interface.
-      - reset (str): Reboots interface and re-initializes connection. 
+      - reset (str): Reboots interface and re-initializes connection.
     """
 
     if baudrate != None:
@@ -408,7 +443,7 @@ def protocol_handler(set=None, baudrate=None, verify=False):
 
     Optional arguments:
       - set (str): Change to protocol with given identifier.
-      - baudrate (int): Use custom protocol baudrate. 
+      - baudrate (int): Use custom protocol baudrate.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
     """
 
@@ -441,12 +476,23 @@ def setup_handler(**kwargs):
       - can_flow_control_clear (bool): Clear all CAN flow control filters and ID pairs before adding any new ones.
       - can_flow_control_filter (str): Ensure CAN flow control filter is added. Value must consist of '<Pattern>,<Mask>'.
       - can_flow_control_id_pair (str): Ensure CAN flow control ID pair is added. Value must consist of '<Transmitter ID>,<Receiver ID>'.
+      - allow_sending_can_frames (bool): Allow the connection to send CAN frames on the CAN bus.
 
     Optional arguments, J1939 specific:
       - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
 
     ret = {}
+
+    # Apply port (CANConn) settings
+    allow_sending_can_frames = kwargs.pop("allow_sending_can_frames", None)
+    if hasattr(conn, "port_settings") and callable(conn.port_settings):
+        if allow_sending_can_frames != None:
+            conn.ensure_port_settings(allow_sending_can_frames=allow_sending_can_frames)
+
+        ret["settings"] = conn.port_settings()
+    elif allow_sending_can_frames != None:
+        raise AttributeError("This connection instance (likely STN) does not support changing port settings through setup")
 
     # Ensure all options are applied
     conn.ensure_advanced_settings(kwargs, filter=True)
@@ -481,10 +527,8 @@ def monitor_handler(wait=False, limit=500, duration=None, mode=0, auto_format=Fa
     ret = {
         "_type": type
     }
-
     # Ensure protocol
     conn.ensure_protocol(protocol, baudrate=baudrate, verify=verify)
-
     # Ensure filtering
     if filtering:
         _ensure_filtering(filtering)
@@ -680,10 +724,10 @@ def export_handler(run=None, folder=None, wait_timeout=0, monitor_filtering=Fals
             "-o", os.path.join(protocol_folder, "{:%Y%m%d%H%M}.log".format(datetime.datetime.utcnow())),
             "-q",  # Quiet mode
         ]
-        
+
         log.info("Spawning export subprocess by running command: {:}".format(" ".join(cmd)))
 
-        return subprocess.Popen(cmd, 
+        return subprocess.Popen(cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             preexec_fn=lambda: os.nice(process_nice))
@@ -853,7 +897,7 @@ def import_handler(folder=None, limit=5000, idle_sleep=0, cleanup_grace=60, proc
                         line = file.readline()
                         while line:
 
-                            # Ensure line ends with a newline (last line might not) 
+                            # Ensure line ends with a newline (last line might not)
                             if line[-1] != "\n":
                                 log.info("Skipping incomplete line {:}".format(repr(line)))
 
@@ -1185,6 +1229,10 @@ def can_converter(result):
 
         /opt/autopi/obd/can/db/protocol_<PROTOCOL ID>.dbc
     """
+    extended_ids = None
+    if isinstance(result['values'][0], tuple):
+        extended_ids = True
+
 
     start = timer()
 
@@ -1203,27 +1251,46 @@ def can_converter(result):
         # Try to decode CAN messages and add to list
         res = []
         fail_count = 0
-        for val in result["values"]:
-            val = val if isinstance(val, dict) else {"value": val}
-            try:
-                res.extend(decode_can_frame_for(can_db, protocol, val))
-            except Exception as ex:
-                log.info("Failed to decode raw CAN frame result '{:}' as a CAN message: {:}".format(val, ex))
+        if extended_ids:
+            for val, is_ext in (result["values"]):
+                val = val if isinstance(val, dict) else {"value": val}
+                try:
+                    res.extend(decode_can_frame_for(can_db, protocol, val, extended_id=is_ext))
+                except Exception as ex:
+                    # Count failed
+                    fail_count += 1
 
-                # Count failed
-                fail_count += 1
+            # Report if any failed
+            if fail_count:
+                log.error("{:} out of {:} raw CAN frame(s) in result failed to be decoded as CAN message(s)".format(fail_count, len(result["values"])))
 
-        # Report if any failed
-        if fail_count:
-            log.error("{:} out of {:} raw CAN frame(s) in result failed to be decoded as CAN message(s)".format(fail_count, len(result["values"])))
+            if not res:
+                log.warning("No raw CAN frame(s) out of {:} value(s) in result was decoded as CAN messages".format(len(result["values"])))
 
-        if not res:
-            log.warning("No raw CAN frame(s) out of {:} value(s) in result was decoded as CAN messages".format(len(result["values"])))
-
-            # Skip if none decoded
-            return
+                # Skip if none decoded
+                return
+            else:
+                log.info("Converted {:}/{:} raw CAN frame(s) into {:} CAN signals in {:}".format(len(result["values"]) - fail_count, len(result["values"]), len(res), timer() - start))
         else:
-            log.info("Converted {:}/{:} raw CAN frame(s) into {:} CAN signals in {:}".format(len(result["values"]) - fail_count, len(result["values"]), len(res), timer() - start))
+            for val in result["values"]:
+                val = val if isinstance(val, dict) else {"value": val}
+                try:
+                    res.extend(decode_can_frame_for(can_db, protocol, val))
+                except Exception as ex:
+                    # Count failed
+                    fail_count += 1
+
+            # Report if any failed
+            if fail_count:
+                log.error("{:} out of {:} raw CAN frame(s) in result failed to be decoded as CAN message(s)".format(fail_count, len(result["values"])))
+
+            if not res:
+                log.warning("No raw CAN frame(s) out of {:} value(s) in result was decoded as CAN messages".format(len(result["values"])))
+
+                # Skip if none decoded
+                return
+            else:
+                log.info("Converted {:}/{:} raw CAN frame(s) into {:} CAN signals in {:}".format(len(result["values"]) - fail_count, len(result["values"]), len(res), timer() - start))
 
         result["values"] = res
 
@@ -1284,9 +1351,11 @@ def battery_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def dtc_converter(result):
+def dtc_flattening_converter(result):
     """
     Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format.
+
+    NOTE: This was the old default DTC converter in the past. The new default converter will not be flattening the DTC result.
     """
 
     if result.get("_type", None) != "get_dtc":
@@ -1296,6 +1365,19 @@ def dtc_converter(result):
     result["values"] = [{"code": r[0], "text": r[1]} for r in result.pop("value", None) or []]
 
     return result
+
+
+@edmp.register_hook(synchronize=False)
+def dtc_converter(result):
+    """
+    Converts Diagnostics Trouble Codes (DTCs) result into a cloud friendly format that will NOT be flattened by the cloud returner.
+    """
+
+    ret = dtc_flattening_converter(result)
+    ret["_unflatten"] = True  # NOTE: The presence of this additional field (name and value are irrelevant) will prevent flattening by the cloud returner
+
+    return ret
+
 
 @edmp.register_hook(synchronize=False)
 def alternating_dtc_filter(result):
@@ -1339,12 +1421,14 @@ def realistic_speed_converter(result):
 
 
 @edmp.register_hook(synchronize=False)
-def alternating_readout_filter(result):
+def alternating_readout_filter(result, pass_interval=1500):
     """
     Filter that only returns alternating/changed results.
-    """
 
-    return filter_out_unchanged(result, context=context["readout"])
+    Optional arguments:
+      - pass_interval (int): Filter passes values only when this many miliseconds have passed between readings, even when the values are different. Default value is '0'.
+    """
+    return filter_out_unchanged(result, context=context["readout"], pass_interval=pass_interval)
 
 
 @edmp.register_hook(synchronize=False)
@@ -1413,7 +1497,7 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
         elif "values" in result:
             for res in result["values"]:
 
-                # TODO HN: Also accept values with unit RPM here? 
+                # TODO HN: Also accept values with unit RPM here?
 
                 # Only interested in RPM results
                 if res.get("_type", None) != kind:
@@ -1427,7 +1511,7 @@ def rpm_engine_event_trigger(result, kind="rpm", key="engine"):
         else:
             log.error("RPM {:} event trigger could not find any value(s)".format(key))
 
-            return
+            error = "No value found in result"
 
     # Check if state has chaged since last known state
     ctx = context.setdefault(key, {})
@@ -1509,6 +1593,27 @@ def battery_event_trigger(result):
             skip_duplicates_filter="vehicle/battery/*"
         )
 
+class StatusEventThrottler:
+    def __init__(self, min_interval=120.0):
+        self.last_emit = None
+        self.min_interval = min_interval
+
+    def should_emit(self, status=None, data=None):
+        if not self.min_interval or self.min_interval == 0:
+            return True
+        now = time.time()
+        last_time = self.last_emit
+
+        if not self.last_emit or (now - self.last_emit) >= self.min_interval:
+            self.last_emit = now
+            return True
+        return False
+    
+    def callback(self, status, data):
+        if self.should_emit():
+            edmp.trigger_event(data, "system/obd/{:s}".format(status))
+
+
 
 @factory_rendering
 @intercept_exit_signal
@@ -1536,20 +1641,27 @@ def start(**settings):
             hooks=settings.get("hooks", []),
             workers=settings.get("workers", []),
             reactors=settings.get("reactors", []))
-        edmp.measure_stats = settings.get("measure_stats", False) 
+        edmp.measure_stats = settings.get("measure_stats", False)
 
         # Initialize OBD connection
         global conn
         conn_settings = {}
         if "can_conn" in settings:
+            throttle_interval = 0
+            try:
+                throttle_interval = int(settings.get("throttle_interval", 0))
+            except ValueError:
+                log.error("Throttle interval has to be an integer - throttle interval is now set to 0")
+                pass
             from can_obd_conn import SocketCAN_OBDConn
             conn = SocketCAN_OBDConn(__salt__)
-            conn.on_status = lambda status, data: edmp.trigger_event(data, "system/obd/{:s}".format(status))
+            throttler = StatusEventThrottler(min_interval=throttle_interval)
+            conn.on_status = lambda status, data: throttler.callback(status, data)
 
             conn_settings = settings["can_conn"]
         else:
             conn = OBDConn()
-            conn.on_status = lambda status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
+            conn.on_status = lambda  status, data: edmp.trigger_event(data, "system/stn/{:s}".format(status))
 
             conn_settings = settings["serial_conn"]
 
@@ -1632,9 +1744,15 @@ def start(**settings):
         log.exception("Failed to start OBD manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

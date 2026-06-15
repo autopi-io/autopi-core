@@ -1,4 +1,5 @@
 import logging
+import time
 
 from cloud_cache import NextCloudCache
 from messaging import EventDrivenMessageProcessor
@@ -136,9 +137,15 @@ def start(**settings):
         log.exception("Failed to start cloud manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

@@ -12,6 +12,17 @@ libqmi-installed:
     - name: libqmi-utils
     {%- endif %}
 
+{%- if salt['grains.get']('osmajorrelease') >= 11 %}
+modem-manager-service-dead:
+  service.dead:
+    - name: ModemManager
+    - enable: false
+
+modem-manager-service-masked:
+  service.masked:
+    - name: ModemManager
+{%- endif %}
+
 udhcpc:
   pkg.installed
 
@@ -24,6 +35,8 @@ udhcpc-script-installed:
     - group: root
     - require:
       - pkg: udhcpc
+    - require_in:
+      - service: qmi-manager
 
 reboot-requested-after-qmi-udev-rules-changed:
   module.wait:
@@ -34,6 +47,8 @@ reboot-requested-after-qmi-udev-rules-changed:
     - source: salt://network/wwan/qmi/udev.rules
     - watch_in:
       - module: reboot-requested-after-qmi-udev-rules-changed
+    - require_in:
+      - service: qmi-manager
 
 udev-service-restarted-after-qmi-rules-changed:
   service.running:
@@ -47,6 +62,8 @@ py-lib-installed:
     - source: salt://network/wwan/qmi/pylib
     - makedirs: True
     - exclude_pat: "*test.py"
+    - require_in:
+      - service: qmi-manager
 
 qmi-network-script-installed:
   file.managed:
@@ -57,6 +74,8 @@ qmi-network-script-installed:
     - group: root
     - require:
       - pkg: libqmi-installed
+    - require_in:
+      - service: qmi-manager
 
 qmi-manager-script-installed:
   file.managed:
@@ -67,6 +86,8 @@ qmi-manager-script-installed:
     - group: root
     - require:
       - pkg: libqmi-installed
+    - require_in:
+      - service: qmi-manager
 
 qmi-manager-service-configured:
   file.managed:
@@ -74,6 +95,8 @@ qmi-manager-service-configured:
     - source: salt://network/wwan/qmi/qmi-manager.service
     - require:
       - file: qmi-manager-script-installed
+    - require_in:
+      - service: qmi-manager
 
 qmi-manager-service-running:
   service.running:
@@ -84,3 +107,5 @@ qmi-manager-service-running:
     - watch:
       - file: /lib/systemd/system/qmi-manager.service
       - file: /etc/qmi-manager.conf
+    - require_in:
+      - service: qmi-manager

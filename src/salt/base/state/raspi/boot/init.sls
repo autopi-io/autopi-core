@@ -110,6 +110,70 @@ usb-xhci-controller-enabled:
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
 
+external-wifi-antenna-enabled:
+  file.replace:
+    - name: /boot/config.txt.tmp
+    - pattern: "^#?dtparam=ant2*$"
+    {%- if salt['pillar.get']('rpi:boot:ant2', default=false) %}
+    - repl: "dtparam=ant2"
+    - append_if_not_found: true
+    {%- else %}
+    - repl: ""
+    {%- endif %}
+    - require:
+      - file: temporary-config-prepared
+    - require_in:
+      - file: temporary-config-applied
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+{%- if salt['grains.get']('osmajorrelease') >= 11 %}
+
+i2c0-module-enabled:
+  file.replace:
+    - name: /boot/config.txt.tmp
+    - pattern: "^#?(dtparam=i2c_vc|dtparam=i2c0).*$"
+    - repl: "dtparam=i2c0=on"
+    - append_if_not_found: true
+    - require:
+      - file: temporary-config-restored
+    - require_in:
+      - file: temporary-config-applied
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+i2c0-module-configured:
+  file.replace:
+    - name: /boot/config.txt.tmp
+    - pattern: "^#?(dtoverlay=i2c0).*$"
+    - repl: "dtoverlay=i2c0,pins_44_45=on"
+    - append_if_not_found: true
+    - require:
+      - file: temporary-config-restored
+      - file: i2c0-module-enabled
+    - require_in:
+      - file: temporary-config-applied
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+i2c1-module-enabled:
+  file.replace:
+    - name: /boot/config.txt.tmp
+    - pattern: "^#?(dtparam=i2c_arm|dtparam=i2c1).*$"
+    - repl: "dtparam=i2c1=on"
+    - append_if_not_found: true
+    - require:
+      - file: temporary-config-restored
+    - require_in:
+      - file: temporary-config-applied
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
+    - watch_in:
+      - module: reboot-requested-after-boot-config-changed
+
+{%- else %}
+
 i2c0-module-enabled:
   file.replace:
     - name: /boot/config.txt.tmp
@@ -134,9 +198,11 @@ i2c1-module-enabled:
       - file: temporary-config-restored
     - require_in:
       - file: temporary-config-applied
-      - file: rtc-configured  # # I2C must be setup before RTC in the config file
+      - file: rtc-configured  # I2C must be setup before RTC in the config file
     - watch_in:
       - module: reboot-requested-after-boot-config-changed
+
+{%- endif %}
 
 # Generated with: dtc -@ -I dts -O dtb -o disable-pcie.dtbo disable-pcie-overlay.dts
 disable-pcie-overlay-distributed:
@@ -294,6 +360,7 @@ gpio-{{ key }}-configured:
       - module: reboot-requested-after-boot-config-changed
 {%- endfor %}
 
+
 {%- if salt["pillar.get"]("minion:hw.version", default=0.0) >= 6.0 %}
 spi-module-enabled:
   file.replace:
@@ -312,7 +379,9 @@ can1-configured:
   file.replace:
     - name: /boot/config.txt.tmp
     - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can1),spi0-1.*$"
-    {%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
+    {%- if salt["pillar.get"]("minion:hw.version") >= 7.1 %}
+    - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=17,oscillator=40000000,speed=20000000"
+    {%- elif salt["pillar.get"]("minion:hw.version") >= 7.0 %}
     - repl: "dtoverlay=mcp2515,spi0-1,interrupt=17,oscillator=8000000,speed=20000000"
     {%- elif salt["pillar.get"]("minion:hw.version") in [6.0, 6.2] %}
     - repl: "dtoverlay=mcp251xfd,spi0-1,interrupt=15,oscillator=40000000,speed=20000000"
@@ -332,7 +401,9 @@ can0-configured:
   file.replace:
     - name: /boot/config.txt.tmp
     - pattern: "^#?dtoverlay=mcp251(xfd|5|5-can0),spi0-0.*$"
-    {%- if salt["pillar.get"]("minion:hw.version") >= 7.0 %}
+    {%- if salt["pillar.get"]("minion:hw.version") >= 7.1 %}
+    - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=16,oscillator=40000000,speed=20000000"
+    {%- elif salt["pillar.get"]("minion:hw.version") >= 7.0 %}
     - repl: "dtoverlay=mcp2515,spi0-0,interrupt=16,oscillator=8000000,speed=20000000"
     {%- elif salt["pillar.get"]("minion:hw.version") == 6.0 %}
     - repl: "dtoverlay=mcp251xfd,spi0-0,interrupt=14,oscillator=40000000,speed=20000000"

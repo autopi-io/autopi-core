@@ -17,6 +17,11 @@ log = logging.getLogger(__name__)
 client = EventDrivenMessageClient("ec2x")
 
 
+"""
+:::note Important The EC2X commands listed in this documentation are only compatible with the EC2X series of modems and require a board version of 6.0 or below. Ensure that your hardware meets these requirements before attempting to use these commands. ::
+"""
+
+
 def __init__(opts):
     client.init(opts)
 

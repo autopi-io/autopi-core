@@ -1,5 +1,5 @@
-{%- set frontend_version = "2021-09-21" %}
-{%- set frontend_hash    = "4e2a6833f2fdd3672441583e7cd956d174343c9d" %}
+{%- set frontend_version = "2021-09-21.mtu-fix" %}
+{%- set frontend_hash    = "3a17f59366a2dd3c81e0bbe5eb6771a75481f09f" %}
 
 frontend-release-extracted:
   archive.extracted:

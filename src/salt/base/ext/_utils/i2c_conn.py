@@ -18,11 +18,31 @@ class I2CConn(object):
 
             def decorator(self, *args, **kwargs):
                 try:
+                    try:
+                        # Ensure connection is open
+                        self.ensure_open()
 
-                    # Ensure connection is open
-                    self.ensure_open()
+                        ret = func(self, *args, **kwargs)
 
-                    return func(self, *args, **kwargs)
+                        if self.on_success:
+                            try:
+                                self.on_success(ret)
+                            except:
+                                log.exception("Error in 'on_success' event handler")
+
+                        return ret
+
+                    except IOError as se:
+                        if self.close_on_error:
+                            log.warning("Closing I2C bus due to error {:}".format(se))
+
+                            try:
+                                self.close()
+                            except:
+                                log.exception("Failed to close I2C bus after error occurred: {:}".format(se))
+
+                        raise
+
                 except Exception as ex:
                     if self.on_error:
                         try:
@@ -47,7 +67,9 @@ class I2CConn(object):
         self._open_timer = 0.0
 
         self.on_written = None
+        self.on_success = None
         self.on_error = None
+        self.close_on_error = None
 
     def init(self, settings):
         if log.isEnabledFor(logging.DEBUG):
@@ -62,10 +84,12 @@ class I2CConn(object):
         self._address = settings["address"]
 
         self._reopen_delay = settings.get("reopen_delay", 5)
+        self.close_on_error = settings.get("close_on_error", True)
 
         self._bus = smbus.SMBus()
 
         return self
+
 
     @retry(stop_max_attempt_number=3, wait_fixed=1000)
     def open(self):
@@ -77,7 +101,7 @@ class I2CConn(object):
 
             return self
         except Exception:
-            log.exception("Failed to open I2C connection")
+            log.exception("Failed to open I2C connection on port: {:}".format(self._port))
             self._is_open = False
 
             raise
@@ -91,7 +115,7 @@ class I2CConn(object):
             if self._open_timer:
                 reopen_delay = self._reopen_delay - (timer() - self._open_timer)
                 if reopen_delay > 0:
-                    log.warning("Enforcing re-open delay of {:} second(s)...".format(reopen_delay))
+                    log.warning("Enforcing re-open delay of {:} second(s) on port {:}".format(reopen_delay, self._port))
                     time.sleep(reopen_delay)
 
             self._open_timer = timer()
@@ -133,7 +157,7 @@ class I2CConn(object):
     @Decorators.ensure_open
     def read(self, register, length=1):
         ret = None
-        
+
         if length > 1:
             ret = self.read_block.undecorated(self, register, length)
         else:
@@ -219,3 +243,4 @@ class I2CConn(object):
         """
 
         return word - (word >> bits-1) * (2 ** bits)
+

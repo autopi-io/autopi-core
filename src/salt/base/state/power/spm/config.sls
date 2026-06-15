@@ -19,6 +19,8 @@ spm-voltage-change-wake-trigger-configured:
         difference: {{ salt['pillar.get']('power:wake_trigger:voltage_change', default='0.50') }}
         period: {{ salt['pillar.get']('power:wake_trigger:voltage_change_duration', default=1000) }}
 
+{%- if salt['pillar.get']('power:battery:nominal_voltage', 12) != 'autodetect' %}
+
 # Wake when engine is running (battery charging)
 spm-voltage-level-wake-trigger-configured:
   module_extra.configured:
@@ -38,3 +40,5 @@ spm-voltage-level-sleep-trigger-configured:
     - kwargs:
         threshold: {{ salt['pillar.get']('power:safety_cut-out:voltage', default='12.20') }}
         duration: {{ salt['pillar.get']('power:safety_cut-out:duration', default=240) * 1000 }}
+
+{%- endif %}

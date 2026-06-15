@@ -11,17 +11,25 @@
 {%- endif %}
 
 {%- if part_id == "rp2040" %}
+
 openocd-interface-raspberrypi-swd-configured:
   file.managed:
+    {%- if salt['grains.get']('osmajorrelease') >= 11 %}
+    - name: /usr/share/openocd/scripts/interface/raspberrypi-swd.cfg
+    {%- else %}
     - name: /usr/local/share/openocd/scripts/interface/raspberrypi-swd.cfg
+    {%- endif %}
     - source: salt://power/spm/openocd/raspberrypi-swd.cfg
     - makedirs: True
 
+{%- if salt['grains.get']('osmajorrelease') < 11 %}
 openocd-target-rp2040-configured:
   file.managed:
     - name: /usr/local/share/openocd/scripts/target/rp2040.cfg
     - source: salt://power/spm/openocd/rp2040.cfg
     - makedirs: True
+{%- endif %}
+
 {%- else %}
 avrdude-configured:
   file.managed:

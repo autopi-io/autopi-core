@@ -7,8 +7,10 @@ network={
 {%- for key, val in network.iteritems() %}
     {%- if key == 'psk' and val == '' %}
     key_mgmt=NONE
+    {%- elif key == 'psk' or key == 'ssid' %}
+    {{ key }}="{{ val }}"
     {%- else %}
-    {{ key }}={{ val|tojson|safe }}
+    {{ key }}={{ val }}
     {%- endif %}
 {%- endfor %}
 }

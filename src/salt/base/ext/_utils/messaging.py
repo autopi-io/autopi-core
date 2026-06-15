@@ -1,5 +1,6 @@
 import copy
 import datetime
+import time
 import logging
 import re
 import salt.exceptions
@@ -12,6 +13,7 @@ import urlparse
 import uuid
 
 from common_util import ensure_primitive, last_iter, force_kwargs
+from proc_util import enforce_single_process_with_name
 from salt_more import cached_loader, SuperiorCommandExecutionError
 from timeit import default_timer as timer
 
@@ -163,23 +165,45 @@ class MessageProcessor(object):
                 try:
 
                     # Run workflow
-                    self._call_hook_for(message, "workflow", message)
+                    _, result = self._call_hook_for(message, "workflow", message)
+
+                    # Store the last result in the message context
+                    message.setdefault("context", {})["last_result"] = {
+                        "success": success,
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                        "data": result
+                    }
 
                 except Warning as wa:
                     success = False
 
                     # Register time of last warning in context
-                    context["last_warning"] = datetime.datetime.utcnow().isoformat()
+                    ts = datetime.datetime.utcnow().isoformat()
+                    context["last_warning_at"] = ts
 
-                    # Also register all distinct warning messages in context
+                    # Also register all distinct warning messages in the context (stored only temporarily)
                     msg = str(wa)
                     context.setdefault("distinct_warnings", {}).setdefault(msg, 0)
                     context["distinct_warnings"][msg] += 1
 
+                    # Also store the warning permanently in the context
+                    context.setdefault("seen_warnings", {}).setdefault(msg, 0)
+                    context["seen_warnings"][msg] += 1
+
+                    # Store warning as last result in the message context
+                    message.setdefault("context", {})["last_result"] = {
+                        "success": success,
+                        "timestamp": ts,
+                        "warning": msg
+                    }
+
                     # Only allow recurring warnings to be logged every minute
                     if context["distinct_warnings"][msg] > 3 \
                         and timer() - getattr(thread, "warning_log_timer", 0) < 60:
-                        return
+                        if transactional: # We want to break out as soon as there is an error
+                            return
+                        else: # We just want to run all messages (aka workflows) regardless of errors
+                            continue
                     setattr(thread, "warning_log_timer", timer())
 
                     # Go ahead and log the warning
@@ -192,18 +216,33 @@ class MessageProcessor(object):
                 except Exception as ex:
                     success = False
 
-                    # Register time of last error in context
-                    context["last_error"] = datetime.datetime.utcnow().isoformat()
+                    # Register time of last error in the context
+                    ts = datetime.datetime.utcnow().isoformat()
+                    context["last_error_at"] = ts
 
-                    # Also register all distinct error messages in context
+                    # Also register all distinct error messages in the context (stored only temporarily)
                     msg = str(ex)
                     context.setdefault("distinct_errors", {}).setdefault(msg, 0)
                     context["distinct_errors"][msg] += 1
 
+                    # Also store the error permanently in the context
+                    context.setdefault("seen_errors", {}).setdefault(msg, 0)
+                    context["seen_errors"][msg] += 1
+
+                    # Store error as last result in the message context
+                    message.setdefault("context", {})["last_result"] = {
+                        "success": success,
+                        "timestamp": ts,
+                        "error": msg
+                    }
+
                     # Only allow recurring exceptions to be logged every minute
                     if suppress_exceptions and context["distinct_errors"][msg] > 3 \
                         and timer() - getattr(thread, "exception_log_timer", 0) < 60:
-                        return
+                        if transactional: # We want to break out as soon as there is an error
+                            return
+                        else: # We just want to run all messages (aka workflows) regardless of errors
+                            continue
                     setattr(thread, "exception_log_timer", timer())
 
                     # Go ahead and log the exception
@@ -236,6 +275,7 @@ class MessageProcessor(object):
 
         # Start immediately is default
         start = settings.pop("start", True)
+        reason = settings.pop("reason", "unknown")
 
         # Add new worker thread
         thread = threading_more.WorkerThread(
@@ -245,7 +285,7 @@ class MessageProcessor(object):
             **settings)  # Pass additional settings
 
         if start:
-            thread.start()
+            thread.start(reason=reason)
 
             return {
                 "started": thread.name
@@ -266,8 +306,8 @@ class MessageProcessor(object):
             <handler> --> [trigger] --> [filter] --> [returner]
         """
 
-        args = message.get("args", [])
-        kwargs = message.get("kwargs", {})
+        args = message.get("args", []) or []
+        kwargs = message.get("kwargs", {}) or {}
 
         result = None
         try:
@@ -307,8 +347,8 @@ class MessageProcessor(object):
             [validator] --> <handler> --> [converter] --> [trigger] --> [filter] --> [enricher] --> [retuner]
         """
 
-        args = message.get("args", [])
-        kwargs = message.get("kwargs", {})
+        args = message.get("args", []) or []
+        kwargs = message.get("kwargs", {}) or {}
 
         # Call validator hook (chain)
         found, error = self._call_hook_chain_for(message, "validator", *args, **kwargs)
@@ -368,8 +408,8 @@ class MessageProcessor(object):
             - run <key>=<value>...
         """
 
-        args = message.get("args", [])
-        kwargs = message.get("kwargs", {})
+        args = message.get("args", []) or []
+        kwargs = message.get("kwargs", {}) or {}
 
         if len(args) > 1 and args[0] == "hook":
             if args[1] == "list":
@@ -398,23 +438,40 @@ class MessageProcessor(object):
             elif args[1] == "show":
                 threads = self.worker_threads.find_all_by(args[2] if len(args) > 2 else "*")
                 return {
-                    "value": {t.name: t.context for t in threads}
+                    "value": {t.name: ensure_primitive(t.context) for t in threads}
                 }
 
-            elif args[1] == "create":
-                messages = args[2:] # all other arguments are considered messages
+            elif args[1] == "create" or args[1] == "ensure" or args[1] == "ensure_and_enqueue":
+                messages = args[2:]  # All other arguments are considered messages
 
-                # create worker
-                res = self.dedicated_worker(None, **kwargs)
+                is_worker_found = False
 
-                # resolve name
-                worker_name = None
-                if res.get("started", None):
-                    worker_name = res["started"]
-                elif res.get("created", None):
-                    worker_name = res["created"]
-                else:
-                    raise Exception("Couldn't figure out worker name, skipping enqueueing of messages")
+                # Ensure a worker is created and not yet terminated
+                if args[1] == "ensure" or args[1] == "ensure_and_enqueue":
+                    worker_name = kwargs.get("name", None)
+                    if not worker_name:
+                        raise ValueError("A name must be specified in order to ensure the worker")
+
+                    if self.worker_threads.find_all_by(worker_name):
+                        is_worker_found = True
+
+                        if args[1] == "ensure":
+                            return {
+                                "value": worker_name,
+                            }
+
+                # Create worker, if not already found
+                if not is_worker_found:
+                    res = self.dedicated_worker(None, **kwargs)
+
+                    # Resolve name
+                    worker_name = None
+                    if res.get("started", None):
+                        worker_name = res["started"]
+                    elif res.get("created", None):
+                        worker_name = res["created"]
+                    else:
+                        raise Exception("Could not figure out worker name, skipping enqueueing of messages")
 
                 # Enqueue all messages to worker
                 for message in messages:
@@ -449,7 +506,17 @@ class MessageProcessor(object):
                 }
 
             elif args[1] == "kill":
+                join_timeout = kwargs.pop("join_timeout", 0)
+
                 threads = self.worker_threads.do_for_all_by(args[2], lambda t: t.kill(**kwargs))
+
+                if join_timeout > 0:
+                    for thread in threads:
+                        log.info("Waiting up to %f second(s) for the worker thread '%s' to terminate", join_timeout, thread.name)
+                        thread.join(timeout=join_timeout)
+                        if thread.is_alive():
+                            raise Exception("The worker thread '{}' is still alive after waiting {} second(s) for termination".format(thread.name, join_timeout))
+
                 return {
                     "values": [t.name for t in threads]
                 }
@@ -461,6 +528,14 @@ class MessageProcessor(object):
         elif len(args) > 0 and args[0] == "exit":
             sys.exit()
             return {}
+
+        elif len(args) > 0 and args[0] == "insight":
+            ret = {
+                "workers": {t.name: t.context for t in self.worker_threads.find_all_by("*")},
+                "hooks": [h for h in self._hook_funcs]
+            }
+
+            return ensure_primitive(ret)
 
         raise Exception("Invalid or unknown command")
 
@@ -622,16 +697,24 @@ class EventDrivenMessageProcessor(MessageProcessor):
         MessageProcessor.__init__(self, default_hooks)
         self._namespace = namespace
         self._context = context
-        self._tag_regex = re.compile("^{:s}/req/(?P<id>.+)$".format(namespace))
+        self._tag_regex = None
         self._event_matchers = []
         self._bus_lock = threading.RLock()  # Used to synchronize event bus function calls
         self._outgoing_event_filters = {}
         self._reactors = []
 
-    def init(self, __salt__, __opts__, hooks=[], workers=[], reactors=[]):
+    def init(self, __salt__, __opts__, namespace=None, hooks=[], workers=[], reactors=[]):
         """
         Initialize this instance.
         """
+
+        # Override default namespace if defined
+        if namespace:
+            self._namespace = namespace
+
+        enforce_single_process_with_name(self._namespace)
+
+        self._tag_regex = re.compile("^{:s}/req/(?P<id>.+)$".format(self._namespace))
 
         # Dedicated event bus handle for receiving events
         self._incoming_bus = salt.utils.event.get_event("minion",
@@ -654,6 +737,14 @@ class EventDrivenMessageProcessor(MessageProcessor):
         # Add given workflow hooks
         for hook in hooks or []:
             try:
+
+                # Check requirements, if defined
+                if "requirements" in hook:
+                    if not is_requirements_met(hook["requirements"], keywords={"context": self._context, "salt": __salt__, "options": __opts__}, force_eval=True):
+                        log.warning("Skipping hook as requirement(s) are not met: {:}".format(hook))
+
+                        continue
+
                 if not "." in hook["func"]:
                     hook_func = self._hook_funcs[hook["func"]]
 
@@ -722,16 +813,44 @@ class EventDrivenMessageProcessor(MessageProcessor):
 
         # Add given workers
         for worker in workers or []:
+
+            # Check requirements, if defined
+            if "requirements" in worker:
+                if not is_requirements_met(worker.pop("requirements"), keywords={"context": self._context, "salt": __salt__, "options": __opts__, "hooks": self._hook_funcs}, force_eval=True):
+                    log.warning("Skipping worker as requirement(s) are not met: {:}".format(worker))
+
+                    continue
+
             messages = worker.pop("messages")
 
             self.dedicated_worker(None, start=False, **worker)
 
             # Enqueue all messages to worker
             for message in messages:
+
+                # Check requirements, if defined
+                if "requirements" in message:
+                    if not is_requirements_met(message["requirements"], keywords={"context": self._context, "salt": __salt__, "options": __opts__, "hooks": self._hook_funcs}, force_eval=True):
+                        log.warning("Skipping message in worker '{:}' as requirement(s) are not met: {:}".format(worker["name"], message))
+
+                        continue
+
                 self.dedicated_worker(message, enqueue=worker["name"])
 
         # Add given reactors
         for reactor in reactors or []:
+
+            # Check requirements, if defined
+            if "requirements" in reactor:
+                if not is_requirements_met(reactor["requirements"], keywords={"context": self._context, "salt": __salt__, "options": __opts__, "hooks": self._hook_funcs}, force_eval=True):
+                    log.warning("Skipping reactor as requirement(s) are not met: {:}".format(reactor))
+
+                    continue
+
+            # Initialize stats
+            reactor["stats"] = {
+                "match_count": 0
+            }
 
             # Define function to handle events when matched
             def on_event(event, match=None, reactor=reactor):
@@ -747,13 +866,30 @@ class EventDrivenMessageProcessor(MessageProcessor):
                         if DEBUG:
                             log.debug("Event NOT meets condition #{:} '{:}': {:}".format(index, condition, event))
 
+                        # Update stats with the unfulfilled condition
+                        reactor["stats"]["last_unfulfilled_condition"] = condition
+                        reactor["stats"]["last_unfulfilled_condition_event"] = dict(event)
+
                         return
+
+                # Update the stats
+                reactor["stats"]["match_count"] += 1
+                reactor["stats"]["last_matched_event"] = dict(event)
+
+                last_result = None
 
                 # Process all action messages
                 actions = reactor.get("actions", [])
                 if "action" in reactor:
                     actions.append(reactor["action"])
                 for index, message in enumerate(actions, 1):
+
+                    # Check requirements, if defined
+                    if "requirements" in message:
+                        if not is_requirements_met(message["requirements"], keywords={"event": event, "match": match, "context": self._context, "salt": __salt__, "options": __opts__, "hooks": self._hook_funcs}, force_eval=True):
+                            log.warning("Skipping action in reactor '{:}' as requirement(s) are not met: {:}".format(reactor.get("name", "unknown"), message))
+
+                            continue
 
                     # Check if keyword resolving is enabled
                     if reactor.get("keyword_resolve", False):
@@ -767,12 +903,20 @@ class EventDrivenMessageProcessor(MessageProcessor):
                     else:
                         res = self.process(message)
 
+                    # Store the last result in the message context
+                    message.setdefault("context", {})["last_result"] = {
+                        "timestamp": datetime.datetime.utcnow().isoformat(),
+                        "data": res
+                    }
+
                     if index < len(actions) and reactor.get("chain_conditionally", False):
                         if not res or isinstance(res, dict) and not res.get("result", True):
                             if DEBUG:
                                 log.debug("Breaking action chain after message #{:} '{:}' because of result '{:}'".format(index, message, result))
 
                             break
+                        
+                        last_result = res
 
             match_type = None
             if "regex" in reactor:
@@ -843,8 +987,8 @@ class EventDrivenMessageProcessor(MessageProcessor):
             - reactor list|show <name>
         """
 
-        args = message.get("args", [])
-        kwargs = message.get("kwargs", {})
+        args = message.get("args", []) or []
+        kwargs = message.get("kwargs", {}) or {}
 
         if len(args) > 0 and args[0] == "context":
             res = self._context
@@ -884,6 +1028,12 @@ class EventDrivenMessageProcessor(MessageProcessor):
                 return {
                     "value": {r["name"]: r for r in reactors}
                 }
+        elif len(args) > 0 and args[0] == "insight":
+            res = super(EventDrivenMessageProcessor, self).manage_workflow(message)
+            res["context"] = self._context
+            res["reactors"] = self._reactors
+
+            return ensure_primitive(res)
         else:
             return super(EventDrivenMessageProcessor, self).manage_workflow(message)
 
@@ -893,7 +1043,7 @@ class EventDrivenMessageProcessor(MessageProcessor):
         """
 
         # Ensure all worker threads with auto start enabled are started
-        threads = self.worker_threads.do_for_all(lambda t: t.auto_start, lambda t: t.start())
+        threads = self.worker_threads.do_for_all(lambda t: t.auto_start, lambda t: t.start(reason="auto_start"))
         if threads:
             log.info("Starting {:d} worker thread(s): {:s}".format(len(threads), ", ".join([t.name for t in threads])))
 
@@ -1025,15 +1175,15 @@ class EventDrivenMessageClient(object):
     def init(self, opts):
         self._opts = opts
 
-    def send_sync(self, message, timeout=None):
+    def send_sync(self, message, timeout=None, namespace=None):
 
         if timeout == None:
             timeout = message.get("timeout", self._default_timeout)
 
         correlation_id = uuid.uuid4()
         
-        req_tag = "{:s}/req/{:s}".format(self._namespace, correlation_id)
-        res_tag = "{:s}/res/{:s}".format(self._namespace, correlation_id)
+        req_tag = "{:s}/req/{:s}".format(namespace or self._namespace, correlation_id)
+        res_tag = "{:s}/res/{:s}".format(namespace or self._namespace, correlation_id)
 
         bus = salt.utils.event.get_event("minion",
             opts=self._opts,
@@ -1104,9 +1254,9 @@ def msg_pack(*args, **kwargs):
     return msg
 
 
-def keyword_resolve(data, keywords={}, symbol="$"):
+def keyword_resolve(data, keywords={}, symbol="$", force_eval=False):
     """
-    Helper method to resolve keywords in a data structure.
+    Helper function to resolve keywords in a data structure.
     """
 
     if isinstance(data, (list, tuple, set)):
@@ -1119,7 +1269,7 @@ def keyword_resolve(data, keywords={}, symbol="$"):
             res[keyword_resolve(key, keywords)] = keyword_resolve(val, keywords)
         data = res
 
-    elif isinstance(data, basestring) and symbol in data:
+    elif isinstance(data, basestring) and (force_eval or any("{:s}{:s}".format(symbol, key) in data for key in keywords)):
 
         # Replace keywords in data
         for key in keywords:
@@ -1128,6 +1278,28 @@ def keyword_resolve(data, keywords={}, symbol="$"):
         return eval(data, {"__{:s}__".format(key): val for key, val in keywords.iteritems()})
 
     return data
+
+
+def is_requirements_met(requirements, **kwargs):
+    """
+    Helper function to evaluate requirements specified within a dictionary.
+    """
+
+    for index, requirement in enumerate(requirements, 1):
+        try:
+            if keyword_resolve(requirement, **kwargs):
+                if DEBUG:
+                    log.debug("Requirement #{:}/{:} met: {:}".format(index, len(requirements), requirement))
+            else:
+                log.info("Requirement #{:}/{:} NOT met: {:}".format(index, len(requirements), requirement))
+
+                return False
+        except:
+            log.exception("Failed to evaluate requirement #{:}/{:}: {:}".format(index, len(requirements), requirement))
+
+            return False
+
+    return True
 
 
 def extract_error_from(result):
@@ -1143,20 +1315,53 @@ def extract_error_from(result):
     return result if isinstance(result, Exception) else result.get("error", None) if isinstance(result, dict) else result
 
 
-def filter_out_unchanged(result, context={}, kind=None):
-    """
-    Helper function to filter out unchanged results recursively based on their specified types.
-    """
+def _interval_passthrough_allowed(old_ts, new_ts, interval_ms):
 
+    # No timestamp means no previous entry
+    if not old_ts:
+        return True
+
+    # Skip entry when less than minimum passthrough time interval has passed 
+    return (new_ts - old_ts) >= interval_ms
+
+def _get_unix_ts_from_stamp_or_now(stamp):
+    """
+    Convert iso timestmap to unix ts (ms accuracy) or generate from current time
+    """
+    ts = None
+    
+    if stamp:
+        dt = datetime.datetime.strptime(stamp, "%Y-%m-%dT%H:%M:%S.%f")
+        seconds = int(time.mktime(dt.timetuple()))
+        miliseconds = dt.microsecond / 1000
+        ts = (seconds * 1000) + miliseconds
+    else:
+        ts = int(time.time() * 1000)
+        
+    return ts
+
+def filter_out_unchanged(result, context={}, kind=None, pass_interval=0):
+    """
+    Helper function to filter out unchanged results recursively based on their specified types and logging frequency.
+    """
+    # Should we check for time since last reading?
+    filter_by_frequency = pass_interval > 0
+   
     # Build qualified type string for the result
     kind = ".".join(filter(None, [kind, result.get("_type", None)]))
 
     # Loop through all keys in the result and build entry with the significant alternating values
     entry = {}
+    iso_stamp = None
     for key, val in result.iteritems():
-
-        # Skip all meta/hidden
+        # Handle meta/hidden
         if key.startswith("_"):
+            
+            # Use timestamp for frequency filtering
+            if key == "_stamp":
+                iso_stamp = val
+                
+            # Discard others
             continue
 
         # Dive into list in an attempt to filter it
@@ -1167,7 +1372,10 @@ def filter_out_unchanged(result, context={}, kind=None):
 
                 # Recursive handling of dictionary values
                 if isinstance(res, dict):
-                    sub_res = filter_out_unchanged(res, context=context, kind=kind)
+                    sub_res = filter_out_unchanged(res, 
+                                                   context=context, 
+                                                   kind=kind, 
+                                                   pass_interval=pass_interval)
                     if sub_res:
                         vals.append(sub_res)
 
@@ -1185,18 +1393,35 @@ def filter_out_unchanged(result, context={}, kind=None):
         else:
             entry[key] = val
 
-    # Do we have a type and an entry with one or more significant alternating values?
+    # Do we have a type and an entry with one 
+    #   or more significant alternating values?
     if kind and entry:
 
-        # Compare if entry equals content cached in context
-        if context.get(kind, None) == entry:
+        # Ensure we are comparing without the timestamp, 
+        #   and old entry doesn't get changed 
+        old_val = context.get(kind, None)
+        if filter_by_frequency:
+            old_ts = None
+            if old_val:
+                old_val = old_val.copy()
+                old_ts = old_val.pop("_ts")
+
+        # Compare if entry equals content cached in context         
+        if old_val == entry:
 
             # Skip entry when equal to cached
             return
 
+        # Check if data point logged recently
+        if filter_by_frequency:
+            new_ts = _get_unix_ts_from_stamp_or_now(iso_stamp)
+            if _interval_passthrough_allowed(old_ts, new_ts, pass_interval):
+                entry["_ts"] = new_ts   # Set entry timestamp
+            else:
+                return
+        
         # Otherwise update cache with recent content
-        else:
-            context[kind] = entry
-
+        context[kind] = entry
+        
     return result
 

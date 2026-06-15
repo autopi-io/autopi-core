@@ -39,9 +39,9 @@ def query_handler(cmd, **kwargs):
 
     # TODO HN: Support query of multiple commands in one call.
 
-    ret = {
-        "_type": cmd.lower(),
-    }
+    reason = kwargs.pop("reason", "unknown")
+
+    ret = {}
 
     try:
         func = getattr(conn, cmd)
@@ -55,6 +55,12 @@ def query_handler(cmd, **kwargs):
             ret.update(res)
         else:
             ret["value"] = res
+
+    # Trigger an event when changes are made
+    if kwargs:
+        edmp.trigger_event(dict(ret, **{"_alternating_cache_event_filter.skip": True, "reason": reason}), "system/spm/{}/configured".format(cmd))
+
+    ret["_type"] = cmd.lower()
 
     return ret
 
@@ -131,7 +137,7 @@ def heartbeat_handler():
 @edmp.register_hook()
 def reset_handler():
     """
-    Reset/restart the MCU. 
+    Reset/restart the MCU.
     """
 
     ret = {}
@@ -265,7 +271,7 @@ def start(**settings):
         global gpio_pins
         gpio_pins = settings.get("gpio", {}).get("pins", {})
 
-        gpio.setup(gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR), gpio.OUT, initial=gpio.LOW)        
+        gpio.setup(gpio_pins.get("hold_pwr", gpio_pin.HOLD_PWR), gpio.OUT, initial=gpio.LOW)
         gpio.setup(gpio_pins.get("reset", gpio_pin.SPM_RESET), gpio.OUT, initial=gpio.HIGH)
 
         has_led = True
@@ -316,12 +322,18 @@ def start(**settings):
 
     except Exception as ex:
         log.exception("Failed to start SPM manager")
-        
+
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
-        
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
+
         raise
 
     finally:

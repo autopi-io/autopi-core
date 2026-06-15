@@ -246,7 +246,7 @@ def close_writers():
 
 def returner(ret):
     """
-    Return a result to cloud jsonl file.
+    Return a result to [Cloud](https://www.autopi.io/software-platform/cloud-management) jsonl file.
     """
 
     returner_job(ret)
@@ -254,7 +254,7 @@ def returner(ret):
 
 def returner_job(job):
     """
-    Return a Salt job result to cloud jsonl file.
+    Return a Salt job result to [Cloud](https://www.autopi.io/software-platform/cloud-management) jsonl file.
     """
 
     if not job or not job.get("jid", None):
@@ -294,7 +294,7 @@ def returner_job(job):
 
 def returner_event(event):
     """
-    Return an event to cloud jsonl file.
+    Return an event to [Cloud](https://www.autopi.io/software-platform/cloud-management) jsonl file.
     """
 
     if not event:
@@ -313,7 +313,7 @@ def returner_event(event):
 
 def returner_data(data, kind, **kwargs):
     """
-    Return any arbitrary data structure to cloud jsonl file.
+    Return any arbitrary data structure to [Cloud](https://www.autopi.io/software-platform/cloud-management) jsonl file.
     """
 
     if not data:

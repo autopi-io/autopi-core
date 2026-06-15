@@ -78,6 +78,33 @@ def dict_key_by_value(dic, val):
     return next(iter(kv))
 
 
+def dict_query(dic, full_path, **kwargs):
+    val = dic
+    curr_path = []
+    for key in full_path.format(**kwargs).split(":"):
+        if not isinstance(val, dict):
+            if kwargs.get("raise_on_not_found", True):
+                if curr_path:
+                    raise Exception("The dictionary query '{}' found no dictionary below path '{}' but instead: {}".format(full_path, ":".join(curr_path), repr(val)))
+                else:
+                    raise Exception("The dictionary query '{}' found no dictionary but instead: {}".format(full_path, repr(val)))
+            else:
+                val = kwargs.get("default", None)
+                break
+
+        if kwargs.get("raise_on_not_found", True) and not key in val:
+            if curr_path:
+                raise Exception("The dictionary query '{}' found no key named '{}' below path '{}' in: {}".format(full_path, key, ":".join(curr_path), val))
+            else:
+                raise Exception("The dictionary query '{}' found no key named '{}' in: {}".format(full_path, key, val))
+        else:
+            val = val.get(key, kwargs.get("default", None))
+
+        curr_path.append(key)
+
+    return val
+
+
 def ensure_primitive(val):
     if isinstance(val, (int, float, bool, str)):
         return val
@@ -85,6 +112,8 @@ def ensure_primitive(val):
         return {ensure_primitive(k): ensure_primitive(v) for k, v in val.iteritems()}
     elif isinstance(val, (list, set, tuple)):
         return [ensure_primitive(v) for v in val]
+    elif isinstance(val, object) and hasattr(val, "to_dict"):
+        return ensure_primitive(val.to_dict())  # Ensure primitives just in case
     else:
         return str(val)
 
@@ -311,4 +340,37 @@ def call_retrying(func, args=[], kwargs={}, limit=3, wait=0, context={}):
 
                 continue
 
+            if not isinstance(ex, Warning):
+                log.exception("Error calling function '{}' after {} retry attempt(s)".format(func, count))
+
             raise ex
+
+
+BYTE_SIZE_UNITS_MAPPING = [
+    (1<<50, ' PB'),
+    (1<<40, ' TB'),
+    (1<<30, ' GB'),
+    (1<<20, ' MB'),
+    (1<<10, ' KB'),
+    (1, (' byte', ' bytes')),
+]
+
+
+def pretty_size(bytes, units=BYTE_SIZE_UNITS_MAPPING):
+    """
+    Get human-readable file sizes.
+    Simplified version of: https://pypi.python.org/pypi/hurry.filesize/
+    """
+
+    for factor, suffix in units:
+        if bytes >= factor:
+            break
+    amount = int(bytes / factor)
+
+    if isinstance(suffix, tuple):
+        singular, multiple = suffix
+        if amount == 1:
+            suffix = singular
+        else:
+            suffix = multiple
+    return str(amount) + suffix

@@ -13,7 +13,7 @@ le910cx-assert-modem-ttytlt-usb-test:
 
 le910cx-sim-card-present-test:
   cmd.run:
-    - name: "qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
+    - name: "qmicli --device /dev/cdc-wdm0 --dms-set-operating-mode=online && sleep 1 && qmicli --device-open-qmi --device /dev/cdc-wdm0 --uim-get-card-status | grep -q \"Card state: 'present'\""
 
 le910cx-qmi-test:
   module.run:

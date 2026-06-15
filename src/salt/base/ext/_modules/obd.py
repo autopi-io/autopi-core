@@ -47,6 +47,7 @@ def query(*args, **kwargs):
       - baudrate (int): Specific protocol baudrate to be used. If none is specifed the current baudrate will be used.
       - verify (bool): Verify that OBD-II communication is possible with the desired protocol? Default value is 'False'.
       - force (bool): Force query of unknown command. Default is 'False'.
+      - type (str): Specify an alternative name of the type of the result. Default is the given name of the command.
 
     Optional arguments, CAN specific:
       - can_extended_address (str): Use CAN extended address.
@@ -72,6 +73,8 @@ def query(*args, **kwargs):
 def query_many(*cmds):
   """
   Queries many OBD commands in one call.
+
+  For details, check out the 'obd_manager.query_many_handler' documentation
   """
 
   return client.send_sync(_msg_pack(*cmds, _handler="query_many"))
@@ -184,7 +187,7 @@ def send(msg, **kwargs):
     Optional arguments, J1939 specific:
       - j1939_pgn_filter (str): Ensure J1939 PGN filter is added. Value must consist of '<PGN>[,<Target Address>]'.
     """
-
+    
     return client.send_sync(_msg_pack(str(msg), _handler="send", **kwargs))
 
 
@@ -397,3 +400,6 @@ def manage(*args, **kwargs):
 
     return client.send_sync(_msg_pack(*args, _workflow="manage", **kwargs))
 
+
+def alternating_readout_interval_supported(*args, **kwargs):
+    return True

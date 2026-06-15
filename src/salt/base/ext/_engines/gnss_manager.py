@@ -1,6 +1,7 @@
 import logging
 import pynmea2
 import datetime
+import time
 
 from common_util import call_retrying
 from le910cx_conn import LE910CXConn
@@ -20,7 +21,7 @@ def connection_handler(cmd, *args, **kwargs):
     """
     Queries a given command down to the connection class.
 
-    Argumnets:
+    Arguments:
       - cmd (str): The command to query.
     """
 
@@ -34,7 +35,7 @@ def connection_handler(cmd, *args, **kwargs):
         ret["error"] = "Unsupported command: {:s}".format(cmd)
         return ret
 
-    res = call_retrying(func, args=args, kwargs=kwargs, limit=3, wait=0.2, context=context)
+    res = call_retrying(func, args=args, kwargs=kwargs, limit=3, wait=0.2, context=context.setdefault("errors", {}))
     if res != None:
         if isinstance(res, dict):
             ret.update(res)
@@ -55,7 +56,7 @@ def nmea0183_readout_handler():
     }
 
     # Read lines from serial connection
-    lines = conn.nmea_messages()
+    lines = conn._nmea_messages()
     if not lines:
         log.warn("No NMEA0183 sentences available")
         return ret
@@ -246,7 +247,17 @@ def start(**settings):
         # Init connection
         conn.init(settings["serial_conn"])
         if settings.get("trigger_events", True):
-            conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex), "path": settings["serial_conn"].get("device", None)}, "system/device/le910cx/error")
+            tag_format = "system/device/le910cx/{:}/{{:}}".format(settings["serial_conn"].get("device", "unknown").split("/")[-1].lower())
+
+            def on_success(res):
+                if context.pop("serial_conn.error", None):
+                    edmp.trigger_event({}, tag_format.format("recover"))
+            conn.on_success = on_success
+
+            def on_error(ex):
+                context["serial_conn.error"] = str(ex)
+                edmp.trigger_event({"message": str(ex)}, tag_format.format("error"))
+            conn.on_error = on_error
 
         # Init and start message processor
         edmp.init(__salt__, __opts__,
@@ -260,10 +271,16 @@ def start(**settings):
         log.exception("Failed to start GNSS manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
-        
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
+
         raise
 
     finally:

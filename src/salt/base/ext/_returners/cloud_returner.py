@@ -76,7 +76,8 @@ def _get_cloud_cache_for(ret):
 
 def returner(ret):
     """
-    Return a result to cloud cache.
+    Return a result to [Cloud](https://www.autopi.io/software-platform/cloud-management) cache.
+
     """
 
     returner_job(ret)
@@ -84,7 +85,7 @@ def returner(ret):
 
 def returner_job(job):
     """
-    Return a Salt job result to cloud cache.
+    Return a Salt job result to [Cloud](https://www.autopi.io/software-platform/cloud-management) cache.
     """
 
     if not job or not job.get("jid", None):
@@ -112,7 +113,7 @@ def returner_job(job):
 
 def returner_event(event):
     """
-    Return an event to cloud cache.
+    Return an event to [Cloud](https://www.autopi.io/software-platform/cloud-management) cache.
     """
 
     if not event:
@@ -131,7 +132,7 @@ def returner_event(event):
 
 def returner_data(data, kind, **kwargs):
     """
-    Return any arbitrary data structure to cloud cache.
+    Return any arbitrary data structure to [Cloud](https://www.autopi.io/software-platform/cloud-management) cache.
     """
 
     if not data:

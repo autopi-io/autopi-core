@@ -1,13 +1,15 @@
 import logging
 import shlex
+import time
 import uuid
 
 from flask import Flask, jsonify, request, send_from_directory, send_file, abort
-from werkzeug.exceptions import HTTPException
 from flask_cors import CORS
 from flask_api import FlaskAPI
 from functools import wraps
+from proc_util import enforce_single_process_with_name
 from threading_more import intercept_exit_signal
+from werkzeug.exceptions import HTTPException
 
 
 """
@@ -64,6 +66,8 @@ def _caller():
 
     opts = salt.config.minion_config('/etc/salt/minion')
     opts['file_client'] = 'local'
+
+    # NOTE: The default file roots which have already been added are '/srv/salt/' and '/srv/spm/salt' - if one of these folders exist, SLS files from there will be used before the one below!
     opts['file_roots']['base'].append('/var/cache/salt/minion/files/base')
 
     return salt.client.Caller(mopts=opts)
@@ -192,6 +196,8 @@ def start(**settings):
         if log.isEnabledFor(logging.DEBUG):
             log.debug("Starting API service with settings: {:}".format(settings))
 
+        enforce_single_process_with_name("api_service")
+
         global flask_settings
         flask_settings.update(settings["flask"])
 
@@ -203,7 +209,15 @@ def start(**settings):
         log.exception("Failed to start API service")
 
         if settings.get("trigger_events", True):
-            __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

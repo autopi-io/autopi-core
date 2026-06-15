@@ -8,6 +8,7 @@ import time
 from binascii import unhexlify
 from obd.interfaces import STN11XX
 from obd.utils import format_frame, parse_frame
+from can_exceptions import CANMessageTooLongToAutoFormatException
 
 from retrying import retry
 
@@ -50,6 +51,7 @@ class OBDConn(object):
         self._protocol_baudrate = None
         self._protocol_verify = True
         self._advanced_initial = {}
+        self._allow_sending_can_frames = True
 
         self._obd = None
 
@@ -358,6 +360,9 @@ class OBDConn(object):
 
         for msg in msgs:
 
+            if kwargs.get("auto_format") and self._get_message_data_length(msg) >= 8:
+                raise CANMessageTooLongToAutoFormatException("The message '{}' is too long to be auto-formatted (max 7 byte data length)".format(msg))
+
             # Parse out header if found
             hash_pos = msg.find("#")
             if hash_pos > 0:
@@ -404,6 +409,8 @@ class OBDConn(object):
         lines = self._obd.interface.monitor(**kwargs)
 
         # Format response frames if requested
+        # header_bits does not work with extended_return 
+        # will format response wrong, if header_bits are mixed length
         if format_response:
             header_bits = getattr(self.cached_protocol, "HEADER_BITS", None)
             lines = [format_frame(l, header_bits) for l in lines]
@@ -412,11 +419,11 @@ class OBDConn(object):
 
     @Decorators.ensure_open
     def monitor_continuously(self, **kwargs):
-        return self._obd.interface.monitor_continuously(enrich=self._enrich_monitor_entry, **kwargs)
+        enrich = kwargs.pop("enrich", self._enrich_monitor_entry)
+        return self._obd.interface.monitor_continuously(enrich=enrich, **kwargs)
 
     @Decorators.ensure_open
     def sync_filters_with(self, can_db, filter_type, force=False, continue_on_error=False):
-
         can_msgs = can_db.messages
 
         # Skip if not messages found in CAN database
@@ -447,8 +454,9 @@ class OBDConn(object):
                     filter_value = "{:04X}".format((msg.frame_id >> 8) & 0xFFFF)
                 else:
                     # TODO HN: How to handle 29bit headers here?
-                    filter_value = "{:03X},7FF".format(msg.frame_id)
-
+                    # Looks at is_extended_frame and sets masks accordingly 
+                    # Check on mask downstream to set filters correcly. 
+                    filter_value = "{:03X},7FF".format(msg.frame_id) if not msg.is_extended_frame else "{0:08X},1FFFFFFF".format(msg.frame_id)
                 self._obd.interface.add_filter(filter_type, filter_value)
                 count += 1
 
@@ -457,7 +465,6 @@ class OBDConn(object):
 
                 if not continue_on_error:
                     raise Exception("Failed to add '{:}' filter for CAN message '{:}': {:}".format(filter_type, msg, ex))
-
         log.info("Synced {:}/{:} filter(s) of type '{:}' from CAN DB".format(count, len(can_msgs), filter_type))
 
     @property
@@ -520,12 +527,16 @@ class OBDConn(object):
 
             raise Exception("Failed to calculate formula: {:}".format(ex))
 
+    def _get_message_data_length(self, msg):
+        msg_split = msg.split("#")
+        return len(msg_split[len(msg_split) - 1]) / 2
 
-def decode_can_frame_for(can_db, protocol, result):
+def decode_can_frame_for(can_db, protocol, result, extended_id=None):
     """
     Helper function to decode a raw CAN frame result.
     Note that one single CAN frame can output multiple results.
     """
+
 
     ret = []
 
@@ -541,7 +552,14 @@ def decode_can_frame_for(can_db, protocol, result):
         return ret
 
     # Parse frame
+
     header_bits = getattr(protocol, "HEADER_BITS", None)
+    if extended_id:
+        header_bits = 29
+    elif extended_id == False:
+        header_bits = 11
+
+
     header, data = parse_frame(result["value"], header_bits, validate=False)  # No need to validate hex here
 
     # Strip any leading hash sign

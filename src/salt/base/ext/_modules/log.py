@@ -14,6 +14,47 @@ def help():
     return __salt__["sys.doc"]("log")
 
 
+def journalctl(log, minutes=4, days=None, lines=None, matched_lines=0, grep=None, boot=0):
+    """
+    Retrive log files for either kernel, system or salt-minion.
+
+    Arguments:
+    - log (str): The log you want to retrieve.
+
+    Optional Arguments:
+    - minutes (int): Specifies time delimiter on report retrival, time now minus minutes.
+    - days (int): Overwrites minutes to days date minus days.
+    - lines (int): Specifies the maximum number of lines returned.
+    - grep (str): Match expressions and delimit output string.
+    - matched_lines (int): Amount of lines returned after grep pattern context.
+    - boot (int): Fetches boot records from journal using offset; positive starting from the first boot, non-positive starting from the last boot, -0 or no number for current boot.
+    """
+
+    _query = "journalctl -b {} -o short-iso-precise".format(boot)
+       
+    if log == "system":
+        _query += ' --{}'.format(log)
+    elif log == "kernel":
+        _query += ' -k'
+    else:
+        _query += ' -u {}'.format(log)
+    
+    if not days:
+        _query +=  ' --since "{} minutes ago"'.format(minutes)
+    if days:
+        _query +=  ' --since "{} days ago"'.format(days)
+    if lines:
+        _query += " -n --lines={}".format(lines)
+
+    if grep: 
+        _query += " | grep -A {} {}".format(matched_lines, grep)
+    
+    res = __salt__["cmd.shell"](_query)
+    
+    return res
+
+
+
 def query(file, begin="^", end="$", match=".*", count=0, reverse=False, before=0, after=0, first=0, last=100):
     """
     Query a log file or any text file.

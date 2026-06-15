@@ -1,8 +1,10 @@
 import battery_util
+import datetime
 import dateutil.parser
 import logging
 import re
 
+from common_util import dict_filter, dict_get
 from messaging import extract_error_from, filter_out_unchanged, keyword_resolve
 from salt_more import cached_loader
 from timeit import default_timer as timer
@@ -27,7 +29,7 @@ def module_handler(*args, **kwargs):
     # Resolve keyword arguments if available
     if kwargs.pop("_keyword_resolve", False):
         kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Keyword resolved arguments: {:}".format(kwargs))
 
     kind = kwargs.pop("_type", None)
@@ -48,7 +50,7 @@ def module_direct_handler(*args, **kwargs):
     # Resolve keyword arguments if available
     if kwargs.pop("_keyword_resolve", False):
         kwargs = keyword_resolve(kwargs, keywords={"context": context, "options": __opts__})
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Keyword resolved arguments: {:}".format(kwargs))
 
     kind = kwargs.pop("_type", None)
@@ -73,6 +75,72 @@ def returner_call_handler(name, *args, **kwargs):
     return ret
 
 
+def context_cache_handler(key=None, root_key="cache", compare_data="*", **data):
+    """
+    Manages cached data in the context.
+    """
+
+    # Validate input
+    if key == None and data:
+        raise ValueError("A key must be given to identify cache data")
+
+    ret = {}
+
+    ctx = __context__.setdefault(root_key, {})
+
+    # List all cached items if not key is specified
+    if key == None:
+        ret["values"] = ctx
+
+        return ret
+
+    # Return cached entry for key if not data is specified
+    if not data:
+        ret["value"] = ctx.get(key, {})
+
+        return ret
+
+    # Determine if the data has changed depending on what to compare
+    has_data_changed = False
+    if key in ctx and compare_data:
+        if compare_data == "*":
+            old_data = dict_filter(ctx[key], lambda k: not k.startswith("_"))
+            new_data = dict_filter(data, lambda k: not k.startswith("_"))
+        else:
+            old_data = dict_get(ctx[key], *compare_data.split(":"))
+            new_data = dict_get(data, *compare_data.split(":"))
+
+        if DEBUG:
+            log.debug("Comparing old data '{:}' with new data '{:}' in context cache for key '{:}'".format(old_data, new_data, key))
+
+        has_data_changed = old_data != new_data
+
+    # Go ahead and update the cache
+    if not key in ctx or has_data_changed:
+        data["_count"] = 1
+        data["_first_at"] = datetime.datetime.utcnow()
+        data["_last_at"] = datetime.datetime.utcnow()
+        ctx[key] = data
+
+        if DEBUG:
+            log.debug("Inserted key '{:}' into context cache: {:}".format(key, data))
+
+        ret["value"] = data
+
+    else:
+        data["_count"] = ctx[key]["_count"] + 1
+        data["_first_at"] = ctx[key]["_first_at"]
+        data["_last_at"] = datetime.datetime.utcnow()
+        ctx[key] = data
+
+        if DEBUG:
+            log.debug("Updated key '{:}' in context cache: {:}".format(key, data))
+
+        ret["value"] = data
+
+    return ret
+
+
 def skip_empty_filter(result):
     """
     Filters out empty results.
@@ -87,16 +155,16 @@ def skip_empty_filter(result):
 
     return result
 
-
-def alternating_readout_filter(result):
+def alternating_readout_filter(result, **kwargs):
     """
     Filter that only returns alternating/changed results.
+
+    Optional arguments:
+      - pass_interval (int): Filter passes values only when this many miliseconds have passed between readings, even when the values are different. Default value is '0'.
     """
+    return filter_out_unchanged(result, context=__context__.setdefault("readout", {}), **kwargs)
 
-    return filter_out_unchanged(result, context=__context__.setdefault("readout", {}))
-
-
-def battery_converter(result):
+def battery_converter(result, nominal_voltage_divider=20):
     """
     Converts a voltage reading result with battery charge state and level.
     """
@@ -107,14 +175,99 @@ def battery_converter(result):
     nominal_voltage = opt.get("nominal_voltage", battery_util.DEFAULT_NOMINAL_VOLTAGE)
     critical_limit = opt.get("critical_level", {}).get("voltage", battery_util.DEFAULT_CRITICAL_LIMIT)
 
+    # Autodetect the nominal voltage based on the current voltage
+    is_nominal_voltage_autodetected = False
+    if not nominal_voltage or nominal_voltage == "autodetect":
+        is_nominal_voltage_autodetected = True
+
+        if voltage < nominal_voltage_divider:
+            nominal_voltage = 12
+            if DEBUG:
+                log.debug("Battery converter has autodetected a nominal voltage of 12V")
+
+            # Adjust critical limit if out of range
+            if critical_limit >= nominal_voltage_divider:
+                if DEBUG:
+                    log.debug("Battery converter is adjusting down the configured critical limit from {}V to {}V".format(critical_limit, critical_limit / 2))
+                critical_limit = critical_limit / 2
+        else:
+            nominal_voltage = 24
+            if DEBUG:
+                log.debug("Battery converter has autodetected a nominal voltage of 24V")
+
+            # Adjust critical limit if out of range
+            if critical_limit < nominal_voltage_divider:
+                if DEBUG:
+                    log.debug("Battery converter is adjusting up the configured critical limit from {}V to {}V".format(critical_limit, critical_limit * 2))
+                critical_limit = critical_limit * 2
+
     ret = {
         "_type": "bat",
         "level": battery_util.charge_percentage_for(voltage, nominal_voltage),
         "state": battery_util.state_for(voltage, nominal_voltage, critical_limit),
-        "voltage": voltage
+        "voltage": voltage,
+        "nominal_voltage": nominal_voltage,
+        "is_nominal_voltage_autodetected": is_nominal_voltage_autodetected
     }
 
     return ret
+
+
+def battery_nominal_voltage_event_trigger(result, autodetect_period=10):
+    """
+    Looks for battery results and triggers 'vehicle/battery/nominal_voltage/*' event when the nominal voltage state changes.
+    All possible events are:
+      - vehicle/battery/nominal_voltage/unknown
+      - vehicle/battery/nominal_voltage/autodetected
+      - vehicle/battery/nominal_voltage/predefined
+    """
+
+    data = {}
+
+    # Check for error result
+    error = extract_error_from(result)
+    if error:
+        log.error("Battery nominal voltage event trigger got error result: {:}".format(result))
+
+        state = "unknown"
+        data["reason"] = str(error)
+    else:
+        if DEBUG:
+            log.debug("Battery nominal voltage event trigger got battery result: {:}".format(result))
+
+        if not "nominal_voltage" in result or not "is_nominal_voltage_autodetected" in result:
+            state = "unknown"
+            reason = "nominal_voltage_absent"
+        elif result["is_nominal_voltage_autodetected"]:
+            state = "autodetected"
+            data["value"] = result["nominal_voltage"]
+        else:
+            state = "predefined"
+            data["value"] = result["nominal_voltage"]
+
+   # Check if state or data has chaged since last time
+    ctx = __context__.setdefault("hooklib.battery_nominal_voltage_event_trigger", {})
+    if not ctx or state != ctx.get("state", None) or data != ctx.get("data", None):
+        ctx["state"] = state
+        ctx["data"] = data
+        ctx["timer"] = timer()
+        ctx["count"] = 1
+        ctx["is_sent"] = False
+    else:
+        ctx["count"] += 1
+
+    # Skip if already sent
+    if ctx["is_sent"]:
+        return
+
+    # Skip if state is 'autodetected' and period not reached
+    if state == "autodetected" and (ctx["count"] == 1 or timer() - ctx["timer"] < autodetect_period):
+        return
+
+    # Trigger event
+    __salt__["minionutil.trigger_event"]("vehicle/battery/nominal_voltage/{}".format(state), data=dict(data, **{"_alternating_cache_event_filter.skip": True}))
+
+    ctx["is_sent"] = True
 
 
 def battery_event_trigger(result):
@@ -129,7 +282,7 @@ def battery_event_trigger(result):
 
         state = "unknown"
     else:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Battery event trigger got battery result: {:}".format(result))
 
         state = result["state"]
@@ -182,7 +335,7 @@ def temperature_event_trigger(result):
 
         state = "unknown"
     else:
-        if log.isEnabledFor(logging.DEBUG):
+        if DEBUG:
             log.debug("Temperature event trigger got temperature result: {:}".format(result))
 
         if "value" in result:
@@ -245,7 +398,7 @@ def kernel_error_blacklist_filter(result):
 
     ret = []
 
-    if log.isEnabledFor(logging.DEBUG):
+    if DEBUG:
         log.debug("Compiling regex for pattern: {:}".format(pattern))
 
     regex = re.compile(pattern)
@@ -253,7 +406,7 @@ def kernel_error_blacklist_filter(result):
     for entry in result:
         if regex.match(entry.get("message", "")):
 
-            if log.isEnabledFor(logging.DEBUG):
+            if DEBUG:
                 log.debug("Skipping blacklisted kernel error log entry: {:}".format(entry))
 
             continue
@@ -286,13 +439,13 @@ def kernel_error_event_trigger(result):
             span = dateutil.parser.parse(entry["timestamp"]) - dateutil.parser.parse(last["timestamp"])
             if span.total_seconds() < 60:
 
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Skipping duplicate kernel error log entry ({:} seconds since the last occurrence): {:}".format(span.total_seconds(), entry))
 
                 continue
 
         # Trigger kernel error event
-        __salt__["minionutil.trigger_event"]("system/kernel/error", data=entry)
+        __salt__["minionutil.trigger_event"]("system/kernel/error", data=dict(entry, **{"_alternating_cache_event_filter.skip": True}))
 
         # Store last reported entry
         ctx["last_reported"] = entry
@@ -305,7 +458,7 @@ def getOrCreateGeofenceInContext(ctx):
 
         ctx["geofence"] = {   
             "error": None,
-            "repeat_count_to_trigger_change": 3,
+            "repeat_count_to_trigger_change": 1,
             "fences": [],
             "loaded": False
         }

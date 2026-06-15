@@ -143,9 +143,20 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
 
     ret = {}
 
-    if pending or __context__.get("minionutil.request_restart", False):
+    ctx = __context__.setdefault("minionutil.request_restart", {})
+    if pending or ctx.get("pending", False):
+
+        # Keep a list of reasons in the context
+        ctx.setdefault("reasons", []).append(reason)
+
         if immediately:
             log.warn("Performing minion restart in {:} second(s) because of reason '{:}'".format(delay, reason))
+
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nThe minion service is restarting in {:} second(s).\nReason: {:}\n\n(Press ENTER to continue)\"".format(datetime.datetime.utcnow(), delay, ", ".join(ctx.get("reasons", []))))
+            except:
+                log.exception("Failed to broadcast minion restart notification")
 
             # Trigger a restarting event
             trigger_event("system/minion/restarting", data={"reason": reason})
@@ -172,11 +183,12 @@ def request_restart(pending=True, immediately=False, delay=10, expiration=1200, 
                 log.info("Pending request for minion restart because of reason '{:}' is scheduled to be performed automatically in {:} second(s)".format(reason, expiration))
             else:
                 log.info("Request for minion restart is pending because of reason '{:}'".format(reason))
+
     else:
         log.debug("No pending minion restart request")
 
     # Set pending in context
-    __context__["minionutil.request_restart"] = pending
+    ctx["pending"] = pending
 
     ret["pending"] = pending
     
@@ -332,6 +344,14 @@ def update_release(force=False, demand=False, dry_run=False, only_retry=False, r
             # Ensure dynamic modules are updated (refresh of modules is done in highstate)
             res = __salt__["saltutil.sync_all"](refresh=False)
             ret["dynamic"] = res
+
+            # Trigger a modules synced event
+            has_synced_modules = False
+            for key, val in res.iteritems():
+                if val:
+                    has_synced_modules = True
+                    break
+            trigger_event("system/release/modules_synced", data=res if has_synced_modules else {})
 
             # Run highstate
             res = __salt__["state.highstate"]()

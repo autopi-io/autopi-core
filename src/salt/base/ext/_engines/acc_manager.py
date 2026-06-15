@@ -46,7 +46,7 @@ def connection_handler(close=False):
     Manages current connection.
 
     Optional arguments:
-      - close (bool): Close connection? Default value is 'False'. 
+      - close (bool): Close connection? Default value is 'False'.
     """
 
     ret = {}
@@ -112,10 +112,10 @@ def interrupt_query_handler(cmd, *args, **kwargs):
     # Pass on interrupt timestamp if requested
     if kwargs.get("interrupt_timestamp", False):
         kwargs["interrupt_timestamp"] = interrupt_event.timestamp
-    
+
     interrupt_event.clear()
     context["interrupt"]["total"] += 1
-    
+
     # Perform a normal data read
     return query_handler(cmd, *args, **kwargs)
 
@@ -145,7 +145,7 @@ def dump_handler(duration=1, range=8, rate=12.5, decimals=4, timestamp=True, sou
 
     file_path = abs_file_path(file, "/opt/autopi/acc", ext="json") if file != None else None
     if file_path != None and os.path.isfile(file_path):
-        raise ValueError("File already exists: {:}".format(file_path)) 
+        raise ValueError("File already exists: {:}".format(file_path))
 
     ret = {
         "range": range,
@@ -224,12 +224,14 @@ def dump_handler(duration=1, range=8, rate=12.5, decimals=4, timestamp=True, sou
 
 
 @edmp.register_hook(synchronize=False)
-def alternating_readout_filter(result):
+def alternating_readout_filter(result, **kwargs):
     """
     Filter that only returns alternating/changed results.
-    """
 
-    return filter_out_unchanged(result, context=context["readout"])
+    Optional arguments:
+      - pass_interval (int): Filter passes values only when this many miliseconds have passed between readings, even when the values are different. Default value is '0'.
+    """
+    return filter_out_unchanged(result, context=context["readout"], **kwargs)
 
 
 @edmp.register_hook(synchronize=False)
@@ -271,7 +273,7 @@ def motion_event_trigger(result, jolt_g_threshold=0.3, jolt_duration=1, shake_g_
     shake_duration = settings.get("shake_duration", shake_duration)
     shake_percentage = settings.get("shake_percentage", shake_percentage)
     debounce_delay = settings.get("debounce_delay", debounce_delay)
-    
+
     reinit = settings.pop("reinit", False)
 
     ctx = context.setdefault("motion_event_trigger", {})
@@ -472,7 +474,16 @@ def start(**settings):
             conn = LSM6DSLConn(settings["lsm6dsl_conn"])
 
             if settings.get("trigger_events", True):
-                conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex)}, "system/device/lsm6dsl/error")
+                def on_success(res):
+                    if context.pop("i2c_conn.error", None):
+                        edmp.trigger_event({}, "system/device/lsm6dsl/recover")
+                conn.on_success = on_success
+
+                def on_error(ex):
+                    context["i2c_conn.error"] = str(ex)
+                    edmp.trigger_event({"message": str(ex)}, "system/device/lsm6dsl/error")
+                conn.on_error = on_error
+
         elif "mma8x5x_conn" in settings:
             from mma8x5x_conn import MMA8X5XConn
 
@@ -480,7 +491,18 @@ def start(**settings):
             conn.init(settings["mma8x5x_conn"])
 
             if settings.get("trigger_events", True):
-                conn.on_error = lambda ex: edmp.trigger_event({"message": str(ex)}, "system/device/mma8x5x/error")
+
+                def on_success(res):
+                    if context.pop("i2c_conn.error", None):
+                        edmp.trigger_event({}, "system/device/mma8x5x/recover")
+                conn.on_success = on_success
+
+                def on_error(ex):
+                    context["i2c_conn.error"] = str(ex)
+                    edmp.trigger_event({"message": str(ex)}, "system/device/mma8x5x/error")
+                conn.on_error = on_error
+
+
         else:
             log.error("No supported connection found in settings")
 
@@ -497,9 +519,15 @@ def start(**settings):
         log.exception("Failed to start accelerometer manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

@@ -153,18 +153,22 @@ def sleep(interval=60, delay=60, modem_off=False, acc_off=False, confirm=False, 
         "{:} second(s)".format(interval) if interval > 0 else "infinite",
         delay))
 
-    # First set SPM sleep interval
-    try:
-        __salt__["spm.query"]("sleep_interval", value=interval)
-    except:
-        log.exception("Failed to set sleep interval")
-        interval = 0  # Assume interval is unset
-
     # Run shutdown SLS
     try:
         __salt__["minionutil.run_job"]("state.sls", "shutdown", pillar={"allow_auto_update": allow_auto_update}, _timeout=600)
     except:
         log.exception("Failed to run shutdown SLS")
+
+    # NOTE NV: It's a good idea to keep the sleep_interval being set after the update, because the update might reflash
+    # the SPM firmware, leading to loss of RAM memory, leading to loss of sleep_interval setting. The sleep_interval
+    # being set prior to the update lead to a bug where the devices would go to hibernation instead of sleep after
+    # an attempted update.
+    # Set SPM sleep interval
+    try:
+        __salt__["spm.query"]("sleep_interval", value=interval)
+    except:
+        log.exception("Failed to set sleep interval")
+        interval = 0  # Assume interval is unset
 
     # TODO: Power off audio amp (if not done when shutting down RPi?)
 
@@ -307,6 +311,12 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, refresh=None, **
             # Trigger a cleared event
             __salt__["minionutil.trigger_event"]("system/{:}/cleared".format(name.lstrip("_")), data={"reason": reason})
 
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nCleared sleep timer '{:}' with reason '{:}'.\n\n(Press ENTER to continue)\"".format(datetime.utcnow(), name, reason))
+            except:
+                log.exception("Failed to broadcast sleep timer cleared notification")
+
         # Cancel any pending shutdown
         if clear == "*":
             __salt__["cmd.run"](["shutdown", "-c"], python_shell=False)
@@ -354,7 +364,7 @@ def sleep_timer(enable=None, period=1800, add=None, clear=None, refresh=None, **
 
             # Broadcast notification to all terminals
             try:
-                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nSleep timer '{:}' added which is scheduled to trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, name[name.rindex("/")+1:], expiry))
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nAdded sleep timer '{:}' which is scheduled to trigger at {:}.\nRun command 'autopi power.sleep_timer' to list active sleep timers.\n\n(Press ENTER to continue)\"".format(now, name[name.rindex("/")+1:], expiry))
             except:
                 log.exception("Failed to broadcast sleep timer added notification")
 
@@ -476,16 +486,28 @@ def request_reboot(pending=True, immediately=False, delay=10, reason="unknown"):
       - reason (str): Reason code that tells why we decided to reboot. Default is 'unknown'.
     """
 
-    if pending or __context__.get("power.request_reboot", False):
+    ctx = __context__.setdefault("power.request_reboot", {})
+    if pending or ctx.get("pending", False):
+
+        # Keep a list of reasons in the context
+        ctx.setdefault("reasons", []).append(reason)
+
         if immediately:
             log.warn("Performing system reboot immediately because of reason '{:}'".format(reason))
+
+            # Broadcast notification to all terminals
+            try:
+                __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nThe system is rebooting in {:} second(s).\nReason: {:}\n\n(Press ENTER to continue)\"".format(datetime.utcnow(), delay, ", ".join(ctx.get("reasons", []))))
+            except:
+                log.exception("Failed to broadcast reboot notification")
 
             # Trigger a reboot event
             __salt__["minionutil.trigger_event"](
                 "system/power/reboot",
                 data={
                     "reason": reason,
-                    "uptime": __salt__["status.uptime"]()["seconds"]
+                    "uptime": __salt__["status.uptime"]()["seconds"],
+                    "_alternating_cache_event_filter.skip": True
                 }
             )
 
@@ -503,7 +525,7 @@ def request_reboot(pending=True, immediately=False, delay=10, reason="unknown"):
         log.debug("No pending system reboot request")
 
     # Set pending in context
-    __context__["power.request_reboot"] = pending
+    ctx["pending"] = pending
 
     return {
         "pending": pending,
@@ -528,7 +550,13 @@ def restart_3v3(confirm=False, reason="unknown"):
     log.error("Performing restart of the 3V3 power supply because of reason '{:}'".format(reason))  # NOTE: Error logs propagates to syslog
     ret = __salt__["spm.query"]("restart_3v3")
 
+    # Broadcast notification to all terminals
+    try:
+        __salt__["cmd.run"]("wall -n \"\nATTENTION ({:}):\n\nThe 3V3 power supply has been restarted.\nReason: {:}\n\n(Press ENTER to continue)\"".format(datetime.utcnow(), reason))
+    except:
+        log.exception("Failed to broadcast 3V3 restarted notification")
+
     # Trigger a 3V3 restarted event
-    __salt__["minionutil.trigger_event"]("system/power/3v3/restarted", data={"reason": reason})
+    __salt__["minionutil.trigger_event"]("system/power/3v3/restarted", data={"reason": reason, "_alternating_cache_event_filter.skip": True})
 
     return ret

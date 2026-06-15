@@ -22,19 +22,31 @@ timezone-configured:
     - name: UTC
 
 {%- if salt['grains.get']('osmajorrelease') == 10 %}
+apt-debian-backport-keys:
+  cmd.run:
+    - name: apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0E98404D386FA1D9 && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 6ED0E7B82643E131
+
 {%- if salt['pillar.get']('rpi:boot:bt', default='disable') == 'enable' %}
-backports-repo-added:
-  pkgrepo.managed:
+
+bluez-expired-backports-repo-removed:
+  pkgrepo.absent:
     - name: deb http://deb.debian.org/debian buster-backports main
-    - keyid: 648ACFD622F3D138
-    - keyserver: keyserver.ubuntu.com
+    - refresh: false
+    - require:
+      - cmd: apt-debian-backport-keys
+
+bluez-archive-backports-repo-added:
+  pkgrepo.managed:
+    - name: deb http://archive.debian.org/debian buster-backports main
+    - require:
+      - cmd: apt-debian-backport-keys
 
 bluez-upgraded:
   pkg.installed:
     - name: bluez
     - version: 5.54-1~bpo10+1
     - require:
-      - pkgrepo: backports-repo-added
+      - pkgrepo: bluez-archive-backports-repo-added
 
 bluetooth-sap-disable-override-configured:
   file.managed:

@@ -21,7 +21,11 @@ COMMIT
 -A INPUT -s 0.0.0.0 -d 255.255.255.255 -i uap0 -p udp -m state --state NEW -m udp --dport 67 -j ACCEPT
 -A INPUT -s 192.168.4.0/24 -i uap0 -p tcp -m state --state NEW -m tcp --dport 80 -j ACCEPT
 {%- for permit in salt['pillar.get']('firewall:permits', []) %}
+{%- if permit.get('destination', '') %}
+-A INPUT -p {{ permit.get('protocol', 'tcp') }} -m state --state NEW -m tcp {% if permit.get('destination') != '0.0.0.0' %}-d {{ permit.get('destination') }} {% endif %}--dport {{ permit.get('port') }} -j ACCEPT
+{%- else %}
 -A INPUT {% if permit.get('interface', 'uap0') == 'uap0' %}-s 192.168.4.0/24 {% endif %}-i {{ permit.get('interface', 'uap0') }} -p {{ permit.get('protocol', 'tcp') }} -m state --state NEW -m tcp --dport {{ permit.get('port') }} -j ACCEPT
+{%- endif %}
 {%- endfor %}
 {%- for entry in salt['pillar.get']('firewall:entries', []) %}
 {{ entry }}

@@ -13,3 +13,8 @@ obd-bus-{{ bus['id'] }}-can-db-removed:
     - name: /opt/autopi/obd/can/db/protocol_{{ bus['protocol_id'] }}.dbc
 {%- endif %}
 {%- endfor %}
+
+# Required to signal that SLS 'obd.can.db.sync' has run when no buses are available
+obd-can-db-sync-completed:
+  test.succeed_without_changes:
+    - comment: CAN DB sync completed

@@ -180,7 +180,23 @@ up ()
     [ $? -gt 0 ] && echoerr "[ERROR] Failed to communicate with QMI device -" $(printf "$STDERR" | grep "^error:") && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] Successfully communicated with QMI device"
 
-    # Check if SIM card is present
+    # Ensure QMI device is in online operating mode
+    qmicli --device-open-$MODE --device $DEVICE --dms-get-operating-mode | grep -q "Mode: 'online'"
+    if [ $? -gt 0 ]; then
+        echo "Going to put device in operating mode online..."
+
+        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
+        [ $? -gt 0 ] && echoerr "[ERROR] Failed to put QMI device into online operating mode" && return $ERROR
+        [ $VERBOSE == true ] && echo "[INFO] QMI device is put into online operating mode"
+
+        # Give device some time to be ready before network check and start of connection
+        # NOTE: Too little time results in errors and establish of connection fails
+        sleep 1
+    else
+        [ $VERBOSE == true ] && echo "[INFO] QMI device is already in online operating mode"
+    fi
+
+    # Check if SIM card is present (NOTE: No longer possible if not in online operating mode)
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
     [ $? -gt 0 ] && echoerr "[ERROR] No SIM card present" && return $ERROR
     [ $VERBOSE == true ] && echo "[INFO] SIM card is present"
@@ -199,22 +215,6 @@ up ()
 
     else
         echoerr "[WARN] No SIM config file found at '$SIM_CONF'"
-    fi
-
-    # Ensure QMI device is in online operating mode
-    qmicli --device-open-$MODE --device $DEVICE --dms-get-operating-mode | grep -q "Mode: 'online'"
-    if [ $? -gt 0 ]; then
-        echo "Going to put device in operating mode online..."
-
-        qmicli --device-open-$MODE --device $DEVICE --dms-set-operating-mode=online
-        [ $? -gt 0 ] && echoerr "[ERROR] Failed to put QMI device into online operating mode" && return $ERROR
-        [ $VERBOSE == true ] && echo "[INFO] QMI device is put into online operating mode"
-
-        # Give device some time to be ready before network check and start of connection
-        # NOTE: Too little time results in errors and establish of connection fails
-        sleep 1
-    else
-        [ $VERBOSE == true ] && echo "[INFO] QMI device is already in online operating mode"
     fi
 
     # Check for network
@@ -351,9 +351,20 @@ ensure_second_pdp_context_deleted ()
     retry 3 1 "qmicli --device-open-$MODE --device $DEVICE --uim-get-card-status | grep -q \"Card state: 'present'\""
     if [ $? -eq 0 ]
     then
-        # Requires le910cx modem...
-        echo "[INFO] Removing second PDP context"
-        autopi modem.connection pdp_context cid=2 delete_cid=true
+        # First, make sure we actually need to delete the pdp context
+        autopi modem.connection pdp_context | grep -q "cid: 2"
+        if [ $? -eq 0 ]
+        then
+            # First, bring the qmi-manager down to make sure that we can clear out the context
+            # if it's in use, we can't clear it
+            down
+
+            # Requires le910cx modem...
+            echo "[INFO] Removing second PDP context"
+            autopi modem.connection pdp_context cid=2 delete_cid=true
+        else
+            echo "[INFO] Skipping clearing of PDP context as it already has been cleared"
+        fi
     else
         echo "[INFO] No SIM present, skipping removing of second PDP context, even though it was requested"
     fi

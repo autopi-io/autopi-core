@@ -134,7 +134,7 @@ def grep(pattern, file, tail_lines=10):
 
     ret = {}
 
-    cmd = ["grep", pattern, file]
+    cmd = ["grep", "-a", pattern, file]
     if tail_lines > 0:
         cmd.extend(["|", "tail", "-n", str(tail_lines)])
 

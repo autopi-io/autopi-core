@@ -24,7 +24,16 @@ class SerialConn(object):
                     self.ensure_open()
 
                     try:
-                        return func(self, *args, **kwargs)
+                        ret = func(self, *args, **kwargs)
+
+                        if self.on_success:
+                            try:
+                                self.on_success(ret)
+                            except:
+                                log.exception("Error in 'on_success' event handler")
+
+                        return ret
+
                     except SerialException as se:
                         if self._settings.get("close_on_error", True):
                             log.warning("Closing serial connection due to error: {:}".format(se))
@@ -35,6 +44,16 @@ class SerialConn(object):
                                 log.exception("Failed to close serial connection after error occurred: {:}".format(se))
 
                         raise
+
+                except Warning as wa:  # NOTE: A warning is not considered an error
+                    if self.on_success:
+                        try:
+                            self.on_success(wa)
+                        except:
+                            log.exception("Error in 'on_success' event handler")
+
+                    raise
+
                 except Exception as ex:
                     if self.on_error:
                         try:
@@ -55,6 +74,7 @@ class SerialConn(object):
         self._settings = {}
 
         self.on_open = None
+        self.on_success = None
         self.on_error = None
 
     def init(self, settings):
@@ -88,6 +108,12 @@ class SerialConn(object):
         log.info("Opening serial connection")
 
         try :
+
+            if not self._serial:
+                log.warning("Re-initializing serial connection using settings: {:}".format(self._settings))
+
+                self.init(self._settings)
+
             self._serial.open()
 
             if self.on_open:
@@ -100,10 +126,12 @@ class SerialConn(object):
         except Exception:
             log.exception("Failed to open serial connection")
 
+            self._serial = None
+
             raise
 
     def is_open(self):
-        return self._serial.is_open
+        return self._serial and self._serial.is_open
 
     def ensure_open(self):
         if not self.is_open():
@@ -117,8 +145,12 @@ class SerialConn(object):
             self._open_timer = timer()
             self.open()
 
-    def close(self):
-        self._serial.close()
+    def close(self, discard=False):
+        try:
+            self._serial.close()
+        finally:
+            if discard:
+                self._serial = None
 
     def __enter__(self):
         return self.open()
@@ -163,10 +195,11 @@ class SerialConn(object):
 
         return line
 
+    @Decorators.ensure_open
     def read_lines(self, timeout=None):
 
         # Read first line using initial or parameter timeout
-        line = self.read_line(timeout)
+        line = self.read_line.undecorated(self, timeout)
         if not line:
             return
 
@@ -175,7 +208,7 @@ class SerialConn(object):
 
         # Read following lines without any timeout
         while True:
-            line = self.read_line(timeout=0)
+            line = self.read_line.undecorated(self, timeout=0)
 
             # Stop reading when no more data
             if not line:
@@ -228,6 +261,7 @@ class SerialConn(object):
                     if match:
                         groups = match.groupdict()
                         if groups:
+                            groups["raw"] = line
                             ret["error"] = groups
                         else:
                             ret["error"] = line

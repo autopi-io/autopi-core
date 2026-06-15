@@ -54,7 +54,7 @@ def _init_pins():
         # Ensure all pins are set to initial values
         for action in context.get("actions", {}).values():
             gpio_pin = context["pin_wires"][action["pin"]["wire"]]
-            
+
             if log.isEnabledFor(logging.DEBUG):
                 log.debug("Re-initializing GPIO output pin {:}".format(gpio_pin))
 
@@ -67,7 +67,7 @@ def _init_pins():
 
         log.info("GPIO pins re-initialized")
 
-    # After (re-)initialization check for delay 
+    # After (re-)initialization check for delay
     if ret:
         delay = context.get("settings", {}).get("delay_after_init_pins", 0)
         if delay > 0:
@@ -132,7 +132,7 @@ def power_handler(value=None):
     Powers on/off key fob.
 
     Optional arguments:
-      - value (bool): Power on or off. 
+      - value (bool): Power on or off.
     """
 
     ret = {}
@@ -344,10 +344,17 @@ def start(**settings):
         log.exception("Failed to start key fob manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
+
     finally:
         log.info("Stopping key fob manager")

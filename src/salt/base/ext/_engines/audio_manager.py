@@ -3,6 +3,7 @@ import importlib
 import logging
 import RPi.GPIO as gpio
 import salt.exceptions
+import time
 
 from messaging import EventDrivenMessageProcessor
 from retrying import retry
@@ -47,7 +48,7 @@ def _ensure_mixer():
 
         if DEBUG:
             log.debug("Successfully initialized mixer")
-        
+
         ctx["initialized"] = True
 
     except Exception:
@@ -66,7 +67,7 @@ def _ensure_amplifier():
         log.info("Ensures the amplifier is powered on")
 
         if __opts__.get("spm.version", 1.0) >= 4.0:
-            res = __salt__["spm.query"]("sys_pins", high="sw_amp")
+            res = __salt__["spm.query"]("sys_pins", high="sw_amp", reason="ensure_amp_power")
             assert res["output"]["sw_amp"] == True, "The amplifier was not switched on in the SPM"
         else:
             gpio.setwarnings(False)
@@ -86,7 +87,7 @@ def _ensure_amplifier():
 @edmp.register_hook()
 def play_handler(audio_file, force=False, loops=0, volume=None):
     """
-    Plays a specific audio file. 
+    Plays a specific audio file.
 
     Arguments:
       - audio_file (str): Local path of the audio file to play.
@@ -273,9 +274,15 @@ def start(**settings):
         log.exception("Failed to start audio manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

@@ -12,6 +12,8 @@ from common_util import dict_key_by_value
 
 log = logging.getLogger(__name__)
 
+DEBUG = log.isEnabledFor(logging.DEBUG)
+
 # +CME ERROR: unknown
 error_regex = re.compile("ERROR|\+(?P<type>.+) ERROR: (?P<reason>.+)")
 
@@ -176,9 +178,9 @@ class LE910CXConn(SerialConn):
 
     def open(self):
         super(LE910CXConn, self).open()
-        self.config(self._settings)
-        
-    def config(self, settings):
+        self._config(self._settings)
+
+    def _config(self, settings):
         """
         Configure the modem with passed settings.
         """
@@ -189,33 +191,43 @@ class LE910CXConn(SerialConn):
         try:
             # Ensure modem is ready to receive commands
             ready = False
-            max_retries = 5
-            for i in range(max_retries):
+            max_retries = 6
+            for i in range(1, max_retries + 1):
                 try:
-                    self.execute("ATI")
+                    self.execute.undecorated(self, "ATI")
                     ready = True
                     break
-                except CommandExecutionException as e:
-                    log.exception("Received error {} while waiting for modem to be ready".format(e))
-                    time.sleep(.5) # Sleep to give time for modem to be ready?
+                except CommandExecutionException:
+                    if i < max_retries:
+                        delay = 0.5 * i * i  # 0.5, 2.0, 4.5, 8.0, 12.5
+                        log.exception("Failed attempt {}/{} to wait for modem to be ready, sleeping for {:} seconds before next attempt".format(i, max_retries, delay))
+                        time.sleep(delay) # Sleep to give time for modem to be ready before next attempt
+                    else:
+                        log.exception("Failed attempt {}/{} to wait for modem to be ready".format(i, max_retries))
 
             if not ready:
-                raise Exception("Modem isn't ready to receive commands yet")
+                raise Exception("Modem is not ready to receive commands yet")
 
             # Configure echo on/off
-            self.execute("ATE{:d}".format(settings.get("echo_on", True)))
+            self.execute.undecorated(self, "ATE{:d}".format(settings.get("echo_on", True)))
 
             # Configure GNSS
             if "error_config" in settings:
-                self.error_config(mode=settings["error_config"])
+                self.error_config.undecorated(self, mode=settings["error_config"])
 
             if "gnss_session" in settings:
-                self.gnss_session(status=settings["gnss_session"])
+                self.gnss_session.undecorated(self, status=settings["gnss_session"])
 
-        except Exception as e:
+        except:
             log.exception("Error occurred while configuring LE910CX modem, closing connection")
-            self.close()
+            try:
+                self.close()
+            except:
+                log.exception("Unable to close serial connection after failing to configure")
 
+            raise
+
+    @SerialConn.Decorators.ensure_open
     def execute(self, cmd, ready_words=["OK"], keep_conn=True, cooldown_delay=None, timeout=None, raise_on_error=True):
         """
         Execute a custom AT command.
@@ -232,14 +244,15 @@ class LE910CXConn(SerialConn):
         - raise_on_error (bool): Set this to true to raise an error when the modem responds with an error. Default: True.
         """
 
-        log.debug("Executing AT command: %s", cmd)
+        if DEBUG:
+            log.debug("Executing AT command: %s", cmd)
         res = None
 
         try:
-            self.write_line(cmd)
+            self.write_line.undecorated(self, cmd)
 
             for ready_word in ready_words:
-                res = self.read_until(ready_word, error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
+                res = self.read_until.undecorated(self, ready_word, error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
 
                 if "error" in res:
                     log.error("Command {} returned error {}".format(cmd, res["error"]))
@@ -259,10 +272,11 @@ class LE910CXConn(SerialConn):
 
         # Raise on error
         if raise_on_error and "error" in res:
-            raise CommandExecutionException("Command {} returned error {}".format(cmd, res["error"]))
+            raise CommandExecutionException("Command '{}' returned error: {}".format(cmd, res["error"]))
 
         return res
 
+    @SerialConn.Decorators.ensure_open
     def error_config(self, mode=None, force=False):
         """
         Configures the error values the modem returns.
@@ -279,57 +293,62 @@ class LE910CXConn(SerialConn):
         """
 
         ret = {}
-        res = self.execute("AT+CMEE?")
+        res = self.execute.undecorated(self, "AT+CMEE?")
 
         res_regex = re.compile("\+CMEE: (?P<mode>[0-2])")
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("Error config did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("Error config did not receive an expected response")
 
         ret["mode"] = ME_ERROR_MODE_MAP[int(match.group("mode"))]
 
         if mode != None:
             # Validate mode
             if type(mode) != str or mode not in ME_ERROR_MODE_MAP.values():
-                raise ValueError("'mode' argument needs to be one of {}".format(ME_ERROR_MODE_MAP.values()))
+                raise ValueError("The 'mode' argument needs to be one of {}".format(ME_ERROR_MODE_MAP.values()))
 
             if ret["mode"] != mode or force:
                 mode_val = dict_key_by_value(ME_ERROR_MODE_MAP, mode)
-                self.execute("AT+CMEE={:d}".format(mode_val))
+                self.execute.undecorated(self, "AT+CMEE={:d}".format(mode_val))
 
                 ret["mode"] = mode
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def imei(self):
-        res = self.execute("AT+GSN=1")
+        res = self.execute.undecorated(self, "AT+GSN=1")
         return re.compile("\\+GSN: (?P<value>[0-9]+)").match(res.get("data", "")).groupdict()
 
+    @SerialConn.Decorators.ensure_open
     def manufacturer_id(self):
         ret = {}
 
-        res = self.execute("AT+GMI")
+        res = self.execute.undecorated(self, "AT+GMI")
         ret["value"] = res.get("data", None)
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def model_id(self):
         ret = {}
 
-        res = self.execute("AT+GMM")
+        res = self.execute.undecorated(self, "AT+GMM")
         ret["value"] = res.get("data", None)
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def soft_reset(self):
         ret = {}
 
-        self.execute("ATZ")
+        self.execute.undecorated(self, "ATZ")
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def reset(self, mode=None, delay=0):
         """
         Enable or disable the one shot or periodic unit reset.
@@ -349,12 +368,12 @@ class LE910CXConn(SerialConn):
             ret = {}
 
             res_regex = re.compile("^#ENHRST: (?P<mode>[0-2])(,(?P<delay>[0-9]+),(?P<remain_time>[0-9]+))?$")
-            res = self.execute("AT#ENHRST?")
+            res = self.execute.undecorated(self, "AT#ENHRST?")
 
             match = res_regex.match(res.get("data", ""))
             if not match:
-                log.error("Didn't receive expected response: {}".format(res))
-                raise InvalidResponseException("Didn't receive expected response")
+                log.error("Reset did not receive an expected response: {}".format(res))
+                raise InvalidResponseException("Reset did not receive an expected response")
 
             ret["mode"] = match.group("mode")
 
@@ -369,10 +388,10 @@ class LE910CXConn(SerialConn):
         # Otherwise, lets set it
         # Validate first
         if type(mode) != str or mode not in PERIODIC_RESET_MODE_MAP.values():
-            raise ValueError("'mode' parameter must be one of {}".format(PERIODIC_RESET_MODE_MAP.values()))
+            raise ValueError("The 'mode' parameter must be one of {}".format(PERIODIC_RESET_MODE_MAP.values()))
 
         if type(delay) != int:
-            raise TypeError("'delay' parameter must be an integer")
+            raise TypeError("The 'delay' parameter must be an integer")
 
         # Construct AT command
         mode_val = dict_key_by_value(PERIODIC_RESET_MODE_MAP, mode)
@@ -384,31 +403,35 @@ class LE910CXConn(SerialConn):
 
         # Don't keep connection if we're immediately resetting, wait for modem to come back up
         if mode_val in [PERIODIC_RESET_MODE_ONE_SHOT, PERIODIC_RESET_MODE_PERIODIC] and delay == 0:
-            return self.execute(cmd, keep_conn=False, cooldown_delay=10)
+            return self.execute.undecorated(self, cmd, keep_conn=False, cooldown_delay=10)
 
         # Keep connection otherwise, we might want to execute more commands
-        return self.execute(cmd)
+        return self.execute.undecorated(self, cmd)
 
+    @SerialConn.Decorators.ensure_open
     def time(self):
         # TODO NV: Improve to be consistent with the rest of the class implementation
 
-        return self.execute("AT+CCLK?")
+        return self.execute.undecorated(self, "AT+CCLK?")
 
+    @SerialConn.Decorators.ensure_open
     def cell_location(self):
         # TODO NV: Improve to be consistent with the rest of the class implementation
 
-        return self.execute("AT#GTP")
+        return self.execute.undecorated(self, "AT#GTP")
 
+    @SerialConn.Decorators.ensure_open
     def sms_storage(self):
         # TODO NV: Improve to be consistent with the rest of the class implementation
         ret = {}
 
-        res = self.execute("AT+CPMS?")
+        res = self.execute.undecorated(self, "AT+CPMS?")
         re.compile("\\+CPMS: \"(?P<read_mem>[0-1])\"").match(res.get("data", ""))
 
 
         ret["mode"] = SMS_FORMAT_MODES.get(int(re.compile("\\+CMGF: (?P<mode>[0-1])").match(res.get("data", "")).group("mode")), None)
 
+    @SerialConn.Decorators.ensure_open
     def sms_format(self, mode=None, force=False):
         """
         Configures the SMS format.
@@ -422,7 +445,7 @@ class LE910CXConn(SerialConn):
         ret = {}
 
         if not force:
-            res = self.execute("AT+CMGF?")
+            res = self.execute.undecorated(self, "AT+CMGF?")
             ret["mode"] = SMS_FORMAT_MODES.get(int(re.compile("\\+CMGF: (?P<mode>[0-1])").match(res.get("data", "")).group("mode")), None)
         elif mode == None:
             raise ValueError("Mode must be specified")
@@ -434,11 +457,12 @@ class LE910CXConn(SerialConn):
                 raise ValueError("Unsupported mode")
 
             if force or mode != ret["mode"]:
-                self.execute("AT+CMGF={:d}".format(dict_key_by_value(SMS_FORMAT_MODES, mode)))
+                self.execute.undecorated(self, "AT+CMGF={:d}".format(dict_key_by_value(SMS_FORMAT_MODES, mode)))
                 ret["mode"] = mode
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def sms_list(self, status="ALL", clear=False, format_mode="TXT"):
         """
         Returns a list of all SMS messages currently stored on the modem.
@@ -457,19 +481,19 @@ class LE910CXConn(SerialConn):
         """
 
         # First check if the SIM is present
-        sim = self.query_sim_status()
+        sim = self.query_sim_status.undecorated(self)
         if sim["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
             raise NoSimPresentWarning()
 
         ret = {"values": []}
 
         # Ensure message format mode
-        prev_format_mode = self.sms_format().get("mode", "PUD")
+        prev_format_mode = self.sms_format.undecorated(self).get("mode", "PUD")
         if prev_format_mode != format_mode:
-            self.sms_format(mode=format_mode)
+            self.sms_format.undecorated(self, mode=format_mode)
 
         try:
-            res = self.execute("AT+CMGL=\"{:s}\"".format(status))
+            res = self.execute.undecorated(self, "AT+CMGL=\"{:s}\"".format(status))
             if not res.get("data", None):
                 return ret
 
@@ -491,21 +515,47 @@ class LE910CXConn(SerialConn):
 
             # NOTE NV: This could potentially cause problems if the output is unexpected, we don't check it before
             # actually starting the loop...
-            for i in range(0, len(res["data"]), 2): # Process every second one - one message is two entries in here
-                meta = res["data"][i]
-                data = res["data"][i+1]
+            # NOTE: Using a while loop so we can advance by 1 instead of 2 when an empty SMS is encountered
+            # (i.e. data is actually the next message's meta line).
+            i = 0
+            while i < len(res["data"]):
+                data_meta_match = None
+                # We try this:
+                try:
+                    meta = res["data"][i]
+                    data = ""
+                    if i + 1 < len(res["data"]):
+                        data = res["data"][i + 1]
+                    # match meta data
+                    meta_match = meta_regex.match(meta)
+                    # try to match data with meta regex - if match - we have received an empty
+                    # message; treat data as the next meta by only advancing i by 1
+                    data_meta_match = meta_regex.match(data)
+                    if data_meta_match:
+                        data = None
+                # If we fail, delete all texts and return nothing
+                except:
+                    try:
+                        log.exception("Malformed SMS recieved - Deleting malformed text")
+                        meta_match = meta_regex.match(meta)
+                        idx = int(meta_match.group("index"))
+                        res = self.sms_delete.undecorated(self, [idx], confirm=True)
+                        ret["clear"] = res
+                        return None
+                    except:
+                        log.exception("Malformed SMS - Deleting all text due to missing meta_data in malformed text")
+                        self.execute.undecorated(self, "AT+CMGD=1,4")
+                        return None
 
-                # Parse meta
-                meta_match = meta_regex.match(meta)
                 if not meta_match:
-                    log.error("Didn't receive expected response from modem: {}".format(meta))
-                    raise InvalidResponseException("Didn't receive expected response")
+                    log.error("SMS list did not receive an expected response from the modem: {}".format(meta))
+                    raise InvalidResponseException("SMS list did not receive an expected response")
 
                 # Parse timestamp (https://stackoverflow.com/a/35444511)
                 scts_match = scts_regex.match(meta_match.group("scts"))
                 if not scts_match:
-                    log.error("Didn't receive expected Service Center Time Stamp from modem: {}. Full meta line: {}".format(scts, meta))
-                    raise InvalidResponseException("Didn't receive expected response")
+                    log.error("SMS list did not receive an expected Service Center Time Stamp from the modem: {}. Full meta line: {}".format(meta_match.group("scts"), meta))
+                    raise InvalidResponseException("SMS list did not receive an expected response")
 
                 # NOTE NV: Since the modem stores a time offset value (timezone info) we need to use that
                 # to calculate the timestamp to be in UTC. Keep in mind that this calculation has only been
@@ -539,19 +589,22 @@ class LE910CXConn(SerialConn):
 
                 ret["values"].append(msg)
 
+                # Advance by 1 if data was actually the next meta (empty SMS), else by 2
+                i += 1 if data_meta_match else 2
+
             # Finally clear messages if required
             if bool(clear):
-                res = self.sms_delete(*[m["index"] for m in ret["values"]], confirm=True)
+                res = self.sms_delete.undecorated(self, *[m["index"] for m in ret["values"]], confirm=True)
                 ret["clear"] = res
-
         finally:
             try:
-                self.sms_format(mode=prev_format_mode)
+                self.sms_format.undecorated(self, mode=prev_format_mode)
             except:
                 log.exception("Failed to restore SMS format mode")
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def sms_delete(self, *indexes, **kwargs):
         """
         Deletes SMS message(s) stored on the modem.
@@ -578,7 +631,7 @@ class LE910CXConn(SerialConn):
 
         if delete_all:
             log.info("Deleting *ALL* SMS messages in storage!")
-            self.execute("AT+CMGD=1,4")
+            self.execute.undecorated(self, "AT+CMGD=1,4")
             ret["deleted"] = "All stored messages deleted"
 
         else:
@@ -593,11 +646,12 @@ class LE910CXConn(SerialConn):
                     continue
 
                 log.info("Deleting message with index {}".format(i))
-                self.execute("AT+CMGD={},0".format(i))
+                self.execute.undecorated(self, "AT+CMGD={},0".format(i))
                 ret["deleted"][i] = True
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def gnss_location(self, decimal_degrees=False):
         """
         Fetches current GPS location and other GPS related metadata from the modem.
@@ -608,7 +662,7 @@ class LE910CXConn(SerialConn):
         """
 
         ret = {}
-        res = self.execute("AT$GPSACP")
+        res = self.execute.undecorated(self, "AT$GPSACP")
 
         # Example responses (you can use these for testing)
         # $GPSACP: 093446.000,5702.1608N,00956.1064E,1.4,-30.6,3,0.0,0.0,0.0,140622,04,04
@@ -631,8 +685,8 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("GNSS location did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("GNSS location did not receive an expected response")
 
         if int(match.group("fix")) in [ GNSS_LOCATION_FIX_INVALID_FIX, GNSS_LOCATION_FIX_NO_FIX ]:
             raise NoFixWarning()
@@ -694,6 +748,7 @@ class LE910CXConn(SerialConn):
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def gnss_session(self, status=None, force=False):
         """
         Gets or sets the GNSS session status (i.e. is the dedicated GPS enabled).
@@ -704,28 +759,29 @@ class LE910CXConn(SerialConn):
         """
 
         ret = {}
-        res = self.execute("AT$GPSP?")
+        res = self.execute.undecorated(self, "AT$GPSP?")
 
         res_regex = re.compile("\\$GPSP: (?P<status>[0-1])")
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("GNSS session did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("GNSS session did not receive an expected response")
 
         # NOTE: Have to parse to int first, as any non-empty string will result in a truthy value
         ret["status"] = bool(int(match.group("status")))
 
         if status != None:
             if type(status) != bool:
-                raise TypeError("'status' parameter needs to be of type 'bool'")
+                raise TypeError("The 'status' parameter needs to be of type 'bool'")
 
             if status != ret["status"] or force:
-                self.execute("AT$GPSP={:d}".format(status))
+                self.execute.undecorated(self, "AT$GPSP={:d}".format(status))
                 ret["status"] = status
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def gnss_nmea_data_config(self, mode=None, gga=False, gll=False, gsa=False, gsv=False, rmc=False, vtg=False, force=False):
         """
         Gets or sets the NMEA data configuration of the modem.
@@ -749,7 +805,7 @@ class LE910CXConn(SerialConn):
         """
 
         ret = {}
-        res = self.execute("AT$GPSNMUN?")
+        res = self.execute.undecorated(self, "AT$GPSNMUN?")
 
         res_regex = re.compile("^\$GPSNMUN: " + \
                 "(?P<mode>[0-3])," + \
@@ -763,8 +819,8 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("GNSS NMEA data config did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("GNSS NMEA data config did not receive an expected response")
 
         # Construct return value
         # NOTE: We need to parse to int first, as any non-empty string will result in a truthy value: bool('0') == True
@@ -779,7 +835,7 @@ class LE910CXConn(SerialConn):
         if mode != None:
             # Validate mode
             if type(mode) != str or mode not in NMEA_MODE_MAP.values():
-                raise ValueError("'mode' argument needs to be one of {}".format(NMEA_MODE_MAP.values()))
+                raise ValueError("The 'mode' argument needs to be one of {}".format(NMEA_MODE_MAP.values()))
 
             # Validate services
             if type(gga) != bool or \
@@ -788,7 +844,7 @@ class LE910CXConn(SerialConn):
             type(gsv) != bool or \
             type(rmc) != bool or \
             type(vtg) != bool:
-                raise ValueError("'gga', 'gll', 'gsa', 'gsv', 'rmc' and 'vtg' parameters all need to be of type 'bool'")
+                raise ValueError("The 'gga', 'gll', 'gsa', 'gsv', 'rmc' and 'vtg' parameters all need to be of type 'bool'")
 
             # Determine if we need to execute an extra command
             if ret["mode"] != mode or \
@@ -804,9 +860,9 @@ class LE910CXConn(SerialConn):
                     dict_key_by_value(NMEA_MODE_MAP, mode), bool(gga), bool(gll), bool(gsa), bool(gsv), bool(rmc), bool(vtg))
 
                 if mode_val == NMEA_MODE_PORT_LOCK:
-                    res = self.execute(cmd, ready_words=["CONNECT"])
+                    res = self.execute.undecorated(self, cmd, ready_words=["CONNECT"])
                 else:
-                    res = self.execute(cmd)
+                    res = self.execute.undecorated(self, cmd)
 
                 # Construct return value
                 ret["mode"] = mode
@@ -819,7 +875,8 @@ class LE910CXConn(SerialConn):
 
         return ret
 
-    def nmea_messages(self, timeout=5):
+    @SerialConn.Decorators.ensure_open
+    def _nmea_messages(self, timeout=5):
         """
         Read all NMEA messages that have been sent by the modem.
 
@@ -828,7 +885,7 @@ class LE910CXConn(SerialConn):
           Default 5.
         """
 
-        raw_lines = self.read_lines(timeout)
+        raw_lines = self.read_lines.undecorated(self, timeout)
 
         if not raw_lines:
             return []
@@ -836,7 +893,8 @@ class LE910CXConn(SerialConn):
         lines = [ line.strip() for line in raw_lines ]
         return lines
 
-    def send_nmea_escape_sequence(self, wait=False, timeout=3):
+    @SerialConn.Decorators.ensure_open
+    def _send_nmea_escape_sequence(self, wait=False, timeout=3):
         """
         Send NMEA escape sequence to stop unsolicited NMEA messages and unlock
         the ability to send AT commands again.
@@ -850,13 +908,14 @@ class LE910CXConn(SerialConn):
         """
 
         # Send escape sequence
-        self.write("+++")
+        self.write.undecorated(self, "+++")
 
         if wait:
             # Wait for the port to become available again
-            res = self.read_until("NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
+            res = self.read_until.undecorated(self, "NO CARRIER", error_regex, timeout=timeout, echo_on=self._settings.get("echo_on", True))
             return res
 
+    @SerialConn.Decorators.ensure_open
     def active_firmware_image(self, net_conf=None, storage_conf=None, force=False, cooldown_delay=20):
         """
         Gets or sets the active firmware configuration on the modem. Don't pass any arguments to query (get) the
@@ -885,7 +944,7 @@ class LE910CXConn(SerialConn):
         # argument to work, it always came back with an error. So, I've ommited it.
 
         ret = {}
-        res = self.execute("AT#FWSWITCH?")
+        res = self.execute.undecorated(self, "AT#FWSWITCH?")
 
         # Response format:
         # #FWSWITCH: <net_conf>,<storage_conf>
@@ -894,8 +953,8 @@ class LE910CXConn(SerialConn):
         match = res_regex.match(res.get("data", ""))
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("Active firmware image did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("Active firmware image did not receive an expected response")
 
         ret["net_conf"] = FW_NET_CONF_MAP[int(match.group("net_conf"))]
         ret["storage_conf"] = FW_STORAGE_CONF_MAP[int(match.group("storage_conf"))]
@@ -905,7 +964,7 @@ class LE910CXConn(SerialConn):
 
         if net_conf != None:
             if type(net_conf) != str or net_conf not in FW_NET_CONF_MAP.values():
-                raise ValueError("'net_conf' needs to be one of {}".format(FW_NET_CONF_MAP.values()))
+                raise ValueError("The 'net_conf' needs to be one of {}".format(FW_NET_CONF_MAP.values()))
 
             if ret["net_conf"] != net_conf or force:
                 net_conf_val = dict_key_by_value(FW_NET_CONF_MAP, net_conf)
@@ -916,7 +975,7 @@ class LE910CXConn(SerialConn):
                 if storage_conf != None:
                     # Use passed value
                     if type(storage_conf) != str or storage_conf not in FW_STORAGE_CONF_MAP.values():
-                        raise ValueError("'storage_conf' needs to be one of {}".format(FW_STORAGE_CONF_MAP.values()))
+                        raise ValueError("The 'storage_conf' needs to be one of {}".format(FW_STORAGE_CONF_MAP.values()))
 
                     storage_conf_val = dict_key_by_value(FW_STORAGE_CONF_MAP, storage_conf)
                     cmd = "{},{:d}".format(cmd, storage_conf_val)
@@ -927,10 +986,11 @@ class LE910CXConn(SerialConn):
                     cmd = "{},{:d}".format(cmd, int(match.group("storage_conf")))
 
                 # Since the modem will restart, we give up the connection and give it time to reboot
-                self.execute(cmd, keep_conn=False, cooldown_delay=cooldown_delay)
+                self.execute.undecorated(self, cmd, keep_conn=False, cooldown_delay=cooldown_delay)
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def query_sim_status(self):
         """
         Queries for the current SIM status.
@@ -946,21 +1006,22 @@ class LE910CXConn(SerialConn):
         # since we're not listening to those anyways.
 
         ret = {}
-        res = self.execute("AT#QSS?")
+        res = self.execute.undecorated(self, "AT#QSS?")
 
         # Response format
         # #QSS: <mode>,<status>
         res_regex = re.compile("^#QSS: (?P<mode>[0-2]),(?P<status>[0-3])")
-        match = res_regex.match(res.get("data", ""))
+        match = res_regex.match(res.get("data", "") or "")
 
         if not match:
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("Query SIM status did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("Query SIM status did not receive an expected response")
 
         ret["status"] = QSS_MAP[int(match.group("status"))]
 
         return ret
 
+    @SerialConn.Decorators.ensure_open
     def pdp_context(self, cid=None, pdp_type=None, apn=None, delete_cid=False, force=False):
         """
         Optional parameters:
@@ -978,12 +1039,12 @@ class LE910CXConn(SerialConn):
         """
 
         # First check if the SIM is present
-        sim_status = self.query_sim_status()
+        sim_status = self.query_sim_status.undecorated(self)
         if sim_status["status"] == QSS_MAP[QSS_STATUS_NOT_INSERTED]:
             raise NoSimPresentWarning()
 
         ret = []
-        res = self.execute("AT+CGDCONT?")
+        res = self.execute.undecorated(self, "AT+CGDCONT?")
 
         # Response format
         # +CGDCONT: <cid>,<PDP_type>,<APN>,<PDP_addr>,<d_comp>,<h_comp>,<IPv4AddrAlloc>,<Emergency_ind><CR><LF>[...]
@@ -1002,8 +1063,8 @@ class LE910CXConn(SerialConn):
         elif type(res.get("data")) == list: # Multiple line res
             res_data = res.get("data", [])
         else: # Invalid response?
-            log.error("Didn't receive expected response from modem: {}".format(res))
-            raise InvalidResponseException("Didn't receive expected response")
+            log.error("PDP context did not receive an expected response from the modem: {}".format(res))
+            raise InvalidResponseException("PDP context did not receive an expected response")
 
         # Process response data
         res_regex = re.compile("^\+CGDCONT: " + \
@@ -1022,8 +1083,8 @@ class LE910CXConn(SerialConn):
             match = res_regex.match(line)
 
             if not match:
-                log.error("Didn't receive expected response from modem: {}".format(res))
-                raise InvalidResponseException("Didn't receive expected response")
+                log.error("PDP context did not receive an expected response from the modem: {}".format(res))
+                raise InvalidResponseException("PDP context did not receive an expected response")
 
             ret.append({
                 "cid": int(match.group("cid")),
@@ -1039,7 +1100,7 @@ class LE910CXConn(SerialConn):
         # Make any changes if necessary
         if cid != None:
             if type(cid) != int:
-                raise ValueError("'cid' argument needs to be a number")
+                raise ValueError("The 'cid' argument needs to be a number")
 
             # Find the pdp_entry that the cid references
             pdp_entry = None
@@ -1050,9 +1111,9 @@ class LE910CXConn(SerialConn):
 
             if pdp_entry: # PDP already exists
                 if delete_cid == True: # User wants to unset this CID
-                    if log.isEnabledFor(logging.DEBUG):
+                    if DEBUG:
                         log.debug("Going to unset cid {}".format(cid))
-                    self.execute("AT+CGDCONT={:d}".format(cid))
+                    self.execute.undecorated(self, "AT+CGDCONT={:d}".format(cid))
                     ret = [pdp_entry for pdp_entry in ret if pdp_entry["cid"] != cid]
 
                 else: # User wants to change the pdp context
@@ -1062,12 +1123,12 @@ class LE910CXConn(SerialConn):
                     if pdp_entry["pdp_type"] != pdp_type or pdp_entry["apn"] != apn or force:
                         # Difference in PDP, set it
                         if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
-                            raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+                            raise ValueError("The 'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
 
                         pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
-                        if log.isEnabledFor(logging.DEBUG):
+                        if DEBUG:
                             log.debug("Going to change a PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
-                        self.execute("AT+CGDCONT={:d},\"{:s}\",\"{:s}\"".format(cid, pdp_type_val, apn))
+                        self.execute.undecorated(self, "AT+CGDCONT={:d},\"{:s}\",\"{:s}\"".format(cid, pdp_type_val, apn))
 
                         new_pdp_context = {
                             "cid": cid,
@@ -1084,7 +1145,7 @@ class LE910CXConn(SerialConn):
 
             else: # PDP doesn't exist
                 if delete_cid == True:
-                    if log.isEnabledFor(logging.DEBUG):
+                    if DEBUG:
                         log.debug("CID {} already doesn't exist. Noop due to delete_cid == {}".format(cid, delete_cid))
                     return ret
 
@@ -1092,12 +1153,12 @@ class LE910CXConn(SerialConn):
                     raise ValueError("cid {} doesn't exist. Both 'pdp_type' and 'apn' arguments needs to be set when defining a new PDP context".format(cid))
 
                 if type(pdp_type) != str or pdp_type not in CGDCONT_PDP_TYPE_MAP.values():
-                    raise ValueError("'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
+                    raise ValueError("The 'pdp_type' needs to be one of {}".format(CGDCONT_PDP_TYPE_MAP.values()))
 
                 pdp_type_val = dict_key_by_value(CGDCONT_PDP_TYPE_MAP, pdp_type)
-                if log.isEnabledFor(logging.DEBUG):
+                if DEBUG:
                     log.debug("Going to set new PDP context. CID: {}, new pdp_type: {}, new apn: {}".format(cid, pdp_type_val, apn))
-                self.execute("AT+CGDCONT={:d},\"{}\",\"{}\"".format(cid, pdp_type_val, apn))
+                self.execute.undecorated(self, "AT+CGDCONT={:d},\"{}\",\"{}\"".format(cid, pdp_type_val, apn))
 
                 ret.append({
                     "cid": cid, # already ensured to be an int
@@ -1112,7 +1173,7 @@ class LE910CXConn(SerialConn):
 
         return ret
 
-    def generate_regex(self, at_command, params, multiline_identifier):
+    def _generate_regex(self, at_command, params, multiline_identifier):
         """
         Generates a regex with named params for interpreting an AT command response
 
@@ -1129,7 +1190,7 @@ class LE910CXConn(SerialConn):
             for param in params: 
                 rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
 
-            rx_string = '^#[A-Z]*: "{}"{}$'.format(multiline_identifier.label.desired_value, rx_param_string)
+            rx_string = '^[+#][A-Z]*: "{}"{}$'.format(multiline_identifier.label.desired_value, rx_param_string)
         
         else:
             for i in range(len(params)): 
@@ -1139,11 +1200,12 @@ class LE910CXConn(SerialConn):
                 else:
                     rx_param_string = '{},{}'.format(rx_param_string, param.get_named_regex_string())
 
-            rx_string = '^#[A-Z]*: {}$'.format(rx_param_string)
+            rx_string = '^[+#][A-Z]*: {}$'.format(rx_param_string)
 
         return rx_string
 
-    def read_modem_config(self, at_command, params, multiline_identifier=None):
+    @SerialConn.Decorators.ensure_open
+    def read_modem_config(self, at_command, params, multiline_identifier=None, question_mark=True):
         """
         Reads an AT command based on a given command signature and parameter list/tuple and formats to dictionary
 
@@ -1153,11 +1215,19 @@ class LE910CXConn(SerialConn):
 
         Optional arguments:
         multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response.
+        question_mark (bool): Append a question mark ('?') to AT command
 
         Returns:
         Dictionary formatted as { param.name: param.datatype(value), ... }
         """
-        res = self.execute(at_command + '?')
+        
+        full_command = None
+        if question_mark:
+            full_command = "{}?".format(at_command)
+        else:
+            full_command = at_command
+        
+        res = self.execute.undecorated(self, full_command)
         config_line = ''
         rx_string = ''
 
@@ -1183,7 +1253,10 @@ class LE910CXConn(SerialConn):
             
         # Compile and match regex string
 
-        rx_string = self.generate_regex(at_command, params, multiline_identifier)
+        rx_string = self._generate_regex(at_command, params, multiline_identifier)
+        
+        if DEBUG:
+            log.debug("Parsing received modem data with regex: {}".format(rx_string))
         match = re.match(rx_string, config_line)
         if not match:
             raise Exception('Could not match generated regex')
@@ -1204,6 +1277,7 @@ class LE910CXConn(SerialConn):
 
         return converted_data
 
+    @SerialConn.Decorators.ensure_open
     def update_modem_config(self, at_command, params, current_values, multiline_identifier=None, force=False):
         """
         Updates configs where the current_values do not match the desired ones
@@ -1255,9 +1329,9 @@ class LE910CXConn(SerialConn):
                 indexed_index += 1
             
         for cmd in update_commands:
-            self.execute(cmd)
+            self.execute.undecorated(self, cmd)
 
-    def is_update_requested_raise_on_error(self, params):
+    def _is_update_requested_raise_on_error(self, params):
         """
         Check if an update has been requested based on parameter list's/tuple's desired values
         """
@@ -1278,7 +1352,8 @@ class LE910CXConn(SerialConn):
 
         return has_value_type
 
-    def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None, pre_update_task=None, post_update_task=None):
+    @SerialConn.Decorators.ensure_open
+    def query(self, at_command, params, confirm=False, force=False, multiline_identifier=None, pre_update_task=None, post_update_task=None, q_mark_on_read=True):
         """
         Query given AT command. If params have desired_values and they don't match the real data, update the modem config.
 
@@ -1286,34 +1361,35 @@ class LE910CXConn(SerialConn):
         - at_command (string): AT command beginning (without proceding ? or =...)
         - params (tuple/list of Param objects): ordered parameters expected to be retrieved from the command
         - multiline_identifier (MultilineIdentifier object): object to determine which line to read in a multi-line response. None if single line expected.
+        - q_mark_on_read (bool): append a question mark to the at command when querying for the value
         - confirm (bool): confirm updates
         - force (bool): Force applying the settings to the modem.
         """
         ret = {}
 
-        update = self.is_update_requested_raise_on_error(params)
+        update = self._is_update_requested_raise_on_error(params)
 
         if update and not confirm:
             raise Exception("This command will modify configuration directly on the Modem - add parameter 'confirm=true' to continue anyway.")
 
-        current_data = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+        current_data = self.read_modem_config.undecorated(self, at_command, params, multiline_identifier=multiline_identifier, question_mark=q_mark_on_read)
 
         if update:
             if pre_update_task:
                 pre_update_task()
 
-            self.update_modem_config(at_command, params, current_data, multiline_identifier=multiline_identifier, force=force)
+            self.update_modem_config.undecorated(self, at_command, params, current_data, multiline_identifier=multiline_identifier, force=force)
 
             if post_update_task:
                 post_update_task()
 
-            ret = self.read_modem_config(at_command, params, multiline_identifier=multiline_identifier)
+            ret = self.read_modem_config.undecorated(self, at_command, params, multiline_identifier=multiline_identifier, question_mark=q_mark_on_read)
         else:
             ret = current_data
 
         return ret
 
-
+    @SerialConn.Decorators.ensure_open
     def evmoni_smsin_config(self, enabled=None, command=None, match_content=None, confirm=False, force=False):
         """
         Sets the configuration of sms received event
@@ -1336,19 +1412,19 @@ class LE910CXConn(SerialConn):
             label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, "SMSIN")
         )
 
-        res = self.query(
+        res = self.query.undecorated(self,
             'AT#EVMONI', 
             params, 
             multiline_identifier=idfr, 
             confirm=confirm, 
             force=force,
-            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
-            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+            pre_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=True, confirm=confirm, force=force)
         )
 
         return res
 
-
+    @SerialConn.Decorators.ensure_open
     def evmoni_gpio_config(self, peripheral_num, enabled=None, command=None, gpio_pin=None, watch_status=None, delay=None, confirm=False, force=False):
         """
         Sets the configuration of gpio change event
@@ -1379,18 +1455,19 @@ class LE910CXConn(SerialConn):
             label=Param('label', PARAM_TYPES['rdInline_wrInline'], str, label)
         )
 
-        res = self.query(
+        res = self.query.undecorated(self,
             'AT#EVMONI', 
             params, 
             multiline_identifier=idfr, 
             confirm=confirm, 
             force=force,
-            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
-            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+            pre_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=True, confirm=confirm, force=force)
         )
 
         return res
 
+    @SerialConn.Decorators.ensure_open
     def evmoni_enabled(self, enabled=None, confirm=False, force=False):
         """
         Sets the configuration of gpio change event
@@ -1405,7 +1482,7 @@ class LE910CXConn(SerialConn):
             Param("_status", PARAM_TYPES['rdInline_wrInline'], bool, enabled)
         )
 
-        res = self.query(
+        res = self.query.undecorated(self,
             "AT#ENAEVMONI", 
             params, 
             confirm=confirm, 
@@ -1416,6 +1493,7 @@ class LE910CXConn(SerialConn):
 
         return res
 
+    @SerialConn.Decorators.ensure_open
     def evmoni_config(self, instance=None, timeout=None, urcmod=None, confirm=False, force=False):
         """
         Configures the event monitor
@@ -1433,14 +1511,44 @@ class LE910CXConn(SerialConn):
             Param("timeout", PARAM_TYPES['rdInline_wrInline'], int, timeout)
         )
 
-        res = self.query(
+        res = self.query.undecorated(self,
             "AT#ENAEVMONICFG", 
             params, 
             confirm=confirm, 
             force=force,
-            pre_update_task=lambda : self.evmoni_enabled(enabled=False, confirm=confirm, force=force),
-            post_update_task=lambda : self.evmoni_enabled(enabled=True, confirm=confirm, force=force)
+            pre_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=False, confirm=confirm, force=force),
+            post_update_task=lambda : self.evmoni_enabled.undecorated(self, enabled=True, confirm=confirm, force=force)
         )
+
+        return res
+
+    @SerialConn.Decorators.ensure_open
+    def icc(self, raise_on_error=True):
+        """
+        Read the SIM ICCID
+        
+        raise_on_error: if False, empty result will be returned instead of an error result
+        """
+        res = {}
+        
+        params = (
+            Param("value", PARAM_TYPES['inline_readonly'], int, None),
+        )
+
+        try:
+            res = self.query.undecorated(self,
+                "AT+ICCID",
+                params,
+                confirm=False,
+                force=False,
+                q_mark_on_read=False
+            )
+        except Exception as ex:
+            if raise_on_error:
+                raise
+            else:
+                log.exception(ex)
+                return {}
 
         return res
 

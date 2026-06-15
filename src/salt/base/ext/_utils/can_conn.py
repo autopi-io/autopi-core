@@ -2,7 +2,13 @@ import binascii
 import can
 import logging
 import Queue
+import struct
 import subprocess
+from abc import abstractmethod
+from enum import Enum
+
+from can_exceptions import CANDisallowedByConfigurationWarning
+from j1939_util import J1939Query, QueryObject
 
 from six import string_types
 from timeit import default_timer as timer
@@ -30,6 +36,32 @@ FRAME_TYPES = {
     FRAME_TYPE_FF: "first",
     FRAME_TYPE_CF: "consecutive"
 }
+
+
+class ConfigurableSocketcanBus(can.interfaces.socketcan.SocketcanBus):
+    def __init__(self, allow_sending_can_frames, *args, **kwargs):
+        super(ConfigurableSocketcanBus, self).__init__(*args, **kwargs)
+        self._allow_sending_can_frames = allow_sending_can_frames
+
+    @property
+    def allow_sending_can_frames(self):
+        return self._allow_sending_can_frames
+
+    @allow_sending_can_frames.setter
+    def allow_sending_can_frames(self, value):
+        self._allow_sending_can_frames = value
+
+    def send(self, *args, **kwargs):
+        if self._allow_sending_can_frames:
+            return super(ConfigurableSocketcanBus, self).send(*args, **kwargs)
+        else:
+            raise CANDisallowedByConfigurationWarning("Sending CAN frames not allowed. allow_sending_can_frames is False")
+
+    def send_periodic(self, *args, **kwargs):
+        if self._allow_sending_can_frames:
+            return super(ConfigurableSocketcanBus, self).send_periodic(*args, **kwargs)
+        else:
+            raise CANDisallowedByConfigurationWarning("Sending CAN frames not allowed. allow_sending_can_frames is False")
 
 
 class CANConn(object):
@@ -82,72 +114,129 @@ class CANConn(object):
             except:
                 log.exception("Failed to remove listener from bus notifier")
 
-        def await_replies(self, timeout=0.2, flow_control=False, replies=None, skip_error_frames=True, skip_remote_frames=True, strict=True, ensure_filtering=True, **kwargs):
+        def await_replies(self, 
+                          nice_flow_control=None, 
+                          timeout=0.2, 
+                          flow_control=False, 
+                          query_instance=None,
+                          replies=None, 
+                          skip_error_frames=True, 
+                          skip_remote_frames=True, 
+                          strict=True, 
+                          ensure_filtering=True, 
+                          **kwargs):
             ret = []
 
-            if isinstance(flow_control, list):
-                for name in flow_control:
-                    func = self.outer._flow_control_id_resolvers.get(name, None)
-                    if not func:
-                        raise ValueError("No flow control ID resolver found for '{:}'".format(name))
+            if query_instance:
+                total_count = 0
+                while True:
+                    msg = self._listener.next(timeout=timeout)
+                    if msg == None:  # Timeout
+                        query_instance.receive(msg)
+                        break
 
-                    kwargs.setdefault("id_resolvers", []).append(func)
+                    if msg.is_error_frame:
+                        if skip_error_frames:
+                            log.info("Skipping received CAN reply message marked as an error frame: {:}".format(msg))
 
-            count = 0
-            while True:
-                msg = self._listener.next(timeout=timeout)
-                if msg == None:  # Timeout
-                    if strict:
-                        if replies > 0:
-                            raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
-                        elif count == 0:
-                            raise Exception("No CAN message reply received within timeout of {:} second(s)".format(timeout))
+                            continue
+                        else:
+                            log.info("Received CAN reply message marked as an error frame: {:}".format(msg))
 
-                    break
+                    elif msg.is_remote_frame:
+                        if skip_remote_frames:
+                            log.info("Skipping received CAN reply message marked as a remote frame: {:}".format(msg))
 
-                frame_type = None
-                if msg.is_error_frame:
-                    if skip_error_frames:
-                        log.info("Skipping received CAN reply message marked as an error frame: {:}".format(msg))
+                            continue
+                        else:
+                            log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
 
-                        continue
-                    else:
-                        log.info("Received CAN reply message marked as an error frame: {:}".format(msg))
+                    # Ensure that we do not get messages not matching filters
+                    if ensure_filtering:
+                        if not self.outer._bus.filters:
+                            log.warning("Received CAN message reply without any filters applied: {:}".format(msg))
+                        elif not self.outer._bus._matches_filters(msg):
+                            log.warning("Skipping received CAN message reply which should have already been filtered out: {:}".format(msg))
 
-                elif msg.is_remote_frame:
-                    if skip_remote_frames:
-                        log.info("Skipping received CAN reply message marked as a remote frame: {:}".format(msg))
+                            continue
 
-                        continue
-                    else:
-                        log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
+                    query_state, frame_action = query_instance.receive(msg, **kwargs)
 
-                else:  # Data frame
+                    if frame_action == query_instance.FrameAction.KEEP:
+                        ret.append(msg)
 
-                    # Determine frame type
-                    frame_type = msg.data[0] & 0xF0
+                    total_count += 1
 
-                    if DEBUG:
-                        log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
+                    if query_state == QueryObject.QueryState.COMPLETE:
+                        break
 
-                # Ensure that we do not get messages not matching filters
-                if ensure_filtering:
-                    if not self.outer._bus.filters:
-                        log.warning("Received CAN message reply without any filters applied: {:}".format(msg))
-                    elif not self.outer._bus._matches_filters(msg):
-                        log.warning("Skipping received CAN message reply which should have already been filtered out: {:}".format(msg))
+                    # Stop if replies is met
+                    if replies > 0 and total_count >= replies:
+                        break
+            else:
+                if isinstance(flow_control, list):
+                    for name in flow_control:
+                        func = self.outer._flow_control_id_resolvers.get(name, None)
+                        if not func:
+                            raise ValueError("No flow control ID resolver found for '{:}'".format(name))
 
-                        continue
+                        kwargs.setdefault("id_resolvers", []).append(func)
 
-                ret.append(msg)
-                count += 1
+                count = 0
+                while True:
+                    msg = self._listener.next(timeout=timeout)
+                    if msg == None:  # Timeout
+                        if strict:
+                            if replies > 0:
+                                raise Exception("No CAN message reply ({:}/{:}) received within timeout of {:} second(s)".format(count, replies, timeout))
+                            elif count == 0:
+                                raise Exception("No CAN message reply received within timeout of {:} second(s)".format(timeout))
 
-                # Stop if replies is met
-                if replies > 0 and count >= replies:
-                    break
+                        break
 
-                if flow_control and frame_type == FRAME_TYPE_FF:
-                    self.outer.send_flow_control_reply_for(msg, **kwargs)
+                    frame_type = None
+                    if msg.is_error_frame:
+                        if skip_error_frames:
+                            log.info("Skipping received CAN reply message marked as an error frame: {:}".format(msg))
+
+                            continue
+                        else:
+                            log.info("Received CAN reply message marked as an error frame: {:}".format(msg))
+
+                    elif msg.is_remote_frame:
+                        if skip_remote_frames:
+                            log.info("Skipping received CAN reply message marked as a remote frame: {:}".format(msg))
+
+                            continue
+                        else:
+                            log.info("Received CAN reply message marked as a remote frame: {:}".format(msg))
+
+                    else:  # Data frame
+
+                        # Determine frame type
+                        frame_type = msg.data[0] & 0xF0
+
+                        if DEBUG:
+                            log.debug("Received CAN reply message considered as a data frame of type '{:}': {:}".format(FRAME_TYPES.get(frame_type, "unknown"), msg))
+
+                    # Ensure that we do not get messages not matching filters
+                    if ensure_filtering:
+                        if not self.outer._bus.filters:
+                            log.warning("Received CAN message reply without any filters applied: {:}".format(msg))
+                        elif not self.outer._bus._matches_filters(msg):
+                            log.warning("Skipping received CAN message reply which should have already been filtered out: {:}".format(msg))
+
+                            continue
+
+                    ret.append(msg)
+                    count += 1
+
+                    # Stop if replies is met
+                    if replies > 0 and count >= replies:
+                        break
+
+                    if flow_control and frame_type == FRAME_TYPE_FF:
+                        self.outer.send_flow_control_reply_for(msg, **kwargs)
 
             return ret
 
@@ -158,7 +247,9 @@ class CANConn(object):
 
         self._settings = {
             "channel": "can0",
-            "bitrate": 500000
+            "bitrate": 500000,
+            "allow_interface_changes": True,
+            "allow_sending_can_frames": True
         }
 
         self._bus = None
@@ -183,6 +274,16 @@ class CANConn(object):
     @property
     def bus_metadata(self):
         return dict(self._bus.metadata) if self._bus else {}
+
+    @property
+    def allow_sending_can_frames(self):
+        return self._settings.get("allow_sending_can_frames")
+
+    @allow_sending_can_frames.setter
+    def allow_sending_can_frames(self, value):
+        if value != self.allow_sending_can_frames:
+            self._settings["allow_sending_can_frames"] = value
+            self._bus.allow_sending_can_frames = value
 
     def setup(self, **settings):
 
@@ -212,14 +313,17 @@ class CANConn(object):
 
     def open(self):
 
-        # Ensure closed
-        self.close()
-
+        # Retrieve settings to open with
         local_settings = self._settings.copy()
         channel = local_settings.pop("channel", "can0")
         receive_own_messages = local_settings.pop("receive_own_messages", False)
         notifier_timeout = local_settings.pop("notifier_timeout", 1.0)
         autodetect = self._settings.pop("autodetect", False)
+        allow_interface_changes = local_settings.pop("allow_interface_changes")
+        allow_sending_can_frames = local_settings.pop("allow_sending_can_frames")
+
+        # Ensure closed
+        self.close()
 
         if not self._is_autodetecting and autodetect:
             if autodetect == True:
@@ -234,31 +338,76 @@ class CANConn(object):
             log.info("Opening CAN connection using settings {:}".format(self._settings))
 
             # Bring up interface
-            try:
-                __salt__["socketcan.up"](interface=channel, **local_settings)
-            except:
-                log.exception("Failed to bring up '{:}' interface - forcing it down before trying again".format(channel))
+            self._ensure_interface_up(
+                channel, 
+                **local_settings
+            )
 
-                __salt__["socketcan.down"](interface=channel)
-                __salt__["socketcan.up"](interface=channel, **local_settings)
+            # Set up cantools instances
+            self._ensure_bus(
+                channel, 
+                receive_own_messages,
+                local_settings.get("dbitrate", None) != None,
+                notifier_timeout,
+                allow_sending_can_frames
+            )
 
-            self._bus = can.interfaces.socketcan.SocketcanBus(
+    def _bring_interface_up_if_allowed(self, **kwargs):
+        if self._settings.get("allow_interface_changes"):
+            __salt__["socketcan.up"](**kwargs)
+        else:
+            log.debug("Disallowing socketcan.up due to allow_interface_changes flag")
+
+    def _bring_interface_down_if_allowed(self, **kwargs):
+        if self._settings.get("allow_interface_changes"):
+            __salt__["socketcan.down"](**kwargs)
+        else:
+            log.info("Disallowing socketcan.down due to allow_interface_changes flag")
+
+    def _all_threads_alive(self, thread_list):
+        all_alive = True
+        for thread in thread_list:
+            all_alive = all_alive & thread.is_alive()
+        return all_alive
+
+    def _is_notifier_alive(self):
+        return bool(self._notifier) and self._all_threads_alive(self._notifier._readers)
+
+    def _ensure_interface_up(self, interface, **settings):
+        try:
+            self._bring_interface_up_if_allowed(interface=interface, **settings)
+        except:
+            log.exception("Failed to bring up '{:}' interface - forcing it down before trying again".format(interface))
+
+            self._bring_interface_down_if_allowed(interface=interface)
+            self._bring_interface_up_if_allowed(interface=interface, **settings)
+
+    def _ensure_bus(self, channel, receive_own_messages, fd, notifier_timeout, allow_sending_can_frames):
+
+        if not self._bus:
+            self._bus = ConfigurableSocketcanBus(
+                allow_sending_can_frames,
                 channel=channel,
                 receive_own_messages=receive_own_messages,
-                fd=local_settings.get("dbitrate", None) != None)
+                fd=fd
+            )
             setattr(self._bus, "metadata", {})
             setattr(self._bus, "stats", {})
 
-            if self._filters:
-                log.info("Re-applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
-                self._bus.set_filters(list(self._filters))
-                self._is_filters_dirty = False
+        if self._filters:
+            log.info("Re-applying {:} filter(s) to CAN bus instance".format(len(self._filters)))
+            self._bus.set_filters(list(self._filters))
+            self._is_filters_dirty = False
 
+        if not self._notifier:
             self._notifier = can.Notifier(self._bus, [], timeout=notifier_timeout)  # No listeners for now
 
     def is_open(self):
         if self._bus != None:
-            
+
+            if not self._is_notifier_alive():
+                return False
+
             # Check for any last error
             if "last_error" in self._bus.stats:
                 last_err_msg = str(self._bus.stats.pop("last_error", None))
@@ -302,8 +451,8 @@ class CANConn(object):
 
         # Bring down interface if not already or force
         if force or self.interface_state() != INTERFACE_STATE_DOWN:
-            __salt__["socketcan.down"](interface=self.channel)
-
+            self._bring_interface_down_if_allowed(interface=self.channel)
+            
     def autodetect(self, *args, **kwargs):
         ret = False
 
@@ -391,7 +540,32 @@ class CANConn(object):
         return False
 
     def _j1939_autodetect(self, channel=None, try_bitrates=[250000, 500000], receive_timeout=0.2):
-        raise NotImplementedError("Not yet supported")
+        channel = channel or self.channel
+
+        for bitrate in try_bitrates:
+            self.setup(channel=channel, bitrate=bitrate)
+
+            # Query for DM1 PGN
+            try:
+                msgs = self.j1939_query(65226, timeout=receive_timeout, strict=False, skip_error_frames=True, skip_remote_frames=True)
+                if msgs:
+                    self._bus.metadata["is_autodetected"] = True
+                    self._bus.metadata["is_extended_id"] = True
+                    self._bus.metadata["is_j1939_supported"] = True
+
+                    log.info("J1939 autodetect was successful using settings {:}".format(self._settings))
+
+                    return True
+                else:
+                    log.info("J1939 autodetect did not receive any reply messages within timeout of {:} second(s) using settings {:}".format(receive_timeout, self._settings))
+
+            except Exception as ex:
+                log.info("J1939 autodetect failed to query for DM1 PGN using settings {:}: {:}".format(self._settings, ex))
+
+        log.warning("J1939 autodetect failed")
+        self.close()
+
+        return False
 
     def interface_state(self, channel=None):
         channel = channel or self.channel
@@ -481,6 +655,13 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def send(self, *messages, **kwargs):
+        """
+        Sends one or more messages on the CAN bus.
+
+        Arguments:
+          - *messages (can.Message): CAN messages to send.
+        """
+
         for msg in messages:
             if DEBUG:
                 log.debug("Sending CAN message {:}".format(msg))
@@ -514,6 +695,22 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def query(self, *messages, **kwargs):
+        """
+        Queries by sending one or more request messages on the CAN bus and then waits for one or more reply messages.
+
+        Arguments:
+          - *messages (can.Message): CAN request messages to send.
+
+        Optional arguments:
+          - ensure_filtering (bool): Ensure that reply messages not matching the filters are excluded. Default value is 'True'.
+          - flow_control (list): List of flow control ID resolvers to enable. Options are 'obd' and 'custom'. Default value is 'False' (disabled).
+          - replies (int): The amount of reply messages to wait for within a timeout.
+          - skip_error_frames (bool): Skip any reply message marked as an error frame. Default value is 'True'.
+          - skip_remote_frames (bool): Skip any reply message marked as a remote frame. Default value is 'True'.
+          - strict (bool): Raise an error when no reply messages are received or if the amount of expected reply messages is not met within the timeout. Default value is 'True'.
+          - timeout (float): The amount of time in seconds to wait for a reply message. Default value is '0.2'.
+        """
+
         ret = []
 
         try:
@@ -537,6 +734,28 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def obd_query(self, mode, pid, id=None, is_ext_id=None, auto_format=True, auto_filter=True, **kwargs):
+        """
+        Queries an OBD-II PID on the CAN bus.
+
+        Arguments:
+          - mode (str): Service section of the PID.
+          - pid (str): Code section of the PID.
+
+        Optional arguments, OBD-II specific:
+          - auto_filter (bool): Ensure to apply filtering to only include OBD-II reply messages. Default value is 'True'.
+          - auto_format (bool): Ensure that the PID request message always has a fixed data length of 8 bytes (zero padding). Default value is 'True'.
+          - id (int): Use a custom CAN arbitration ID for the PID request message. 
+          - is_ext_id (int): Enforce to use extended CAN arbitration ID or not (29 or 11 bit) for the PID request message.
+
+        Optional arguments, general:
+          - ensure_filtering (bool): Ensure that reply messages not matching the filters are excluded. Default value is 'True'.
+          - flow_control (list): List of flow control ID resolvers to enable. Options are 'obd' and 'custom'. Default value is 'False' (disabled).
+          - replies (int): The amount of reply messages to wait for within a timeout.
+          - skip_error_frames (bool): Skip any reply message marked as an error frame. Default value is 'True'.
+          - skip_remote_frames (bool): Skip any reply message marked as a remote frame. Default value is 'True'.
+          - strict (bool): Raise an error when no reply messages are received or if the amount of expected reply messages is not met within the timeout. Default value is 'True'.
+          - timeout (float): The amount of time in seconds to wait for a reply message. Default value is '0.2'.
+        """
 
         if is_ext_id == None:
             is_ext_id = self._bus.metadata.get("is_extended_id", False)
@@ -565,20 +784,94 @@ class CANConn(object):
         # Setup default flow control
         kwargs.setdefault("flow_control", [self.FLOW_CONTROL_CUSTOM, self.FLOW_CONTROL_OBD])
 
+        data = bytearray(data)
+        if "zero_padding" in kwargs:
+            data = data.ljust(kwargs["zero_padding"], "\0")
+        
         msg = can.Message(
             arbitration_id=id,
-            data=bytearray(data).ljust(kwargs["zero_padding"], "\0") if "zero_padding" in kwargs else bytearray(data),
+            data=data,
             is_extended_id=is_ext_id)
-        res = self.query.undecorated(self, msg, **kwargs)  # No need to call the 'ensure_open' decorator again
+    
+        # No need to call the 'ensure_open' decorator again
+        res = self.query.undecorated(self, 
+                                     msg, 
+                                     **kwargs)
+        return res
+
+    @Decorators.ensure_open
+    def j1939_query(self, 
+                    pgn, 
+                    priority=6, 
+                    destination_address=0, 
+                    source_address=249, 
+                    auto_filter=True, 
+                    auto_filter_mask=0x00FFFF00, 
+                    auto_tp=True,
+                    **kwargs):
+        """
+        Queries a J1939 PGN on the CAN bus.
+
+        Arguments:
+          - pgn (int): Number of the PGN to query.
+
+        Optional arguments, J1939 specific:
+          - priority (int): The priority to use for the request message. Default value is '6'.
+          - destination_address (int): The destination address of the request message. Default value is '0'.
+          - source_address (int): The source address of the request message. Default value is '249' (Service Tool).
+          - auto_filter (bool): Ensure to apply filtering to only include reply message for the specific PGN. Default value is 'True'.
+          - auto_filter_mask (int): The bitmask to use when the filter is applied (to all frame types including TP). Default value is '0x00FFFF00'.
+          - auto_tp (bool): Automatically enable Transport Protocol (TP) for multi-frame messages
+
+        Optional arguments, general:
+          - ensure_filtering (bool): Ensure that reply messages not matching the filters are excluded. Default value is 'True'.
+          - flow_control (list): List of flow control ID resolvers to enable. Options are 'obd' and 'custom'. Default value is 'False' (disabled).
+          - replies (int): The amount of reply messages to wait for within a timeout.
+          - skip_error_frames (bool): Skip any reply message marked as an error frame. Default value is 'True'.
+          - skip_remote_frames (bool): Skip any reply message marked as a remote frame. Default value is 'True'.
+          - strict (bool): Raise an error when no reply messages are received or if the amount of expected reply messages is not met within the timeout. Default value is 'True'.
+          - timeout (float): The amount of time in seconds to wait for a reply message. Default value is '0.2'.
+        """
+        j1939_query = J1939Query(pgn,
+                                self.send,
+                                priority=priority,
+                                own_address=source_address,
+                                ecu_address=destination_address,
+                                auto_tp=auto_tp,
+                                auto_filter_mask=auto_filter_mask,
+                                strict=kwargs.get("strict", True))
+
+        if auto_filter:
+            filters = j1939_query.get_filters()
+            for f in filters:
+                self.ensure_filter(**f)
+
+        msg = j1939_query.get_query_msg()
+
+        # No need to call the 'ensure_open' decorator again
+        res = self.query.undecorated(self, 
+                                     msg, 
+                                     query_instance=j1939_query,
+                                     **kwargs)  
 
         return res
 
     @Decorators.ensure_open
-    def j1939_query():
-        raise NotImplementedError("Not yet available")
-
-    @Decorators.ensure_open
     def monitor_until(self, on_msg_func, duration=1, limit=None, receive_timeout=0.2, skip_error_frames=False, keep_listening=False, buffer_size=0):
+        """
+        Monitors messages on the CAN bus until a limit and/or duration is reached.
+
+        Arguments:
+          - on_msg_func (func): Function that will be called on each received message.
+
+        Optional arguments:
+          - duration (int): How many seconds to record data? Default value is '1'.
+          - limit (int): The maximum number of messages to read.
+          - receive_timeout (float): The amount of time in seconds to wait for a reply message. Default value is '0.2'.
+          - skip_error_frames (bool): Skip any reply message marked as an error frame. Default value is 'False'.
+          - keep_listening (bool): Continue listening for messages in the background? Default value is 'False'.
+          - buffer_size (int): The limit of messages that the internal queue can hold. If the value is less than or equal to zero, the queue size is infinite. Default value is '0'.
+        """
 
         if not duration and not limit:
             raise ValueError("Duration and/or limit must be specified")
@@ -662,6 +955,34 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def dump_until(self, file, duration=2, limit=None, receive_timeout=0.5, skip_error_frames=False, keep_listening=False, buffer_size=0, **kwargs):
+        """
+        Stores messages from the CAN bus to a file until a limit or duration is reached.
+
+        Arguments:
+          - file (str): Write data to a file with the given name. Supported file extensions are '.asc', '.blf', '.csv', '.db' and '.log'.
+
+        Optional arguments:
+          - duration (int): How many seconds to record data? Default value is '1'.
+          - limit (int): The maximum number of messages to read.
+          - receive_timeout (float): The amount of time in seconds to wait for a reply message. Default value is '0.2'.
+          - skip_error_frames (bool): Skip any reply message marked as an error frame. Default value is 'False'.
+          - keep_listening (bool): Continue listening for messages in the background? Default value is 'False'.
+          - buffer_size (int): The limit of messages that the internal queue can hold. If the value is less than or equal to zero, the queue size is infinite. Default value is '0'.
+
+        Optional arguments for ASC and BLF files:
+          - channel (int): The default value to use when a message does not have a channel set. Default value is '1'.
+
+        Optional arguments for CSV file:
+          - append (bool): Append messages to an existing file where no header line is written or truncate and start with a newly written header line? Default value is 'False'.
+
+
+        Optional arguments for DB file (SQLite):
+          - table_name (str): The name of the table to store messages in. Default value is 'messages'.
+
+        Optional arguments for log file:
+          - channel (str): The default value to use when a message does not have a channel set. Default value is 'vcan0'.
+          - append (bool): Append messages to any existing file or truncate it?  Default value is 'False'.
+        """
 
         if file.endswith(".asc"):
             writer = can.io.ASCWriter(file, **kwargs)
@@ -689,6 +1010,18 @@ class CANConn(object):
 
     @Decorators.ensure_open
     def play(self, *files, **kwargs):
+        """
+        Sends all messages from one or more dump files on the CAN bus.
+
+        Arguments:
+          - *files (str): Specify one or more dump files for playback.
+
+        Optional arguments:
+          - ignore_timestamps (bool): Ignore the timestamps of the messages and use the 'min_gap' parameter as the time between messages instead. Default value is 'False'.
+          - min_gap (float): Minimum time between sent messages in seconds. Default value is '0.0001'.
+          - skip_gaps_gt (float): Skip periods of inactivity greater than this (in seconds). Default value is '86400'.
+          - include_error_frames (bool): Also send messages marked as error frames? Default value is 'True'.
+        """
 
         ignore_timestamps    = kwargs.get("ignore_timestamps", False)
         min_gap              = kwargs.get("min_gap", 0.0001)
@@ -791,7 +1124,7 @@ def msg_to_str(src, separator="#"):
     Formats a raw python-can Message object to a string with a separator between the header and data sections.
     """
 
-    format_string = "{:02x}{:}{:}"
+    format_string = "{:03x}{:}{:}"
 
     if src.is_extended_id:
         format_string = "{:08x}{:}{:}"
@@ -810,6 +1143,8 @@ def str_to_msg(src, separator="#"):
 
     # If ID is more than 11 bits, use extended ID (29bit header)
     is_ext_id = len(bin(arb_id)) - 2 > 11
+    # TODO HN: More correct to just use:
+    #is_ext_id = len(arb_id_str) > 3
 
     return can.Message(
         is_extended_id=is_ext_id,

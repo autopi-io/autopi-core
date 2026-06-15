@@ -40,6 +40,11 @@ ip-forward-enabled:
     - pattern: "^#?net.ipv4.ip_forward=.*$"
     - repl: net.ipv4.ip_forward=1
 
+tcp-mtu-probing-configured:
+  sysctl.present:
+    - name: net.ipv4.tcp_mtu_probing
+    - value: {{ salt['pillar.get']('minion:tcp_mtu_probing', default=0) }}
+
 # Just activate IP forward immediately instead of waiting until next reboot
 ip-forward-activated:
   cmd.run:

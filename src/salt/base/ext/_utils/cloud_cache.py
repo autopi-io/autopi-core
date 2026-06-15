@@ -10,10 +10,13 @@ import StringIO
 import time
 
 from requests.exceptions import RequestException
+from redis.exceptions import ResponseError
 from timeit import default_timer as timer
 
 
 log = logging.getLogger(__name__)
+
+DEBUG = log.isEnabledFor(logging.DEBUG)
 
 
 def prepare_result_recursively(result, kind, timestamp=None):
@@ -174,7 +177,10 @@ class CloudCache(object):
 
         if "compression" in self.options:
             compression = self.options["compression"]["algorithm"]
-            log.info("Compressing data using {} with level {}".format(compression, self.options["compression"].get("level", 1)))
+
+            if DEBUG:
+                log.debug("Compressing data using {} with level {}".format(compression, self.options["compression"].get("level", 1)))
+
             if compression == "gzip":
                 start = timer()
 
@@ -183,7 +189,7 @@ class CloudCache(object):
                    gf.write(payload)
 
                 compressed_payload = buffer.getvalue()
-                
+
                 log.info("Compressed payload with size {:} to {:} in {:} second(s)".format(len(payload), len(compressed_payload), timer() - start))
 
                 payload = compressed_payload
@@ -511,6 +517,10 @@ class NextCloudCache(CloudCache):
                 log.warning("Failed to upload batch - leaving batch in queue '{:}': {:}".format(queue, rex))
 
             raise
+
+        except ResponseError as re:
+
+            log.warning("Captured 'Background save already in progress' error. We continue.")
 
         return ret
 

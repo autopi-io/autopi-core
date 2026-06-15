@@ -478,8 +478,8 @@ class SPM3Conn(I2CConn):
 
             if not isinstance(value, int):
                 raise ValueError("Sleep interval must be an integer value")
-            elif value > 86400:
-                raise ValueError("Max sleep interval is 24 hours (86400 secs)")
+            elif value > 172800:  # NOTE: Allows increased sleep interval of up to 48 hours
+                raise ValueError("Max sleep interval is 48 hours (172800 secs)")
 
             log.info("Setting sleep interval to %d second(s)", value)
 

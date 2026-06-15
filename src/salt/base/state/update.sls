@@ -1,10 +1,10 @@
 
-update-release:
+update-release-explicitly:
   module.run:
     - name: minionutil.update_release
 
 # Restart minion if restart is pending after running update release
-restart-minion-if-pending:
+restart-minion-if-pending-after-update-release-explicitly:
   module.run:
     - name: minionutil.request_restart
     - pending: false

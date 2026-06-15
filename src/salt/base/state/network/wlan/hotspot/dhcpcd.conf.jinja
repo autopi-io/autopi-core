@@ -57,9 +57,19 @@ slaac private
 #interface eth0
 #fallback static_eth0
 
+{%- if salt['pillar.get']('dhcpcd:deny_interfaces') %}
+denyinterfaces {{ salt['pillar.get']('dhcpcd:deny_interfaces') }}
+{%- endif %}
+
 interface wlan0
 {%- if salt['pillar.get']('dhcpcd:mtu') %}
+{%- if salt['pillar.get']('dhcpcd:mtu') == 'use_qmi' %}
+{%- if salt['grains.get']('qmi:mtu') or salt['grains.get']('qmi:default_mtu') %}
+static interface_mtu={{ salt['grains.get']('qmi:mtu') or salt['grains.get']('qmi:default_mtu') }}
+{%- endif %}
+{%- else %}
 static interface_mtu={{ salt['pillar.get']('dhcpcd:mtu') }}
+{%- endif %}
 {%- endif %}
 metric 200
 nohook wpa_supplicant
@@ -67,7 +77,13 @@ nohook wpa_supplicant
 interface uap0
 static ip_address=192.168.4.1/24
 {%- if salt['pillar.get']('dhcpcd:mtu') %}
+{%- if salt['pillar.get']('dhcpcd:mtu') == 'use_qmi' %}
+{%- if salt['grains.get']('qmi:mtu') or salt['grains.get']('qmi:default_mtu') %}
+static interface_mtu={{ salt['grains.get']('qmi:mtu') or salt['grains.get']('qmi:default_mtu') }}
+{%- endif %}
+{%- else %}
 static interface_mtu={{ salt['pillar.get']('dhcpcd:mtu') }}
+{%- endif %}
 {%- endif %}
 metric 100
 nohook wpa_supplicant

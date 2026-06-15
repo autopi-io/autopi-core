@@ -2,6 +2,7 @@
 include:
   - .patch
   - .config
+  - .grains
   - .ext.sync
 
 minion-id-cron-configured:
@@ -41,3 +42,7 @@ minion-api-call-script-installed:
     - group: root
     - watch_in:
       - module: minion-restart-after-config-changes-required
+
+minion-default-file-root-directory-removed:
+  file.absent:
+    - name: /srv/salt

@@ -105,14 +105,31 @@ class WorkerThread(threading.Thread):
         self.terminate = False
         self.run_on_terminate = False
 
+        self.on_started_callbacks = []
+        self.on_paused_callbacks = []
+        self.on_resumed_callbacks = []
+        self.on_terminated_callbacks = []
+
+        self.reasons = {}
+
+        # Initialize context
+        self.context["state"] = "pending"
+        self.context["state_reason"] = "auto_start" if auto_start else "manual_start"
+        self.context["loop_count"] = 0
+
         if registry and not registry.add(self):
             raise ValueError("Worker thread '{:s}' already added to registry".format(name))
+
+    def start(self, reason="unknown"):
+        self.reasons["start"] = reason
+
+        super(WorkerThread, self).start()
 
     def run(self):
         if PROFILING:
             prof_file = "/tmp/{:%Y%m%d%H%M%S}_{:}.prof".format(datetime.datetime.now(), self.name)
 
-            log.warning("Profiling worker thread '%s' - after thread termination stats file will be written to: %s", self.name, prof_file)
+            log.warning("Profiling the worker thread '%s' - after thread termination stats file will be written to: %s", self.name, prof_file)
 
             profile.runctx("self.work()", globals(), locals(), prof_file)
 
@@ -121,21 +138,36 @@ class WorkerThread(threading.Thread):
         else:
             self.work()
 
+            if DEBUG:
+                log.debug("The worker thread '%s' is returning from the run method", self.name)
+
     def work(self):
         try:
+
+            reason = self.reasons.get("start", "unknown")
+
+            # Process any 'on_started' callbacks
+            for callback_data, callback_func in self.on_started_callbacks:
+                try:
+                    callback_func(self, reason, callback_data)
+                except:
+                    log.exception("Error in the 'on_started' callback function '%s' for the worker thread '%s'", callback_func.__name__, self.name)
 
             # Perform delayed start if requested
             self.__delay()
 
             # No need to continue if already terminated at this point
             if self.terminate:
+                self.context["state"] = "completed"
+
                 return
 
             if DEBUG:
-                log.debug("Running worker thread '%s'...", self.name)
+                log.debug("Running the worker thread '%s'...", self.name)
 
             self.context["state"] = "running"
-            self.context["first_run"] = datetime.datetime.utcnow().isoformat()
+            self.context["state_reason"] = reason
+            self.context["first_run_at"] = datetime.datetime.utcnow().isoformat()
 
             # Ensure allowed to proceed
             self.proceed_event.set()
@@ -147,8 +179,10 @@ class WorkerThread(threading.Thread):
 
                 self.target(self, self.context)
 
+                self.context["loop_count"] += 1
+
                 if self.interval > 0:
-                    self.context["last_run"] = datetime.datetime.utcnow().isoformat()
+                    self.context["last_run_at"] = datetime.datetime.utcnow().isoformat()
 
                     # Sleep until awakened or timeout reached
                     self.wake_event.wait(self.interval)
@@ -156,7 +190,7 @@ class WorkerThread(threading.Thread):
             self.context["state"] = "completed"
 
         except Exception:
-            log.exception("Fatal exception in worker thread '%s'", self.name)
+            log.exception("Fatal exception in the worker thread '%s'", self.name)
 
             self.context["state"] = "failed"
 
@@ -165,14 +199,14 @@ class WorkerThread(threading.Thread):
         finally:
 
             if self.run_on_terminate:
-                log.info("Running worker thread '%s' one last time before being terminated", self.name)
+                log.info("Running the worker thread '%s' one last time before being terminated", self.name)
 
                 try:
                     self.target(self, self.context)
                 except:
                     log.exception("Failed to run worker thread '%s' one last time before being terminated", self.name)
 
-            log.info("Worker thread '%s' terminated", self.name)
+            log.info("The worker thread '%s' terminated", self.name)
 
             if self.registry and self.registry.remove(self):
                 if DEBUG:
@@ -180,12 +214,26 @@ class WorkerThread(threading.Thread):
             else:
                 log.warn("Was unable to remove worker thread '%s' from registry", self.name)
 
-    def pause(self):
+            reason = self.reasons.get("kill", "unknown")
+            self.context["state_reason"] = reason
+
+            # Process any 'on_terminated' callbacks
+            for callback_data, callback_func in self.on_terminated_callbacks:
+                try:
+                    callback_func(self, reason, callback_data)
+                except:
+                    log.exception("Error in the 'on_terminated' callback function '%s' for the worker thread '%s'", callback_func.__name__, self.name)
+
+    def is_paused(self):
+        return not self.proceed_event.is_set()
+
+    def pause(self, reason="unknown"):
         if not self.proceed_event.is_set():
             return
 
         if DEBUG:
-            log.debug("Pausing worker thread '%s'...", self.name)
+            log.debug("Pausing the worker thread '%s' with reason '%s'...", self.name, reason)
+        self.reasons["pause"] = reason
 
         # Disallow to proceed
         self.proceed_event.clear()
@@ -193,7 +241,7 @@ class WorkerThread(threading.Thread):
         # Ensure to wake up if sleeping
         self.wake_event.set()
 
-    def start_or_resume(self):
+    def start_or_resume(self, **kwargs):
         """
         Starts or resumes the WorkerThread instance
         """
@@ -204,18 +252,19 @@ class WorkerThread(threading.Thread):
 
         # Thread hasn't started yet
         if not self.is_alive():
-            self.start()
+            self.start(**kwargs)
 
         # Assume thread is paused
         else:
-            self.resume() # This method will do the checking for us
+            self.resume(**kwargs) # This method will do the checking for us
 
-    def resume(self):
+    def resume(self, reason="unknown"):
         if self.proceed_event.is_set():
             return
 
         if DEBUG:
-            log.debug("Resuming worker thread '%s'...", self.name)
+            log.debug("Resuming the worker thread '%s' with reason '%s'...", self.name, reason)
+        self.reasons["resume"] = reason
 
         # Disallow wake to enforce sleep interval again
         self.wake_event.clear()
@@ -223,12 +272,13 @@ class WorkerThread(threading.Thread):
         # Allow to proceed
         self.proceed_event.set()
 
-    def kill(self, run=False):
+    def kill(self, run=False, reason="unknown"):
         if self.terminate:
             return
 
         if DEBUG:
-            log.debug("Killing worker thread '%s'...", self.name)
+            log.debug("Killing the worker thread '%s' with reason '%s'...", self.name, reason)
+        self.reasons["kill"] = reason
 
         # Set flag that decide whether to run one last time
         self.run_on_terminate = run
@@ -244,9 +294,9 @@ class WorkerThread(threading.Thread):
 
     def __delay(self):
         if self.delay and self.delay > 0.0:
-            log.info("Delayed startup/resume of %f second(s) of worker thread '%s'...", self.delay, self.name)
+            log.info("Delayed startup/resume of %f second(s) of the worker thread '%s'...", self.delay, self.name)
 
-            self.context["state"] = "pending"
+            self.context["state"] = "delayed"
 
             # Sleep until awakened or timeout reached
             self.wake_event.wait(self.delay)
@@ -257,7 +307,17 @@ class WorkerThread(threading.Thread):
         if not self.proceed_event.is_set():
             self.context["state"] = "paused"
 
-            log.info("Paused worker thread '%s'", self.name)
+            log.info("Paused the worker thread '%s'", self.name)
+
+            reason = self.reasons.get("pause", "unknown")
+            self.context["state_reason"] = reason
+
+            # Process any 'on_paused' callbacks
+            for callback_data, callback_func in self.on_paused_callbacks:
+                try:
+                    callback_func(self, reason, callback_data)
+                except:
+                    log.exception("Error in the 'on_paused' callback function '%s' for the worker thread '%s'", callback_func.__name__, self.name)
 
             # Wait until allowed to proceed again
             self.proceed_event.wait()
@@ -266,7 +326,17 @@ class WorkerThread(threading.Thread):
             if self.terminate:
                 return False
 
-            log.info("Resumed worker thread '%s'", self.name)
+            log.info("Resumed the worker thread '%s'", self.name)
+
+            reason = self.reasons.get("resume", "unknown")
+            self.context["state_reason"] = reason
+
+            # Process any 'on_resumed' callbacks
+            for callback_data, callback_func in self.on_resumed_callbacks:
+                try:
+                    callback_func(self, reason, callback_data)
+                except:
+                    log.exception("Error in the 'on_resumed' callback function '%s' for the worker thread '%s'", callback_func.__name__, self.name)
 
             # Perform initial delay if any
             self.__delay()

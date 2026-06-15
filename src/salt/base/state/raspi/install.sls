@@ -26,6 +26,11 @@ pi-user-aliases-configured:
     - user: pi
     - group: pi
 
+{%- if salt["grains.get"]("osmajorrelease") >= 11 %}
+haveged-uninstalled:
+  pkg.purged:
+    - name: haveged
+{%- else %}
 haveged-installed:
   pkg.installed:
     - name: haveged
@@ -33,6 +38,7 @@ haveged-installed:
 haveged-service-running:
   service.running:
     - name: haveged
+{%- endif %}
 
 fake-hwclock-configured:
   {%- if salt['pillar.get']('rpi:hwclock:use_fake', default=True) %}

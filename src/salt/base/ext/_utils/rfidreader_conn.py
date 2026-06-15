@@ -1,5 +1,17 @@
-import evdev
 import time
+import threading
+import queue
+import logging
+import os
+
+log = logging.getLogger(__name__)
+
+try:
+    import evdev
+    HAS_EVDEV = True
+except ImportError:
+    log.warning("Unable to import 'evdev'")
+    HAS_EVDEV = False
 
 EVENT_KEY_MAP = {
     evdev.ecodes.KEY_0: "0",
@@ -15,7 +27,7 @@ EVENT_KEY_MAP = {
 }
 
 class RFIDReader():
-
+    _SENTINEL = object()
     def __init__(self, dev_path):
         self._dev_path = dev_path
         self._dev = evdev.InputDevice(dev_path)
@@ -24,6 +36,12 @@ class RFIDReader():
         # grab device here (the input will only be shown inside the Core system, nothing will be
         # written on screen: https://python-evdev.readthedocs.io/en/latest/apidoc.html#evdev.device.InputDevice.grab)
         self._dev.grab()
+        self._buffer = queue.Queue()
+        self._stop_event = threading.Event()
+        self._reader_thread = threading.Thread(target=self.read_prod)
+        self._reader_thread.daemon = True
+        self._reader_thread.start()
+        self._fatal_exc = None
 
     def translate_event_to_char(self, event):
         """
@@ -40,40 +58,45 @@ class RFIDReader():
 
     def read(self, timeout=2):
         """
-        Read an RFID or return within timeout (2 seconds default).
-
-        NOTE NV: This can probably be improved to use a thread class instead of using time.sleep - time.sleep can possibly hang
-        NOTE NV: It can also probably be improved to hold different RFIDs even if they aren't read - act like a buffer?
+        Blocking call that returns next RFID tag from buffer, or None after timeout.
         """
+        if self._fatal_exc:
+            log.exception("Fatal exception occurred in read_prod - restart of manager required")
+            return self._fatal_exc
+        try:
+            return self._buffer.get(timeout=timeout)
+        except queue.Empty:
+            return None
 
+
+    def read_prod(self):
+        """Continuously read input and push complete RFID tags into buffer"""
         rfid = ""
-        time_left = timeout
-        start = time.time()
-
-        event = self._dev.read_one()
-
-        while time_left > 0 or event: # as long as we have time, but continue working if new events come in
-
-            if event == None:
-                time.sleep(.1)
-
-            elif self.is_key_down_event(event):
-                # if it's enter, break the loop
-                if event.code == evdev.ecodes.KEY_ENTER:
-                    break
-
-                # otherwise, keep building the RFID
-                rfid += self.translate_event_to_char(event)
-
-            # get new event, recalc time_left
-            time_left = timeout - (time.time() - start)
-            event = self._dev.read_one()
-
-        return rfid or None
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    os.stat(self._dev_path)
+                    for event in self._dev.read_loop():
+                        if self._stop_event.is_set():
+                            break
+                        if self.is_key_down_event(event):
+                            if event.code == evdev.ecodes.KEY_ENTER:
+                                if rfid:
+                                    self._buffer.put(rfid)
+                                    rfid = ""
+                            else:
+                                rfid += self.translate_event_to_char(event)
+                except Exception as e: 
+                    self._buffer.put(self._SENTINEL)
+                    self._fatal_exc = e
+        except Exception as e:
+            self._fatal_exc = e
+            self._buffer.put(self._SENTINEL)
 
     def close(self):
         """
         Close down device and cleanup.
         """
-
+        self._stop_event.set()
+        self._reader_thread.join()
         self._dev.close()

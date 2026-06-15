@@ -1,9 +1,10 @@
 import logging
+import time
 
 from messaging import EventDrivenMessageProcessor
 from threading_more import intercept_exit_signal
 import docker
-from time import time
+from docker.errors import DockerException, APIError, NotFound
 
 log = logging.getLogger(__name__)
 
@@ -15,54 +16,91 @@ context = {
 # Message processor
 edmp = EventDrivenMessageProcessor("docker_monitor", context=context)
 
+MAX_RETRIES = 5
+
+def start_docker_monitor(settings):
+    # if log.isEnabledFor(logging.DEBUG):
+    log.info("Starting docker_monitor with settings: {:}".format(settings))
+
+    # If balena-engine restarts it will break the for loop, so keep it in a while loop.
+    log.debug('Creating dockerclient and Attaching to docker.events')
+    docker_path = __salt__["config.get"]("docker.url", 'unix://var/run/balena-engine.sock')
+    client = docker.DockerClient(base_url=docker_path)
+
+    since = context["newest_event_timestamp"]
+    past_events_seconds = 120 # enough to catch the events that might have happened on boot before monitor was ready to start.
+    if not since:
+        # Ensure that older events not caught when they occurred is still processed, else just proceed from "NOW"/Last event.
+        since = int(time.time()) - past_events_seconds
+
+    for event in client.events(decode=True, since=since, filters={ "type": ["container", "image"], "event": ["start", "stop", "die", "pull"] }):
+        # If event is newer than newest_event_timestamp, trigger events.
+        if not context["newest_event_timestamp"] or event["time"] > context["newest_event_timestamp"]:
+            context["newest_event_timestamp"] = event["time"]
+
+            try:
+                event_string = "system/docker/{:}/{:}/{:}".format(event["Type"], event["Actor"]["Attributes"]["name"], event["Action"])
+                data = { k: v for k, v in event["Actor"]["Attributes"].items() }
+                data.update({ "id": event.get('id', None) })
+
+                try:
+                    if event.get("status", None) == "pull":
+                        data.update({ "tag": event["Actor"]["ID"].split(":")[-1] })
+                except Exception:
+                    log.exception('Error occurred while trying to get tag from pull event metadata')
+
+                __salt__["minionutil.trigger_event"](
+                    event_string,
+                    data=data
+                )
+            except Exception:
+                log.error("An error occurred while forwarding docker event: {}".format(event))
+        else:
+            log.warning("event['time']: {:} was less than the newest_event_timestamp {:} - Event has likely already been handled. DOCKER".format(event['time'], context['newest_event_timestamp']))
+
+
 @intercept_exit_signal
 def start(**settings):
     try:
-        # if log.isEnabledFor(logging.DEBUG):
-        log.info("Starting docker_monitor with settings: {:}".format(settings))
+        start_docker_monitor(settings)
 
-        # If balena-engine restarts it will break the for loop, so keep it in a while loop.
-        log.info('Creating dockerclient and Attaching to docker.events')
-        docker_path = __salt__["config.get"]("docker.url", 'unix://var/run/balena-engine.sock')
-        client = docker.DockerClient(base_url=docker_path)
-        
-        since = context["newest_event_timestamp"]
-        past_events_seconds = 120 # enough to catch the events that might have happened on boot before monitor was ready to start.
-        if not since:
-            # Ensure that older events not caught when they occurred is still processed, else just proceed from "NOW"/Last event.
-            since = int(time()) - past_events_seconds
+    except DockerException as d_ex:
+        for retry in range(1, MAX_RETRIES + 1):
+            log.info("Caught DockerException, daemon might not be running yet, retrying no. {}/{}.".format(retry, MAX_RETRIES))
 
-        for event in client.events(decode=True, since=since, filters={ "type": ["container", "image"], "event": ["start", "stop", "die", "pull"] }):
-            # If event is newer than newest_event_timestamp, trigger events.
-            if not context["newest_event_timestamp"] or event["time"] > context["newest_event_timestamp"]:
-                context["newest_event_timestamp"] = event["time"]
+            restart_delay = min(3 * 2**(retry - 1), 180)  # 3, 6, 12, 24, 48 etc with max at 180
+            if restart_delay:
+                log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+                time.sleep(restart_delay)
 
-                try:
-                    event_string = "system/docker/{:}/{:}/{:}".format(event["Type"], event["Actor"]["Attributes"]["name"], event["Action"])
-                    data = { k: v for k, v in event["Actor"]["Attributes"].items() }
-                    data.update({ "id": event.get('id', None) })
+            try:
+                start_docker_monitor(settings)
+                break
+            except DockerException as d_ex:
+                if retry == MAX_RETRIES:
+                    log.error("Max retries reached. Failed to start Docker monitor after {} attempts.".format(MAX_RETRIES))
 
-                    try:
-                        if event.get("status", None) == "pull":
-                            data.update({ "tag": event["Actor"]["ID"].split(":")[-1] })
-                    except Exception:
-                        log.exception('Error occurred while trying to get tag from pull event metadata')
-
-                    log.info("Triggering event: {}".format(event))
-                    __salt__["minionutil.trigger_event"](
-                        event_string,
-                        data=data
-                    )
-                except Exception:
-                    log.error("An error occurred while forwarding docker event: {}".format(event))
-            else:
-                log.warning("event['time']: {:} was less than the newest_event_timestamp {:} - Event has likely already been handled.".format(event['time'], context['newest_event_timestamp']))
+                    if settings.get("trigger_events", True):
+                        try:
+                            __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(d_ex)})
+                        except:
+                            log.exception("Unable to trigger service failed event")
+                else:
+                    continue
 
     except Exception as ex:
         log.exception("Failed to start docker monitor")
 
         if settings.get("trigger_events", True):
-            __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

@@ -1,9 +1,11 @@
+import datetime
 import logging
 import re
 import time
+
+import common_util
 import salt.exceptions
 
-from datetime import datetime, timedelta
 from messaging import EventDrivenMessageProcessor
 from serial_conn import SerialConn
 from threading_more import intercept_exit_signal
@@ -13,6 +15,10 @@ from parsing import _parse_dict
 log = logging.getLogger(__name__)
 
 context = {
+    "datetime": datetime,
+    "util": common_util,
+    "cache.get": lambda *args, **kwargs: common_util.dict_get(context.get("cache", None), *args, **kwargs),
+    "cache.find": lambda *args, **kwargs: common_util.dict_find(context.get("cache", {}).values(), *args, **kwargs),
     "time": {
         "state": None
     }
@@ -39,7 +45,7 @@ def connection_handler(close=False):
     Manages current connection.
 
     Optional arguments:
-      - close (bool): Close serial connection? Default value is 'False'. 
+      - close (bool): Close serial connection? Default value is 'False'.
     """
 
     ret = {}
@@ -126,6 +132,7 @@ def power_handler(cmd, reason="unknown"):
     # Trigger power off event
     edmp.trigger_event({
         "reason": reason,
+        "_alternating_cache_event_filter.skip": True
     }, "system/device/ec2x/powered_off")
 
     return res
@@ -255,8 +262,8 @@ def sync_time_handler(force=False):
         if not status["clock_synced"]:
             log.info("System time is not NTP synchronized")
 
-        # Disable automatic time synchronization 
-        # NOTE: This is done now to minimize time between get network time and adjust system clock 
+        # Disable automatic time synchronization
+        # NOTE: This is done now to minimize time between get network time and adjust system clock
         if status["ntp_enabled"]:
             __salt__["clock.ntp"](enable=False)
 
@@ -272,14 +279,14 @@ def sync_time_handler(force=False):
                     time = "{year:}-{month:}-{day:} {hour:}:{minute:}:{second:}".format(**match.groupdict())
 
                     # Validate time is within acceptable range otherwise discard it
-                    if abs((datetime.utcnow() - datetime.strptime(time, "%y-%m-%d %H:%M:%S")).days) > 365:
+                    if abs((datetime.datetime.utcnow() - datetime.datetime.strptime(time, "%y-%m-%d %H:%M:%S")).days) > 365:
                         log.info("Skipping invalid time retrieved from module's RTC: {:}".format(time))
 
                         time = None
                     else:
                         ret["source"] = "rtc"
                 else:
-                    log.warning("Failed to match time result from module's RTC: {:}".format(res["data"]))                
+                    log.warning("Failed to match time result from module's RTC: {:}".format(res["data"]))
             else:
                 log.warning("Unable to retrieve time from module's RTC: {:}".format(res["error"]))
 
@@ -299,7 +306,7 @@ def sync_time_handler(force=False):
                 ret["source"] = "network"
 
             # Set old time before we adjust clock
-            ret["old"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            ret["old"] = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 
             # Set system time manually
             __salt__["clock.set"](time, adjust_system_clock=True)
@@ -332,7 +339,7 @@ def sync_time_handler(force=False):
 
     # Always update module's RTC time if synchronized from different source
     if ret["source"] != "rtc":
-        res = _exec("AT+CCLK=\"{0:%y/%m/%d,%H:%M:%S}+00\"".format(datetime.utcnow()))
+        res = _exec("AT+CCLK=\"{0:%y/%m/%d,%H:%M:%S}+00\"".format(datetime.datetime.utcnow()))
         if not "error" in res:
             log.info("Updated time of module's RTC")
         else:
@@ -450,9 +457,9 @@ def read_sms_handler():
         # utc timestamp after calculation: 2021-11-16T13:10:00
         time_offset_sign = time[-3:-2]
         time_offset = int(time[-2:])
-        offset_duration = timedelta(minutes=(15 * time_offset))
+        offset_duration = datetime.timedelta(minutes=(15 * time_offset))
 
-        sms_timestamp = datetime.strptime(
+        sms_timestamp = datetime.datetime.strptime(
             "{}T{}".format(date, time[:-3]),
             "%y/%m/%dT%H:%M:%S")
 
@@ -501,6 +508,18 @@ def start(**settings):
         # Initialize serial connection
         conn.init(settings["serial_conn"])
         conn.on_open = lambda: _exec("ATE1")  # Ensure echo is on
+        if settings.get("trigger_events", True):
+            tag_format = "system/device/ec2x/{:}/{{:}}".format(settings["serial_conn"].get("device", "unknown").split("/")[-1].lower())
+
+            def on_success(res):
+                if context.pop("serial_conn.error", None):
+                    edmp.trigger_event({}, tag_format.format("recover"))
+            conn.on_success = on_success
+
+            def on_error(ex):
+                context["serial_conn.error"] = str(ex)
+                edmp.trigger_event({"message": str(ex)}, tag_format.format("error"))
+            conn.on_error = on_error
 
         # Initialize and run message processor
         edmp.init(__salt__, __opts__,
@@ -513,9 +532,15 @@ def start(**settings):
         log.exception("Failed to start EC2X manager")
 
         if settings.get("trigger_events", True):
-            edmp.trigger_event({
-                "reason": str(ex),
-            }, "system/service/{:}/failed".format(__name__.split(".")[-1]))
+            try:
+                __salt__["minionutil.trigger_event"]("system/service/{:}/failed".format(__name__.split(".")[-1]), data={"reason": str(ex)})
+            except:
+                log.exception("Unable to trigger service failed event")
+
+        restart_delay = settings.get("restart_delay", 1)
+        if restart_delay:
+            log.info("Enforcing restart delay of {:} second(s)...".format(restart_delay))
+            time.sleep(restart_delay)
 
         raise
 

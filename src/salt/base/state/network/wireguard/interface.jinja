@@ -1,0 +1,27 @@
+[Interface]
+PrivateKey = {{ config["private_key"] }}
+Address = {{ config["address"] }}
+{%- if "listen_port" in config %}
+ListenPort = {{ config["listen_port"] }}
+{%- endif %}
+{%- if "mtu" in config %}
+MTU = {{ config["mtu"] }}
+{%- endif %}
+{% for peer in config.get("peers", []) %}
+
+{%- if "name" in peer %}
+[Peer] # {{ peer["name"] }}
+{%- else %}
+[Peer]
+{%- endif %}
+PublicKey = {{ peer["public_key"] }}
+{%- if "allowed_ips" in peer %}
+AllowedIPs = {{ peer["allowed_ips"]|join(", ") }}
+{%- endif %}
+{%- if "endpoint" in peer %}
+Endpoint = {{ peer["endpoint"] }}
+{%- endif %}
+{%- if "persistent_keepalive" in peer %}
+PersistentKeepalive = {{ peer["persistent_keepalive"] }}
+{%- endif %}
+{%- endfor %}

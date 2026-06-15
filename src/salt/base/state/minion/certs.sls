@@ -22,46 +22,72 @@ minion-client-certificate-removed-if-empty:
   file.absent:
     - name: {{ client_cert_path }}
     - unless: test -s {{ client_cert_path }}
-
-minion-client-certificate-removed-if-corrupt-or-wrong-unit_id:
-  file.absent:
-    - name: {{ client_cert_path }}
-    - unless: openssl x509 -in {{ client_cert_path }} -text | grep -iF {{ dashed_minion_id }}
 {%- endif %}
 
 {%- if certificate_mode == 'web3' %}
-{%- set eth_address = salt['crypto.query']('ethereum_address') %}
 
+minion-client-certificate-removed-if-corrupt-or-wrong-common-name:
+  file.absent:
+    - name: {{ client_cert_path }}
+    - unless: openssl x509 -in {{ client_cert_path }} -subject -noout | grep -iF "CN = 0x"
+
+private-key-generated:
+  cmd.run:
+    - name: |
+        if [ ! -f /opt/autopi/client.pem ] || ! openssl ec -in /opt/autopi/client.pem -noout -check; then
+            openssl ecparam -name prime256v1 -genkey -noout -out /opt/autopi/client.pem
+        fi
+    - shell: /bin/bash
+
+private-key-permissions-set:
+  file.managed:
+    - name: /opt/autopi/client.pem
+    - mode: '0644'
+    - replace: False
+    - onlyif:
+      - test -f /opt/autopi/client.pem
+      
+# This handles situations where the old private key (i.e. token is set instead of web3 for cert_mode setting)
+# is still present and was used to generate the certificate
+minion-client-certificate-removed-if-wrong-private-key-type:
+  file.absent:
+    - name: {{ client_cert_path }}
+    - unless: 'openssl x509 -in {{ client_cert_path }} -text | grep -iF "Public Key Algorithm: id-ecPublicKey"'
+
+{%- if salt['pillar.get']('state', default='REGISTERED') == 'REGISTERED' %}
+# Prevent this from running if device is not minted.
 web3-minion-client-certificate-created:
   cert_auth.client_certificate_web3_signed:
     - name: {{ client_cert_path }}
     - oauth_url: {{ salt['pillar.get']('ca:oauth_url', None) }}
+    - oauth_client_id: {{ salt['pillar.get']('ca:oauth_client_id', None) }}
+    - oauth_client_secret: {{ salt['pillar.get']('ca:oauth_client_secret', None) }}
     - ca_url: {{ salt['pillar.get']('ca:url', None) }}
     - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
-    - force: false
-    - require_in:
-      - file: minion-private-key-copied
-      - cmd: minion-client-certificate-verified
+    - force: {{ salt['pillar.get']('ca:force_overwrite', False) }}
+    - require:
+      - cmd: private-key-generated
+      - file: minion-client-certificate-removed-if-wrong-private-key-type
+
+mosquitto-service-restart-if-exists:
+  cmd.run:
+    - name: |
+        if systemctl --quiet is-enabled mosquitto; then
+            systemctl restart mosquitto
+        fi
+    - shell: /bin/bash
+    - watch:
+      - cert_auth: web3-minion-client-certificate-created
+{%- endif %}
 
 {% elif certificate_mode == 'token' %}
 
-minion-client-certificate-created:
-  cert_auth.client_certificate_signed:
+{%- if dashed_minion_id %}
+minion-client-certificate-removed-if-corrupt-or-wrong-common-name:
+  file.absent:
     - name: {{ client_cert_path }}
-    - ca_url: {{ salt['pillar.get']('ca:url', None) }}
-    - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
-    - token: {{ salt['pillar.get']('ca:client_certificate_token', None) }}
-    - force: false
-    - require_in:
-      - file: minion-private-key-copied
-      - cmd: minion-client-certificate-verified
-
+    - unless: openssl x509 -in {{ client_cert_path }} -text | grep -iF "CN = {{ dashed_minion_id }}"
 {%- endif %}
-
-{%- if certificate_mode %}
-minion-client-certificate-verified:
-  cmd.run:
-    - name: openssl x509 -in {{ client_cert_path }} -text | grep -F {{ dashed_minion_id }}
 
 minion-private-key-copied:
   file.managed:
@@ -70,6 +96,30 @@ minion-private-key-copied:
     - user: root
     - group: root
     - mode: 644
+
+minion-client-certificate-created:
+  cert_auth.client_certificate_signed:
+    - name: {{ client_cert_path }}
+    - ca_url: {{ salt['pillar.get']('ca:url', None) }}
+    - ca_fingerprint: {{ salt['pillar.get']('ca:fingerprint', None) }}
+    - token: {{ salt['pillar.get']('ca:client_certificate_token', None) }}
+    - force: {{ salt['pillar.get']('ca:force_overwrite', False) }}
+    - require_in:
+      - cmd: minion-client-certificate-common-name-verified
+
+minion-client-certificate-common-name-verified:
+  cmd.run:
+    - name: openssl x509 -in {{ client_cert_path }} -text | grep -iF "CN = {{ dashed_minion_id }}"
+
+mosquitto-service-restart-if-exists:
+  cmd.run:
+    - name: |
+        if systemctl --quiet is-enabled mosquitto; then
+            systemctl restart mosquitto
+        fi
+    - shell: /bin/bash
+    - watch:
+      - cert_auth: minion-client-certificate-created
 {%- endif %}
 
 # Required to signal that SLS 'minion.certs' has run

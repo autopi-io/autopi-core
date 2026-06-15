@@ -18,6 +18,9 @@ wpa-supplicant-configured:
     - name: /etc/wpa_supplicant/wpa_supplicant.conf
     - source: salt://network/wlan/client/wpa_supplicant.conf.jinja
     - template: jinja
+    - retry:
+        attempts: 2
+        interval: 10
 
 wpa-manager-service-configured:
   file.managed:

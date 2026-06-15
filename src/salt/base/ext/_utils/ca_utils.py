@@ -17,6 +17,7 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives.asymmetric import ec
 import uuid
 from datetime import datetime, timedelta
 import pytz
@@ -84,10 +85,16 @@ class StepClient(object):
 class CSR(object):
     def __init__(self, cn, private_key_path, dns_sans = []):
         self.key = self._load_private_key(private_key_path)
+
         self.cn = unicode(cn)
         self.dns_sans = dns_sans
         self.csr_pem_bytes = self._generate_csr()
         self.csr_pem = self.csr_pem_bytes.decode('UTF-8')
+
+    def _generate_private_key(self):
+        return ec.generate_private_key(
+            ec.SECP256R1(), backend=default_backend()
+        )
 
     def _load_private_key(self, path):
         with open(path, "r+") as private_key_file:
